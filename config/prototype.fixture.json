@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0",
+  "days": 35,
+  "notice": "Deterministic prototype fixture; never represent these values as live market observations.",
+  "items": [
+    {"canonical_id":"banana","current_price":20,"history_slope":0.012,"daily_volume":1200,"today_volume_multiplier":1.45},
+    {"canonical_id":"pineapple","current_price":18,"history_slope":0.011,"daily_volume":900,"today_volume_multiplier":1.40},
+    {"canonical_id":"dragon-fruit","current_price":35,"history_slope":0.010,"daily_volume":750,"today_volume_multiplier":1.35},
+    {"canonical_id":"papaya","current_price":28,"history_slope":0.004,"daily_volume":820,"today_volume_multiplier":1.10},
+    {"canonical_id":"guava","current_price":26,"history_slope":0.002,"daily_volume":980,"today_volume_multiplier":1.05},
+    {"canonical_id":"mango","current_price":52,"history_slope":-0.004,"daily_volume":620,"today_volume_multiplier":0.85},
+    {"canonical_id":"watermelon","current_price":17,"history_slope":0.003,"daily_volume":1500,"today_volume_multiplier":1.08},
+    {"canonical_id":"passion-fruit","current_price":48,"history_slope":-0.003,"daily_volume":430,"today_volume_multiplier":0.90},
+    {"canonical_id":"custard-apple","current_price":66,"history_slope":-0.002,"daily_volume":360,"today_volume_multiplier":0.92},
+    {"canonical_id":"avocado","current_price":58,"history_slope":0.001,"daily_volume":410,"today_volume_multiplier":1.00},
+    {"canonical_id":"cucumber","current_price":30,"history_slope":0.006,"daily_volume":1100,"today_volume_multiplier":1.18},
+    {"canonical_id":"cauliflower","current_price":44,"history_slope":-0.006,"daily_volume":540,"today_volume_multiplier":0.80},
+    {"canonical_id":"cabbage","current_price":24,"history_slope":0.005,"daily_volume":1700,"today_volume_multiplier":1.20},
+    {"canonical_id":"bok-choy","current_price":31,"history_slope":0.003,"daily_volume":880,"today_volume_multiplier":1.12},
+    {"canonical_id":"water-spinach","current_price":27,"history_slope":0.008,"daily_volume":960,"today_volume_multiplier":1.28},
+    {"canonical_id":"spinach","current_price":49,"history_slope":-0.008,"daily_volume":470,"today_volume_multiplier":0.75},
+    {"canonical_id":"carrot","current_price":32,"history_slope":0.002,"daily_volume":730,"today_volume_multiplier":1.04},
+    {"canonical_id":"onion","current_price":29,"history_slope":-0.001,"daily_volume":1250,"today_volume_multiplier":0.98},
+    {"canonical_id":"green-onion","current_price":63,"history_slope":-0.007,"daily_volume":390,"today_volume_multiplier":0.78},
+    {"canonical_id":"eggplant","current_price":36,"history_slope":0.005,"daily_volume":690,"today_volume_multiplier":1.16}
+  ]
+}
