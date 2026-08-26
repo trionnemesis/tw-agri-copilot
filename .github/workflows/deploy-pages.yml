@@ -1,0 +1,31 @@
+name: Deploy Pages (opt-in)
+on:
+  push:
+    branches: [main]
+    paths: ['site/**']
+permissions: {contents: read}
+jobs:
+  deploy:
+    if: ${{ vars.ENABLE_PAGES_DEPLOY == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with: {python-version: '3.11'}
+      - run: PYTHONPATH=src python3 -m tpw verify-site
+      - run: test "$(du -sm site | cut -f1)" -le 900
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with: {path: site}
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+# Deployment remains disabled until the repository variable
+# ENABLE_PAGES_DEPLOY is explicitly set to true.

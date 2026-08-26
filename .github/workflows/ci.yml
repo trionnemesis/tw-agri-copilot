@@ -1,0 +1,15 @@
+name: Fixture CI
+on: [push, pull_request]
+permissions: {contents: read}
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with: {python-version: '3.11'}
+      - run: PYTHONPATH=src python3 -m unittest discover -s tests -t . -v
+      - run: PYTHONPATH=src python3 -m tpw validate-config && PYTHONPATH=src python3 -m tpw build --as-of 2026-08-25 && PYTHONPATH=src python3 -m tpw verify-site
+      - run: test "$(du -sm site | cut -f1)" -le 900
+      - run: test "$(du -sm --exclude=.git . | cut -f1)" -le 900
+      - run: '! rg -n ''AKIA|ghp_|glpat-|base64,'' site'

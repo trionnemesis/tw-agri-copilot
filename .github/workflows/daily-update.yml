@@ -1,0 +1,41 @@
+name: Daily market update
+on:
+  schedule:
+    - cron: '37 13 * * *'
+      timezone: 'Asia/Taipei'
+  workflow_dispatch:
+    inputs:
+      as_of_date: {required: false, type: string}
+      backfill_days: {required: false, type: string}
+permissions: {contents: write}
+concurrency: {group: taiwan-produce-daily-update, cancel-in-progress: false}
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with: {python-version: '3.11'}
+      - run: PYTHONPATH=src python3 -m tpw validate-config
+      - id: dates
+        run: |
+          echo "end=$(TZ=Asia/Taipei date +%F)" >> "$GITHUB_OUTPUT"
+      - name: Fetch bounded rolling windows
+        run: |
+          PYTHONPATH=src python3 -m tpw backfill --days "${{ inputs.backfill_days || 4 }}" --end "${{ inputs.as_of_date || steps.dates.outputs.end }}"
+      - name: Build and validate
+        run: |
+          PYTHONPATH=src python3 -m tpw build --as-of "${{ inputs.as_of_date || steps.dates.outputs.end }}"
+          PYTHONPATH=src python3 -m tpw validate-data --as-of "${{ inputs.as_of_date || steps.dates.outputs.end }}"
+          PYTHONPATH=src python3 -m tpw verify-site --as-of "${{ inputs.as_of_date || steps.dates.outputs.end }}"
+      - name: Commit changed content
+        run: |
+          git add data reports site
+          if git diff --cached --quiet; then
+            echo 'No content changes'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'data: daily market update'
+          git push
