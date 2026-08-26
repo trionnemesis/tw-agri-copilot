@@ -1,18 +1,21 @@
 name: Daily market update
 on:
   schedule:
-    - cron: '37 13 * * 1-5'
+    - cron: '0 2,5 * * *'
+      timezone: 'Asia/Taipei'
   workflow_dispatch:
     inputs:
       as_of_date: {required: false, type: string}
       backfill_days: {required: false, type: string}
-permissions: {contents: write}
 concurrency: {group: taiwan-produce-daily-update, cancel-in-progress: false}
 jobs:
   update:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with: {ref: main}
       - uses: actions/setup-python@v6
         with: {python-version: '3.11'}
       - run: PYTHONPATH=src python3 -m tpw validate-config
@@ -50,7 +53,7 @@ jobs:
           PYTHONPATH=src python3 -m tpw build --as-of "$AS_OF_DATE"
           PYTHONPATH=src python3 -m tpw validate-data --as-of "$AS_OF_DATE"
           PYTHONPATH=src python3 -m tpw verify-site --as-of "$AS_OF_DATE"
-      - name: Commit changed content
+      - name: Commit changed content to main
         run: |
           git add data reports site
           if git diff --cached --quiet; then
@@ -60,4 +63,31 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'data: daily market update'
-          git push
+          git push origin HEAD:main
+
+  deploy:
+    needs: update
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+        with: {ref: main}
+      - uses: actions/setup-python@v6
+        with: {python-version: '3.11'}
+      - run: PYTHONPATH=src python3 -m tpw verify-site
+      - run: test "$(du -sm site | cut -f1)" -le 900
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with: {path: site}
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
