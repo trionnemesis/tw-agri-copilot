@@ -1,3 +1,5 @@
+"""Resolve the newest complete market date that is safe to publish."""
+
 import argparse
 import datetime as dt
 import json
