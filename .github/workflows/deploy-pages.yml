@@ -20,6 +20,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with: {python-version: '3.11'}
+      - run: PYTHONPATH=src python3 -m tpw.presentation
       - run: PYTHONPATH=src python3 -m tpw verify-site
       - run: test "$(du -sm site | cut -f1)" -le 900
       - uses: actions/configure-pages@v5
