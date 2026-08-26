@@ -50,17 +50,34 @@ jobs:
           fi
           echo "requested=$requested" >> "$GITHUB_OUTPUT"
           echo "allow_fallback=$allow_fallback" >> "$GITHUB_OUTPUT"
-      - name: Fetch bounded rolling windows
+      - id: market_refresh
+        name: Fetch bounded rolling windows
         if: github.event_name != 'push'
         env:
           AS_OF_DATE: ${{ steps.dates.outputs.requested }}
+          ALLOW_FALLBACK: ${{ steps.dates.outputs.allow_fallback }}
           BACKFILL_DAYS: ${{ inputs.backfill_days || '4' }}
         run: |
           if ! [[ "$BACKFILL_DAYS" =~ ^[0-9]+$ ]] || [ "$BACKFILL_DAYS" -lt 1 ] || [ "$BACKFILL_DAYS" -gt 120 ]; then
             echo 'backfill_days must be an integer from 1 to 120' >&2
             exit 2
           fi
-          PYTHONPATH=src python3 -m tpw backfill --days "$BACKFILL_DAYS" --end "$AS_OF_DATE"
+          set +e
+          refresh_output="$(PYTHONPATH=src python3 -m tpw backfill --days "$BACKFILL_DAYS" --end "$AS_OF_DATE" 2>&1)"
+          refresh_status=$?
+          set -e
+          printf '%s\n' "$refresh_output"
+          if [ "$refresh_status" -ne 0 ]; then
+            if [ "$ALLOW_FALLBACK" = 'true' ] && grep -q 'UpstreamUnavailable' <<<"$refresh_output"; then
+              echo "status=degraded" >> "$GITHUB_OUTPUT"
+              echo "::warning::MOA market refresh failed after retries; publishing the latest complete committed market date instead."
+              echo "Market refresh: degraded; using last complete committed data." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            exit "$refresh_status"
+          fi
+          echo "status=success" >> "$GITHUB_OUTPUT"
+          echo "Market refresh: success." >> "$GITHUB_STEP_SUMMARY"
       - id: resolved
         name: Resolve publishable market date
         env:
@@ -127,7 +144,11 @@ jobs:
       - run: test "$(du -sm site | cut -f1)" -le 900
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
-        with: {path: site}
+        with:
+          path: site
+          name: github-pages-${{ github.run_attempt }}
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
