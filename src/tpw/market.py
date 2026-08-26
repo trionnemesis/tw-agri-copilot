@@ -10,6 +10,8 @@ from .model import REQUIRED
 URL = "https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx"
 RETRYABLE_STATUS = {408, 425, 429, 500, 502, 503, 504}
 
+# Retry only transport/availability failures; schema and contract failures stay hard errors.
+
 
 class UpstreamUnavailable(ValueError):
     """Transient upstream failure that may safely use last-known-good data."""
