@@ -3,6 +3,8 @@ from pathlib import Path
 
 # Presentation-only translations. Machine-readable JSON keeps the original
 # status/mode codes so existing tests and consumers do not change contract.
+PRESENTATION_VERSION = "2026-08-26.1"
+
 REPLACEMENTS = (
     ("Taiwan Produce Watch 台灣蔬果行情原型", "Taiwan Produce Watch 台灣蔬果行情與當季採買資訊"),
     ("資料狀態：success", "行情資料：官方更新成功"),
@@ -88,7 +90,7 @@ def rewrite_tree(root):
 
 def main():
     changed = rewrite_tree("site") + rewrite_tree("reports")
-    print(f"presentation normalized: {changed} files")
+    print(f"presentation {PRESENTATION_VERSION} normalized: {changed} files")
 
 
 if __name__ == "__main__":
