@@ -2,7 +2,7 @@
 
 ## Acceptance status
 
-Local implementation, remote-main, GitHub Actions, Pages deployment and live-browser acceptance are complete for the deterministic side-project prototype. Live upstream refreshes remain outside this release.
+Local implementation, remote-main, GitHub Actions, Pages deployment and live-browser acceptance are complete for the side-project prototype. The market feed now includes a successful 2026-08-26 upstream snapshot; seasonality and traceability remain clearly labelled prototype reference data.
 
 ## Verified locally
 
@@ -10,7 +10,7 @@ Local implementation, remote-main, GitHub Actions, Pages deployment and live-bro
 PYTHONPATH=src python3 -m compileall -q src tests
 
 PYTHONPATH=src python3 -m unittest discover -s tests -t . -v
-Ran 22 tests in 2.113s
+Ran 24 tests in 1.605s
 OK
 
 PYTHONPATH=src python3 -m tpw validate-config
@@ -91,6 +91,11 @@ Source-input hashes remained unchanged:
 ## Remote evidence
 
 - Public repository: https://github.com/trionnemesis/tw-agri-copilot
+- CI regression fix: `4538e1d2e17cd9d946cdc068199658616608a4f8`; push builds now reuse the committed verified date and skip external market/context fetches.
+- Generated presentation normalization: `b54d88c`; created by the repaired workflow and fast-forwarded back to the local `main`.
+- Fixture CI after the fix: success — https://github.com/trionnemesis/tw-agri-copilot/actions/runs/32984784012
+- Daily market update after the fix: success — https://github.com/trionnemesis/tw-agri-copilot/actions/runs/32984784867. The run shows both external fetch steps skipped on `push`, with build, normalization, validation, commit and Pages deployment successful.
+- Deploy Pages after the fix: success — https://github.com/trionnemesis/tw-agri-copilot/actions/runs/32985003582
 - PR2–PR5 feature tip: `c708ee712f7e364fdb3885768ea9d7a71bddf3ad`; observed on remote `main`.
 - Fixture CI: success — https://github.com/trionnemesis/tw-agri-copilot/actions/runs/32956554494
 - Deploy Pages: success — https://github.com/trionnemesis/tw-agri-copilot/actions/runs/32956554533
@@ -111,5 +116,5 @@ Live screenshots:
 - No live 120-day backfill was dispatched for this release.
 - No live seasonality or traceability API snapshot was published.
 - No external AI provider was enabled.
-- Daily scheduled publication is defined but has not accumulated production runtime evidence.
+- Twice-daily scheduled publication remains lightly observed; the separate push rebuild path now has successful remote runtime evidence and does not contact the upstream market service.
 - Fixture/fallback status and wholesale/non-retail wording are intentionally visible on the public prototype.
