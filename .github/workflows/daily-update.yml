@@ -8,6 +8,7 @@ on:
     paths:
       - 'src/tpw/advice.py'
       - 'src/tpw/render.py'
+      - 'src/tpw/presentation.py'
       - '.github/workflows/daily-update.yml'
   workflow_dispatch:
     inputs:
@@ -57,6 +58,7 @@ jobs:
           PYTHONPATH=src python3 -m tpw fetch-seasonality --month "$AS_OF_MONTH"
           PYTHONPATH=src python3 -m tpw fetch-traceability --month "$AS_OF_MONTH"
           PYTHONPATH=src python3 -m tpw build --as-of "$AS_OF_DATE"
+          PYTHONPATH=src python3 -m tpw.presentation
           PYTHONPATH=src python3 -m tpw validate-data --as-of "$AS_OF_DATE"
           PYTHONPATH=src python3 -m tpw verify-site --as-of "$AS_OF_DATE"
       - name: Commit changed content to main
