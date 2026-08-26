@@ -1,7 +1,7 @@
 ---
 plan_id: TPW-PLAN-001
 version: 0.2.0
-status: Prototype implementation complete; release verification pending
+status: Public prototype released and verified
 scope: PR 1-5 - Public side-project prototype
 source_spec: SPEC.md
 prepared_at: 2026-08-26

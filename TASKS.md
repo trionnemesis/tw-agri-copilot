@@ -1,6 +1,6 @@
 ---
 task_set: TPW-PR1-PR5-PROTOTYPE
-status: In review
+status: Done
 owner: gpt-5.6-terra implementation subagent
 reviewer: main agent
 source_spec: SPEC.md
@@ -99,9 +99,9 @@ T-000 → T-101 → T-102 → T-103 → T-104 → T-105
   - Watchlist filtering, nullable fields, coarse location, minimized persistence, detail routes and exact non-join warning.
   - Evidence: traceability unit/integration tests and generated route inspection.
 
-- [ ] **T-205 — Public prototype release** (`FR-013`, `FR-014`)
+- [x] **T-205 — Public prototype release** (`FR-013`, `FR-014`)
   - AgentSec-inspired README, fixture CI, active official Pages workflow, independent Sol acceptance, direct main push, observed CI/deploy and live desktop/mobile verification.
-  - Evidence belongs in `VERIFICATION.md`; remote boxes remain unchecked until observed.
+  - Evidence: `VERIFICATION.md` records the observed remote commit, successful workflow runs, live HTTP response and browser checks.
 
 ## Completion definition for this work order
 

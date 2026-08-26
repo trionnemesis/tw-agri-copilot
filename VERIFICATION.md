@@ -2,7 +2,7 @@
 
 ## Acceptance status
 
-Local implementation and browser acceptance are complete for the deterministic side-project prototype. GitHub main, Actions and Pages evidence is added only after it is observed; live upstream refreshes remain outside this release.
+Local implementation, remote-main, GitHub Actions, Pages deployment and live-browser acceptance are complete for the deterministic side-project prototype. Live upstream refreshes remain outside this release.
 
 ## Verified locally
 
@@ -59,7 +59,7 @@ Local site was served through a real browser at http://127.0.0.1:8765/.
 - /traceability/index.html showed five minimized fixture cards and the exact non-join warning.
 - Local server log showed only 200/304 responses for tested HTML, CSS and JS; no 404 occurred.
 
-Screenshots:
+Local screenshots:
 
 - tpw-desktop-1366x768.jpg
 - tpw-mobile-390x844.jpg
@@ -90,7 +90,21 @@ Source-input hashes remained unchanged:
 
 ## Remote evidence
 
-Pending first prototype push. Do not treat local success as CI, deployment or live-site evidence.
+- Public repository: https://github.com/trionnemesis/tw-agri-copilot
+- PR2–PR5 feature tip: `c708ee712f7e364fdb3885768ea9d7a71bddf3ad`; observed on remote `main`.
+- Fixture CI: success — https://github.com/trionnemesis/tw-agri-copilot/actions/runs/32956554494
+- Deploy Pages: success — https://github.com/trionnemesis/tw-agri-copilot/actions/runs/32956554533
+- Pages API: public, HTTPS enforced, workflow build type.
+- Live URL: https://trionnemesis.github.io/tw-agri-copilot/ returned HTTP 200.
+- Live `data/current.json`: 2026-08-25, fixture, deterministic_fallback, prototype_complete=true, 13 eligible rows.
+- Live browser 1366×768: recommendation top 272 px, 3 columns, 3 cards visible, no overflow.
+- Live browser 390×844: recommendation top 274 px, 1 column, no overflow.
+- Live recommendation flow opened `/produce/banana.html` with chart/disclaimer; live traceability index showed five cards and the exact non-join warning.
+
+Live screenshots:
+
+- `tpw-live-desktop-1366x768.jpg`
+- `tpw-live-mobile-390x844.jpg`
 
 ## Explicit limits
 
