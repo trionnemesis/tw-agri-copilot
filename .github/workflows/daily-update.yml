@@ -6,9 +6,8 @@ on:
   push:
     branches: [main]
     paths:
-      - 'src/tpw/advice.py'
-      - 'src/tpw/render.py'
-      - 'src/tpw/presentation.py'
+      - 'src/tpw/**'
+      - 'config/**'
       - '.github/workflows/daily-update.yml'
   workflow_dispatch:
     inputs:
@@ -31,24 +30,29 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           REQUESTED_DATE: ${{ inputs.as_of_date }}
         run: |
+          allow_fallback=false
           if [ "$EVENT_NAME" = 'push' ]; then
             requested="$(python3 -c 'import json, pathlib; print(json.loads(pathlib.Path("site/data/current.json").read_text(encoding="utf-8"))["as_of_date"])')"
           else
             requested="$REQUESTED_DATE"
             if [ -z "$requested" ]; then
               requested="$(TZ=Asia/Taipei date +%F)"
+              allow_fallback=true
+            fi
+            if [ "$EVENT_NAME" = 'schedule' ]; then
+              allow_fallback=true
             fi
           fi
           if ! [[ "$requested" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
             echo 'as_of_date must use YYYY-MM-DD' >&2
             exit 2
           fi
-          echo "end=$requested" >> "$GITHUB_OUTPUT"
-          echo "month=${requested:0:7}" >> "$GITHUB_OUTPUT"
+          echo "requested=$requested" >> "$GITHUB_OUTPUT"
+          echo "allow_fallback=$allow_fallback" >> "$GITHUB_OUTPUT"
       - name: Fetch bounded rolling windows
         if: github.event_name != 'push'
         env:
-          AS_OF_DATE: ${{ steps.dates.outputs.end }}
+          AS_OF_DATE: ${{ steps.dates.outputs.requested }}
           BACKFILL_DAYS: ${{ inputs.backfill_days || '4' }}
         run: |
           if ! [[ "$BACKFILL_DAYS" =~ ^[0-9]+$ ]] || [ "$BACKFILL_DAYS" -lt 1 ] || [ "$BACKFILL_DAYS" -gt 120 ]; then
@@ -56,16 +60,33 @@ jobs:
             exit 2
           fi
           PYTHONPATH=src python3 -m tpw backfill --days "$BACKFILL_DAYS" --end "$AS_OF_DATE"
+      - id: resolved
+        name: Resolve publishable market date
+        env:
+          REQUESTED_DATE: ${{ steps.dates.outputs.requested }}
+          ALLOW_FALLBACK: ${{ steps.dates.outputs.allow_fallback }}
+        run: |
+          resolved="$REQUESTED_DATE"
+          if [ "$ALLOW_FALLBACK" = 'true' ]; then
+            resolved="$(PYTHONPATH=src python3 -m tpw.schedule --on-or-before "$REQUESTED_DATE")"
+          fi
+          echo "date=$resolved" >> "$GITHUB_OUTPUT"
+          echo "month=${resolved:0:7}" >> "$GITHUB_OUTPUT"
+          echo "Requested market date: $REQUESTED_DATE" >> "$GITHUB_STEP_SUMMARY"
+          echo "Resolved market date: $resolved" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$resolved" != "$REQUESTED_DATE" ]; then
+            echo "::notice::Latest complete market date is $resolved; requested $REQUESTED_DATE is not complete yet."
+          fi
       - name: Refresh supplemental context
         if: github.event_name != 'push'
         env:
-          AS_OF_MONTH: ${{ steps.dates.outputs.month }}
+          AS_OF_MONTH: ${{ steps.resolved.outputs.month }}
         run: |
           PYTHONPATH=src python3 -m tpw fetch-seasonality --month "$AS_OF_MONTH"
           PYTHONPATH=src python3 -m tpw fetch-traceability --month "$AS_OF_MONTH"
       - name: Build, normalize, and validate
         env:
-          AS_OF_DATE: ${{ steps.dates.outputs.end }}
+          AS_OF_DATE: ${{ steps.resolved.outputs.date }}
         run: |
           PYTHONPATH=src python3 -m tpw build --as-of "$AS_OF_DATE"
           PYTHONPATH=src python3 -m tpw.presentation
