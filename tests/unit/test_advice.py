@@ -1,4 +1,5 @@
 import copy
+import json
 import unittest
 
 from tpw.advice import DISCLAIMER, fallback_advice, generate_advice, provider_input
@@ -28,6 +29,9 @@ class AdviceTest(unittest.TestCase):
         first = fallback_advice(SCORES, "2026-08-25")
         self.assertEqual(first, fallback_advice(SCORES, "2026-08-25"))
         self.assertEqual(first["generation_mode"], "deterministic_fallback")
+        self.assertEqual(str(first["generation_mode"]), "規則分析模式")
+        serialized = json.loads(json.dumps(first, ensure_ascii=False))
+        self.assertEqual(serialized["generation_mode"], "deterministic_fallback")
         self.assertNotIn("components", provider_input(SCORES, "2026-08-25")["items"][0])
 
     def test_invalid_or_prohibited_provider_output_falls_back(self):

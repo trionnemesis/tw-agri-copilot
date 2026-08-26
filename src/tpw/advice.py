@@ -7,6 +7,23 @@ DISCLAIMER = "批發市場平均行情，非實際零售通路售價。"
 BANNED_CLAIMS = ("保證划算", "一定便宜", "療效", "治療", "本日成交來自")
 
 
+class AdviceMode(str):
+    """Keep the machine mode code stable while rendering a user-facing label in HTML/report text."""
+
+    LABELS = {
+        "deterministic_fallback": "規則分析模式",
+        "ai": "AI 摘要模式",
+    }
+
+    def __str__(self):
+        code = super().__str__()
+        return self.LABELS.get(code, code)
+
+
+def _mode(code):
+    return AdviceMode(code)
+
+
 def provider_input(scores, as_of_date):
     allowed = (
         "canonical_id",
@@ -83,7 +100,7 @@ def fallback_advice(scores, as_of_date, fallback_reason="未使用生成式 AI")
         "prompt_version": PROMPT_VERSION,
         "input_hash": _input_hash(evidence),
         "generated_at": as_of_date + "T00:00:00Z",
-        "generation_mode": "deterministic_fallback",
+        "generation_mode": _mode("deterministic_fallback"),
     }
 
 
@@ -129,7 +146,7 @@ def generate_advice(scores, as_of_date, enabled=False, provider=None):
     evidence = provider_input(scores, as_of_date)
     try:
         payload = provider(evidence)
-        payload["generation_mode"] = "ai"
+        payload["generation_mode"] = _mode("ai")
         payload["input_hash"] = _input_hash(evidence)
         return validate_advice(payload, scores, as_of_date)
     except Exception as error:
