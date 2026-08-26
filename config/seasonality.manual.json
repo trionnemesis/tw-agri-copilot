@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "source_url": "https://www.afa.gov.tw/",
+  "source_status": "fallback",
+  "verified_at": "prototype-fixture",
+  "notice": "Prototype manual fallback. It demonstrates the contract and must not be presented as a live official snapshot.",
+  "items": [
+    {"canonical_id":"banana","months":[1,2,3,4,5,6,7,8,9,10,11,12],"counties":["南投縣","屏東縣"]},
+    {"canonical_id":"pineapple","months":[3,4,5,6,7,8],"counties":["嘉義縣","屏東縣"]},
+    {"canonical_id":"dragon-fruit","months":[6,7,8,9,10,11],"counties":["彰化縣","南投縣"]},
+    {"canonical_id":"papaya","months":[1,2,3,4,5,6,7,8,9,10,11,12],"counties":["台南市","屏東縣"]},
+    {"canonical_id":"guava","months":[1,2,3,4,5,6,7,8,9,10,11,12],"counties":["彰化縣","高雄市"]},
+    {"canonical_id":"mango","months":[5,6,7,8],"counties":["台南市","屏東縣"]},
+    {"canonical_id":"watermelon","months":[4,5,6,7,8],"counties":["花蓮縣","雲林縣"]},
+    {"canonical_id":"passion-fruit","months":[7,8,9,10,11,12],"counties":["南投縣"]},
+    {"canonical_id":"custard-apple","months":[1,2,3,8,9,10,11,12],"counties":["台東縣"]},
+    {"canonical_id":"avocado","months":[6,7,8,9,10],"counties":["嘉義縣","台南市"]},
+    {"canonical_id":"cucumber","months":[1,2,3,4,5,6,7,8,9,10,11,12],"counties":["屏東縣","雲林縣"]},
+    {"canonical_id":"cauliflower","months":[1,2,3,10,11,12],"counties":["彰化縣","嘉義縣"]},
+    {"canonical_id":"cabbage","months":[1,2,3,4,10,11,12],"counties":["南投縣","宜蘭縣"]},
+    {"canonical_id":"bok-choy","months":[1,2,3,4,5,9,10,11,12],"counties":["彰化縣","雲林縣"]},
+    {"canonical_id":"water-spinach","months":[4,5,6,7,8,9,10],"counties":["高雄市","屏東縣"]},
+    {"canonical_id":"spinach","months":[1,2,3,11,12],"counties":["彰化縣","雲林縣"]},
+    {"canonical_id":"carrot","months":[1,2,3,4,11,12],"counties":["彰化縣","雲林縣"]},
+    {"canonical_id":"onion","months":[1,2,3,4],"counties":["屏東縣"]},
+    {"canonical_id":"green-onion","months":[1,2,3,4,5,9,10,11,12],"counties":["宜蘭縣","彰化縣"]},
+    {"canonical_id":"eggplant","months":[4,5,6,7,8,9,10],"counties":["屏東縣","雲林縣"]}
+  ]
+}

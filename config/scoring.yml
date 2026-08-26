@@ -1,1 +1,7 @@
-{"version":"pr1-placeholder","enabled":false}
+{
+  "schema_version": "1.0",
+  "enabled": true,
+  "windows": {"7d_minimum_days": 3, "30d_minimum_days": 10, "90d_minimum_days": 30},
+  "eligibility": {"minimum_market_count": 2, "requires_in_season": true},
+  "verdicts": {"priority": 80, "consider": 65, "watch": 50}
+}
