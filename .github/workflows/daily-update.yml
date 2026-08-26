@@ -1,4 +1,5 @@
 name: Daily market update
+# Scheduled runs publish the latest complete watchlist date when today's feed is not complete yet.
 on:
   schedule:
     - cron: '0 2,5 * * *'
