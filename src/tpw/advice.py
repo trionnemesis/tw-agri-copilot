@@ -55,7 +55,7 @@ def _reason_text(row):
     return f"{row['verdict_label']}：{reasons or '依決定性規則判定'}。"
 
 
-def fallback_advice(scores, as_of_date, fallback_reason="AI 未啟用"):
+def fallback_advice(scores, as_of_date, fallback_reason="未使用生成式 AI"):
     evidence = provider_input(scores, as_of_date)
     priority = [row for row in scores if row["verdict"] in ("priority", "consider")][:5]
     watch = [row for row in scores if row["verdict"] in ("hold", "insufficient")][:3]
@@ -63,10 +63,12 @@ def fallback_advice(scores, as_of_date, fallback_reason="AI 未啟用"):
         "schema_version": "1.0",
         "language": "zh-Hant",
         "as_of_date": as_of_date,
-        "headline": f"{as_of_date} 當季採買觀察",
+        "headline": f"{as_of_date} 當季採買觀察｜規則分析模式",
         "summary": (
-            f"本期依產季、批發價格、交易量與資料覆蓋率產生決定性判定；"
-            f"共有 {len(priority)} 項列入優先或可考慮清單。{fallback_reason}，因此使用固定模板。"
+            f"本期依產季、批發價格、交易量與資料覆蓋率，由可重現的規則引擎自動產生採買判定；"
+            f"共有 {len(priority)} 項列入優先或可考慮清單。"
+            f"目前採用規則分析模式（{fallback_reason}），不由生成式 AI 修改 Buy Score 或 verdict；"
+            f"此區塊會隨每日 02:00 與 05:00（Asia/Taipei）資料更新同步重算。"
         ),
         "priority_items": [
             {"canonical_id": row["canonical_id"], "text": _reason_text(row)}
