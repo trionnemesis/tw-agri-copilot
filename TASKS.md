@@ -1,12 +1,12 @@
 ---
-task_set: TPW-PR1-WORK-ORDER
-status: Done
+task_set: TPW-PR1-PR5-PROTOTYPE
+status: In review
 owner: gpt-5.6-terra implementation subagent
 reviewer: main agent
 source_spec: SPEC.md
 ---
 
-# Taiwan Produce Watch — PR 1 Tasks
+# Taiwan Produce Watch — PR 1–5 Prototype Tasks
 
 Status values: `TODO`, `IN_PROGRESS`, `DONE`, `BLOCKED`. A task may be marked `DONE` only with file and command evidence in `VERIFICATION.md`.
 
@@ -81,6 +81,28 @@ T-000 → T-101 → T-102 → T-103 → T-104 → T-105
                                                           └────→ T-109 → T-110
 ```
 
+## Authorized prototype continuation
+
+- [x] **T-201 — PR 2 rolling analytics and routes** (`FR-004`, `FR-010`)
+  - Previous valid trading day, 7／30／90D volume-weighted windows, coverage, 20 produce pages, four trend routes, inline SVG plus table fallback.
+  - Evidence: analytics unit tests, complete-route integration test, browser route checks.
+
+- [x] **T-202 — PR 3 seasonality and deterministic recommendations** (`FR-003`, `FR-005`, `FR-006`)
+  - Manual fallback contract, canonical mapping, hard eligibility gates, exact score components, first-viewport cards and price movers.
+  - Evidence: seasonality/scoring unit tests, >=3 fixture recommendation gate, responsive browser checks.
+
+- [x] **T-203 — PR 4 provider-neutral advice fallback** (`FR-007`, `FR-008`)
+  - Minimized evidence input, strict zh-Hant output schema, prohibited-claim checks, input hash/prompt metadata and deterministic fallback.
+  - Evidence: advice unit tests and deterministic build hash.
+
+- [x] **T-204 — PR 5 traceability context** (`FR-015`, `FR-016`, `FR-017`)
+  - Watchlist filtering, nullable fields, coarse location, minimized persistence, detail routes and exact non-join warning.
+  - Evidence: traceability unit/integration tests and generated route inspection.
+
+- [ ] **T-205 — Public prototype release** (`FR-013`, `FR-014`)
+  - AgentSec-inspired README, fixture CI, active official Pages workflow, independent Sol acceptance, direct main push, observed CI/deploy and live desktop/mobile verification.
+  - Evidence belongs in `VERIFICATION.md`; remote boxes remain unchecked until observed.
+
 ## Completion definition for this work order
 
-This work order completes **PR 1 only**. It must not mark full P0 or SPEC Definition of Done complete. PR 2 analytics, PR 3 seasonality/recommendations, PR 4 AI, and PR 5 traceability remain explicitly pending.
+This work order completes the **PR 1–5 side-project prototype**, not the full production P0 Definition of Done. Live 120-day bootstrap, live seasonality/traceability adapters, an external AI provider, long-running scheduled publication and production data freshness remain explicitly unverified.

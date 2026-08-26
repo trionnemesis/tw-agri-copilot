@@ -15,7 +15,7 @@ class BuildTest(unittest.TestCase):
    rendered=pathlib.Path(raw); build_site([{'canonical_id':'banana','display_name':'香蕉','category':'fruit','weighted_avg_price_twd_per_kg':20,'total_volume_kg':10}],'2026-08-25',rendered,"<live>")
    self.assertIn("資料狀態：&lt;live&gt;",(rendered/'index.html').read_text())
  def test_mismatch_and_backfill_windows(self):
-  with self.assertRaises(subprocess.CalledProcessError): self.command('build','--as-of','2026-08-23')
+  with self.assertRaises(subprocess.CalledProcessError): self.command('build','--as-of','2026-07-01')
   calls=[]; self.assertEqual(backfill(9,'2026-08-25',lambda a,b:calls.append((a,b))),calls)
   self.assertEqual(calls,[('2026-08-17','2026-08-20'),('2026-08-21','2026-08-24'),('2026-08-25','2026-08-25')])
  def test_ingest_metadata_correction_and_lkg(self):
@@ -45,6 +45,17 @@ class BuildTest(unittest.TestCase):
     __import__('os').replace(src,dst)
    with self.assertRaises(OSError): swap_all(pairs,fail)
    self.assertEqual([(base/n/'v').read_text() for n in ('data','site','reports')],['old','old','old'])
+ def test_prototype_routes_context_and_determinism(self):
+  self.command('seed-prototype','--as-of','2026-08-25');self.command('build','--as-of','2026-08-25')
+  tracked=[ROOT/'site/index.html',ROOT/'site/data/current.json',ROOT/'data/advice/2026/08/2026-08-25.json']
+  before=[hashlib.sha256(path.read_bytes()).hexdigest() for path in tracked];self.command('build','--as-of','2026-08-25');self.assertEqual(before,[hashlib.sha256(path.read_bytes()).hexdigest() for path in tracked])
+  current=json.loads((ROOT/'site/data/current.json').read_text());self.assertTrue(current['prototype_complete']);self.assertGreaterEqual(current['eligible_recommendations'],3);self.assertEqual(len(current['scores']),20);self.assertEqual(current['advice']['generation_mode'],'deterministic_fallback')
+  self.assertEqual(len(list((ROOT/'site/produce').glob('*.html'))),20);self.assertEqual(len(list((ROOT/'site/traceability').glob('*.html'))),21)
+  for route in ('season/current.html','trends/daily.html','trends/weekly.html','trends/monthly.html','trends/quarterly.html','traceability/index.html'):
+   self.assertTrue((ROOT/'site'/route).exists(),route)
+  self.assertEqual(len(list((ROOT/'data/series').glob('*.json'))),20);self.assertTrue((ROOT/'data/seasonality/2026-08.json').exists());self.assertTrue((ROOT/'data/traceability/monthly/2026-08.json').exists())
+  trace=(ROOT/'data/traceability/current.json').read_text();self.assertNotIn('不得保存的姓名',trace);self.assertNotIn('不得保存的通路明細',trace)
+  self.assertNotIn('PR 1 不產生推薦',(ROOT/'reports/daily/2026/08/2026-08-25.md').read_text())
  def test_site_guard_rejects_secret_and_oversize(self):
   from tpw.render import build_site
   rows=[{'canonical_id':'banana','display_name':'香蕉','category':'fruit','weighted_avg_price_twd_per_kg':None,'total_volume_kg':0}]

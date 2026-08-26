@@ -1,8 +1,7 @@
 name: Daily market update
 on:
   schedule:
-    - cron: '37 13 * * *'
-      timezone: 'Asia/Taipei'
+    - cron: '37 13 * * 1-5'
   workflow_dispatch:
     inputs:
       as_of_date: {required: false, type: string}
@@ -18,16 +17,39 @@ jobs:
         with: {python-version: '3.11'}
       - run: PYTHONPATH=src python3 -m tpw validate-config
       - id: dates
+        env:
+          REQUESTED_DATE: ${{ inputs.as_of_date }}
         run: |
-          echo "end=$(TZ=Asia/Taipei date +%F)" >> "$GITHUB_OUTPUT"
+          requested="$REQUESTED_DATE"
+          if [ -z "$requested" ]; then
+            requested="$(TZ=Asia/Taipei date +%F)"
+          fi
+          if ! [[ "$requested" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            echo 'as_of_date must use YYYY-MM-DD' >&2
+            exit 2
+          fi
+          echo "end=$requested" >> "$GITHUB_OUTPUT"
+          echo "month=${requested:0:7}" >> "$GITHUB_OUTPUT"
       - name: Fetch bounded rolling windows
+        env:
+          AS_OF_DATE: ${{ steps.dates.outputs.end }}
+          BACKFILL_DAYS: ${{ inputs.backfill_days || '4' }}
         run: |
-          PYTHONPATH=src python3 -m tpw backfill --days "${{ inputs.backfill_days || 4 }}" --end "${{ inputs.as_of_date || steps.dates.outputs.end }}"
+          if ! [[ "$BACKFILL_DAYS" =~ ^[0-9]+$ ]] || [ "$BACKFILL_DAYS" -lt 1 ] || [ "$BACKFILL_DAYS" -gt 120 ]; then
+            echo 'backfill_days must be an integer from 1 to 120' >&2
+            exit 2
+          fi
+          PYTHONPATH=src python3 -m tpw backfill --days "$BACKFILL_DAYS" --end "$AS_OF_DATE"
       - name: Build and validate
+        env:
+          AS_OF_DATE: ${{ steps.dates.outputs.end }}
+          AS_OF_MONTH: ${{ steps.dates.outputs.month }}
         run: |
-          PYTHONPATH=src python3 -m tpw build --as-of "${{ inputs.as_of_date || steps.dates.outputs.end }}"
-          PYTHONPATH=src python3 -m tpw validate-data --as-of "${{ inputs.as_of_date || steps.dates.outputs.end }}"
-          PYTHONPATH=src python3 -m tpw verify-site --as-of "${{ inputs.as_of_date || steps.dates.outputs.end }}"
+          PYTHONPATH=src python3 -m tpw fetch-seasonality --month "$AS_OF_MONTH"
+          PYTHONPATH=src python3 -m tpw fetch-traceability --month "$AS_OF_MONTH"
+          PYTHONPATH=src python3 -m tpw build --as-of "$AS_OF_DATE"
+          PYTHONPATH=src python3 -m tpw validate-data --as-of "$AS_OF_DATE"
+          PYTHONPATH=src python3 -m tpw verify-site --as-of "$AS_OF_DATE"
       - name: Commit changed content
         run: |
           git add data reports site

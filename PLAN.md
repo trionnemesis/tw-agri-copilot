@@ -1,8 +1,8 @@
 ---
 plan_id: TPW-PLAN-001
-version: 0.1.0
-status: Ready for execution
-scope: PR 1 - Static Market Dashboard Foundation
+version: 0.2.0
+status: Prototype implementation complete; release verification pending
+scope: PR 1-5 - Public side-project prototype
 source_spec: SPEC.md
 prepared_at: 2026-08-26
 ---
@@ -13,15 +13,15 @@ prepared_at: 2026-08-26
 
 - `SPEC.md` is the product and system source of truth and must remain byte-for-byte unchanged during this work order.
 - The user explicitly requires the public GitHub repository to match the current folder name, so the repository will be `tw-agri-copilot`. The product/site name remains **Taiwan Produce Watch**. This is a repository-naming override only.
-- This execution is limited to SPEC section 23, **PR 1 — Static Market Dashboard Foundation**. PR 2–5 behavior is excluded.
+- The original PR 1 foundation remains the baseline; the user subsequently authorized a lean continuation through **PR 2–5** to complete the public prototype.
 - The reference file `references/00965_deep_analysis_20260826(1).html` is visual input only. Reuse layout language and CSS tokens; do not copy its ETF content or embedded base64 charts into the generated site.
 - The required CI path must be fixture-based and offline. Live public API access is allowed only for bounded schema/crop-code discovery and an explicitly invoked data refresh.
 - The main agent owns repository creation, commits, push, and final acceptance. The implementation subagent must not create or mutate remote repositories.
-- A Pages-ready workflow and base-path-safe site are in scope. Enabling or manually dispatching a live Pages deployment is outside this work order; remote deployment state must not be claimed without separate evidence.
+- A base-path-safe site and active official GitHub Pages workflow are in scope. Remote deployment is claimed only after the main agent observes the workflow and live URL.
 
 ## 2. Target outcome
 
-Deliver a reviewable PR 1 foundation that:
+Deliver a reviewable PR 1–5 prototype that:
 
 1. fetches market data with explicit dates and safe pagination;
 2. validates and normalizes only a curated 10-fruit + 10-vegetable watchlist;
@@ -31,6 +31,10 @@ Deliver a reviewable PR 1 foundation that:
 6. supports a 120-day backfill command and rolling four-day update path;
 7. preserves last-known-good output when input/build validation fails;
 8. includes fixture-based tests, CI, a Pages-ready deployment workflow, and reproducible verification evidence.
+9. computes previous-trading-day and 7／30／90D analytics with coverage;
+10. renders 20 produce pages, four trend views, seasonality, recommendations, movers, and archives;
+11. keeps advice provider-neutral with strict validation and deterministic fallback;
+12. filters/minimizes traceability context without joining it into Buy Score.
 
 Primary PR 1 traceability: `FR-001`, `FR-002`, `FR-009`, `FR-011`, `FR-013`; supporting constraints: `NFR-001`–`NFR-004`, `NFR-007`–`NFR-010`, `AC-002`, `AC-003`, `AC-009`–`AC-011`, `AC-013`, `AC-014` where applicable to this slice.
 
@@ -59,7 +63,7 @@ Exit gate: unit and contract tests cover the adapter and weighted example from `
 
 - Generate `site/index.html`, `site/daily/YYYY/MM/YYYY-MM-DD.html`, `reports/daily/YYYY/MM/YYYY-MM-DD.md`, `site/archive/index.html`, `site/methodology.html`, `site/data/current.json`, and `.nojekyll`.
 - Use the reference visual system: compact navy/blue-green Hero, 1,180px content container, sticky pill navigation, white rounded cards, responsive grids, print rules, and accessible semantic HTML.
-- Include a truthful `#recommendations` shell that states recommendation scoring arrives in PR 3; do not fabricate recommendations in PR 1.
+- Populate `#recommendations` only from deterministic score rows that pass seasonality, coverage, market-count, and quality gates.
 - Render the required wholesale disclaimer next to every price-bearing view.
 - Use only escaped upstream strings and base-path-safe relative links.
 
@@ -69,7 +73,7 @@ Exit gate: generated HTML remains useful with JavaScript disabled, has no embedd
 
 - Add fixture-only CI for tests, build verification, secret-pattern checks, and size guards.
 - Add `daily-update.yml` with schedule/manual inputs, concurrency, rolling four-day update, backfill input, validation-before-write, and content-change gating.
-- Add a Pages-ready deploy workflow using official GitHub actions; do not activate or manually dispatch deployment in this work order.
+- Add an active deploy workflow using official GitHub Pages actions; enable it only after local acceptance and verify the resulting URL.
 - Run the same fixture/as-of build twice and compare output hashes to prove determinism.
 - Produce `VERIFICATION.md` with commands, results, requirement evidence, incomplete later-slice items, and release limitations.
 
@@ -77,20 +81,19 @@ Exit gate: targeted tests, full local suite, package/static checks, deterministi
 
 ## 4. Proposed repository topology
 
-Follow SPEC section 13 with only PR 1 modules populated:
+Follow the lean subset of SPEC section 13 required by the PR 1–5 prototype:
 
 ```text
 config/produce.yml
-src/tpw/{adapters,normalize,analytics,render,quality}/
-templates/
-data/{source-meta,market/daily,aggregates/daily}/
+src/tpw/{market,model,analytics,seasonality,scoring,advice,traceability,render,cli}.py
+data/{source-meta,market/daily,aggregates/daily,series,seasonality,advice,traceability,quality}/
 reports/daily/
 site/{assets,data,daily,archive}/
 tests/{fixtures,unit,contract,integration}/
 .github/workflows/{ci,daily-update,deploy-pages}.yml
 ```
 
-Seasonality, Buy Score, LLM advice, crop trend/detail pages, and traceability modules may have no implementation in PR 1. Avoid speculative stubs that imply those features work.
+The prototype implements seasonality fallback, Buy Score, deterministic advice fallback, crop/trend pages, and minimized traceability fixtures. Live seasonality, traceability, AI-provider and full 120-day release validation remain outside this slice and must not be implied.
 
 ## 5. Failure and rollback model
 
@@ -121,4 +124,14 @@ The implementation subagent may report completion only after:
 - no secret, token, credential, private endpoint, or generated credential-bearing file is present;
 - no Git commit, push, repository creation, or live deployment was performed by the subagent.
 
-The main agent will independently inspect the diff, rerun focused and related validation, exercise the generated site, and only then create/push the public GitHub repository.
+The main agent will independently inspect the diff, rerun focused and related validation, exercise the generated site, and only then commit/push the existing public GitHub repository and enable Pages.
+
+## 8. Lean prototype release gates
+
+This side project intentionally does not require the full Hermes engineering process. Release requires only:
+
+1. correct deterministic fixture data and exact score/coverage behavior;
+2. preserved normalized/generated history and rollback-safe promotion;
+3. unit, contract, integration, workflow-YAML, secret, size, and deterministic-build checks;
+4. desktop/mobile browser verification with working routes and no horizontal overflow;
+5. observed remote `main`, successful CI/Pages workflows, and a reachable public site.

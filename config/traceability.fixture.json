@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "source_status": "fixture",
+  "notice": "Shape-only prototype fixture. Codes and organizations below are demonstrative, not live public records.",
+  "items": [
+    {"canonical_id":"banana","Tracecode":"DEMO-BANANA-001","Producer":"示範合作社（fixture）","OrgID":"DEMO-001","ProductName":"香蕉","Place":"屏東縣內埔鄉示範地段","PackDate":"2026-08-23","CertificationName":"產銷履歷示範","ValidDate":"2026-12-31","FarmerName":"不得保存的姓名","StoreInfo":"不得保存的通路明細","source_status":"fixture"},
+    {"canonical_id":"pineapple","Tracecode":"DEMO-PINEAPPLE-001","Producer":"示範合作社（fixture）","OrgID":"DEMO-002","ProductName":"鳳梨","Place":"嘉義縣民雄鄉示範地段","PackDate":"2026-08-22","CertificationName":"產銷履歷示範","ValidDate":"2026-12-31","source_status":"fixture"},
+    {"canonical_id":"dragon-fruit","Tracecode":"DEMO-DRAGON-001","Producer":"示範農場（fixture）","OrgID":"DEMO-003","ProductName":"紅龍果","Place":"彰化縣二林鎮示範地段","PackDate":null,"CertificationName":"產銷履歷示範","ValidDate":null,"source_status":"fixture"},
+    {"canonical_id":"cucumber","Tracecode":"DEMO-CUCUMBER-001","Producer":"示範蔬菜班（fixture）","OrgID":"DEMO-004","ProductName":"胡瓜","Place":"雲林縣西螺鎮示範地段","PackDate":"2026/08/24","CertificationName":"產銷履歷示範","ValidDate":"2026/12/31","source_status":"fixture"},
+    {"canonical_id":"water-spinach","Tracecode":"DEMO-WATER-SPINACH-001","Producer":"示範蔬菜班（fixture）","OrgID":"DEMO-005","ProductName":"蕹菜","Place":"高雄市美濃區示範地段","PackDate":null,"CertificationName":null,"ValidDate":null,"source_status":"fixture"},
+    {"canonical_id":"unknown-crop","Tracecode":"DEMO-IGNORED","Producer":"不應輸出","ProductName":"非觀察清單","Place":"台北市","source_status":"fixture"}
+  ]
+}

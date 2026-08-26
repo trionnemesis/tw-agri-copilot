@@ -1,17 +1,18 @@
-name: Deploy Pages (opt-in)
+name: Deploy Pages
 on:
   push:
     branches: [main]
-    paths: ['site/**']
-permissions: {contents: read}
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
 jobs:
   deploy:
-    if: ${{ vars.ENABLE_PAGES_DEPLOY == 'true' }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pages: write
-      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -27,5 +28,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
-# Deployment remains disabled until the repository variable
-# ENABLE_PAGES_DEPLOY is explicitly set to true.

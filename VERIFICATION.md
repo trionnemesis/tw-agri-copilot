@@ -1,58 +1,101 @@
-# PR 1 verification — 2026-08-26
+# PR 1–5 prototype verification — 2026-08-26
+
+## Acceptance status
+
+Local implementation and browser acceptance are complete for the deterministic side-project prototype. GitHub main, Actions and Pages evidence is added only after it is observed; live upstream refreshes remain outside this release.
 
 ## Verified locally
 
-```text
+~~~text
+PYTHONPATH=src python3 -m compileall -q src tests
+
 PYTHONPATH=src python3 -m unittest discover -s tests -t . -v
-Ran 12 tests in 0.683s
+Ran 22 tests in 2.113s
 OK
 
 PYTHONPATH=src python3 -m tpw validate-config
 config valid: 20 mapped items
 
+PYTHONPATH=src python3 -m tpw seed-prototype --as-of 2026-08-25
+seeded normalized rows: 1400
+
 PYTHONPATH=src python3 -m tpw build --as-of 2026-08-25
 build promoted safely
+
 PYTHONPATH=src python3 -m tpw validate-data --as-of 2026-08-25
 data valid
+
 PYTHONPATH=src python3 -m tpw verify-site --as-of 2026-08-25
 site verified
-```
 
-The double-build hash comparison produced no diff. Representative fixture artifacts:
+python3 -c 'import yaml; ... yaml.safe_load(...)'
+YAML OK: 3 workflows
+~~~
+
+The complete data/, reports/ and site/ file manifest was hashed, the same build was run again, and the second manifest had no diff. git diff --check passed. A site-only secret/base64 pattern scan returned no matches.
+
+## Prototype evidence
+
+| Surface | Observed result |
+|---|---|
+| Fixture history | 35 calendar days, 20 canonical items, 2 markets, 1,400 normalized rows |
+| Analytics | previous valid trading day plus 7／30／90D volume-weighted windows and coverage |
+| Recommendation | 20 score rows; 13 eligible; homepage shows top 6 |
+| Advice | deterministic_fallback, tpw-advice-v1, stable input hash |
+| Static routes | 20 produce pages, 4 trend pages, season page, 21 traceability pages including index, daily/archive/methodology |
+| Derived data | 20 series JSON files plus seasonality, advice, quality and minimized traceability history |
+| Output budget | site/ 388 KB; repository working tree 2.6 MB |
+
+## Browser acceptance
+
+Local site was served through a real browser at http://127.0.0.1:8765/.
+
+- 1366×768: #recommendations top = 272 px, 3 columns, exactly 3 cards visible in the initial viewport, no horizontal overflow.
+- 900×800: 2 recommendation columns, no horizontal overflow.
+- 390×844: 1 recommendation column, #recommendations top = 274 px, no horizontal overflow.
+- Seasonality filter changed to vegetables only: 3 visible vegetables, 0 fruits, and aria-pressed updated.
+- Recommendation-card flow opened /produce/banana.html; title, wholesale disclaimer, inline SVG trend and 14-day table were present.
+- /trends/daily.html showed a real previous-trading-day reference; /trends/quarterly.html showed 20 rows with the 90D heading.
+- /traceability/index.html showed five minimized fixture cards and the exact non-join warning.
+- Local server log showed only 200/304 responses for tested HTML, CSS and JS; no 404 occurred.
+
+Screenshots:
+
+- tpw-desktop-1366x768.jpg
+- tpw-mobile-390x844.jpg
+
+## Requirement traceability
+
+- **PR 2 / FR-004, FR-010:** analytics unit tests cover previous-valid-day skipping, zero-reference behavior, coverage, weighted windows and volatility; integration and browser checks cover all detail/trend routes and chart/table fallback.
+- **PR 3 / FR-003, FR-005, FR-006:** seasonality and score unit tests cover unknown/fallback behavior, market-count/coverage gates and deterministic score boundaries; fixture acceptance requires at least three eligible cards.
+- **PR 4 / FR-007, FR-008:** advice tests prove minimized provider input, deterministic output, strict language/schema checks and fallback on prohibited or invalid provider output.
+- **PR 5 / FR-015, FR-016, FR-017:** traceability tests prove watchlist filtering, nullable dates, coarse place, removal of farmer/store values and non-join semantics.
+- **PR 1 regression:** market contract, normalization/upsert, history retention and injected three-tree rollback tests remain green.
+
+## Artifact integrity
 
 | Artifact | SHA-256 |
 |---|---|
-| `site/index.html` | `4f23512192c19ca8a312f7668e017005cb84f3dc2a241edbff33b447f822c4b7` |
-| normalized daily JSON | `0bba49ce83bc182ac72ab90d93dfe02fe4cb3b575512ae2b6fbcdd495d60b421` |
-| daily aggregate JSON | `0c576a6013f5f0c7188c4219fdeb8dddd33da762c6122ba2c5e38dfb4805a524` |
-| daily Markdown | `8dc5eb909523956735977d073b628b6be4b488276786052b7c3d9a232f7132bc` |
+| site/index.html | b9512f286b761dfd13f0e3a35b71ca8f24ed555faa2f62755cf31779eb2f5f0f |
+| site/data/current.json | cba29eb96fc4a2d3597cb94515ea965a6e1dc6d460cb8e690a42cf5341f9e479 |
+| normalized 2026-08-25 JSON | 36cf85214ccf1bd3e3c2e80a63ed6aaecf3a7d05f0eba818844175a7b312a3f7 |
+| aggregate 2026-08-25 JSON | fa63c8757e1ab0700d333fcbde6cb612bfcec47e98ec1bebacb6601d0c452b99 |
+| advice 2026-08-25 JSON | f6506baa63eeea08dc3a19e298fd158a763f19263c0c92f3d2d4abd3e726eb7b |
+| daily 2026-08-25 Markdown | 901336886a62e71757a1a1b1fd54ed8e0358e52a4efe8f0c459d0f09ecb364af |
 
-`rg -n 'AKIA|ghp_|glpat-|base64,' site` found no matches; `site/` is 1 MB by `du -sm`.
+Source-input hashes remained unchanged:
 
-## Requirement evidence
+- SPEC.md: 2be4f623cf882eca7302d41702ecf53a23564e8f82753a7f82d404f617858ff6
+- reference HTML: bd2ddaeb4a1ce1431d27ad5901310e0abd1a30a9cd8d8f4725f60f78a1b2e7dd
 
-- FR-001/FR-002, NFR-003/NFR-008/NFR-010: explicit-date, paginated market adapter with response validation; contract tests cover empty/HTML and duplicate page handling. `DISCOVERY.md` records live schema evidence.
-- NFR-001/NFR-007, AC-003/AC-010: ROC date conversion, finite numeric validation, correction-safe logical-key upsert and volume-weighted aggregation; unit and double-build integration tests pass. The AC-003 example returns 20.19801980198, not 30.
-- FR-009/FR-011/FR-013, NFR-004/NFR-005/NFR-009: deterministic fixture build produces homepage, daily HTML/Markdown, archive, methodology, current JSON, no-JS core text, responsive CSS, disclaimer, relative links, `.nojekyll`, no base64, size guard.
-- FR-014: named CLI entry points and scheduled/manual workflow definitions are present. Fixture CI has no live API request. The opt-in Pages workflow uses GitHub's official configure, artifact, and deploy actions, but its deployment job remains skipped until `ENABLE_PAGES_DEPLOY=true` is explicitly configured.
+## Remote evidence
 
-## Source-input integrity
+Pending first prototype push. Do not treat local success as CI, deployment or live-site evidence.
 
-SHA-256 remained unchanged: `SPEC.md` `2be4f623cf882eca7302d41702ecf53a23564e8f82753a7f82d404f617858ff6`; `PLAN.md` `6614a7b2c7c8f63941ae0217cb6076287ad05d9bb741dfeb51c6af0d81d860bb`; `WORK_ORDER.md` `30a7f5b29ee4197e666ff7db2303e71e962c1adaa3e5cd35ad0422664d8733d7`; reference HTML `bd2ddaeb4a1ce1431d27ad5901310e0abd1a30a9cd8d8f4725f60f78a1b2e7dd`.
+## Explicit limits
 
-## Not verified / intentionally deferred at subagent handoff
-
-- No GitHub Actions run, Pages enablement/repository variable, Pages deployment, credential, or live daily publication was dispatched during subagent implementation.
-- The one bounded live request verified schema/codes only. It is not committed and not used by required tests.
-- No live 120-day backfill was dispatched. The implemented `backfill --days 120` code path is genuine, bounded in four-day windows, and fixture-mocked in required tests.
-- PR 2–5 remain deferred: rolling windows, crop detail/trend pages, seasonality, Buy Score/recommendations, AI, and traceability.
-
-## Acceptance remediation
-
-The lifecycle is now genuine rather than fixture-coupled: `fetch-market` converts ISO request dates to observed ROC source dates, validates and normalizes only configured mappings, writes per-day normalized JSON and source metadata, then merges corrections by logical key. An identical refetch preserves stored rows and source metadata despite a new fetch timestamp, while a changed row hash replaces the same logical key. Blocking input failures occur before the atomic directory swap, preserving the previous `data/` tree.
-
-`backfill --days N --end YYYY-MM-DD` splits the exact inclusive date range into bounded four-day windows. It is fixture-mocked in required tests; no live 120-day request was run. `build --as-of` now reads only stored normalized data for that ISO date and fails before staging/promoting if it is absent or mismatched. Directory promotion uses rename-to-backup and rollback on replacement failure. The daily workflow stages generated paths before its cached-diff check, so a newly created date is included in content-change gating.
-
-`verify-site` crawls generated HTML links, requires the homepage recommendations-section contract, checks price disclaimers, rejects secret/base64 patterns, validates the requested as-of JSON, and enforces the 900 MB size threshold with largest-file diagnostics. Nested daily CSS and navigation links are depth-correct. The daily workflow calculates Asia/Taipei dates at runtime and calls the real backfill CLI; Pages deployment remains opt-in.
-
-All three workflow files were parsed with `python3 -c 'import yaml; ... yaml.safe_load(...)'`, returning `YAML OK: 3 workflows`. The integration suite retains two built dates (`2026-08-24`, `2026-08-25`) and asserts that both daily HTML/Markdown files and both archive links survive. A focused injected `os.replace` failure confirms the three-tree promotion restores `data`, `site`, and `reports` to their pre-promotion content.
+- No live 120-day backfill was dispatched for this release.
+- No live seasonality or traceability API snapshot was published.
+- No external AI provider was enabled.
+- Daily scheduled publication is defined but has not accumulated production runtime evidence.
+- Fixture/fallback status and wholesale/non-retail wording are intentionally visible on the public prototype.
