@@ -14,6 +14,11 @@ on:
     inputs:
       as_of_date: {required: false, type: string}
       backfill_days: {required: false, type: string}
+      force_seasonality_refresh:
+        description: Bypass a reusable same-month live seasonality snapshot
+        required: false
+        type: boolean
+        default: false
 concurrency: {group: taiwan-produce-daily-update, cancel-in-progress: false}
 jobs:
   update:
@@ -111,12 +116,15 @@ jobs:
         if: github.event_name != 'push'
         env:
           AS_OF_MONTH: ${{ steps.resolved.outputs.month }}
+          FORCE_SEASONALITY_REFRESH: ${{ inputs.force_seasonality_refresh || false }}
         run: |
-          if python3 -c 'import json, os, pathlib, sys; p=pathlib.Path("data/seasonality/catalog")/(os.environ["AS_OF_MONTH"]+".json"); rows=json.loads(p.read_text()) if p.exists() else []; sys.exit(0 if rows and all(row.get("source_status")=="live" for row in rows) else 1)'; then
-            echo "Seasonality: reusing the verified official snapshot for $AS_OF_MONTH."
-          else
-            PYTHONPATH=src python3 -m tpw fetch-seasonality --month "$AS_OF_MONTH"
+          seasonality_args=(--month "$AS_OF_MONTH")
+          if [ "$FORCE_SEASONALITY_REFRESH" = 'true' ]; then
+            seasonality_args+=(--force)
           fi
+          seasonality_output="$(PYTHONPATH=src python3 -m tpw refresh-seasonality "${seasonality_args[@]}")"
+          printf '%s\n' "$seasonality_output"
+          echo "$seasonality_output" >> "$GITHUB_STEP_SUMMARY"
           PYTHONPATH=src python3 -m tpw fetch-traceability --month "$AS_OF_MONTH"
       - name: Build, normalize, and validate
         env:

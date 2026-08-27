@@ -1,9 +1,14 @@
-import hashlib, html, json, pathlib, re, shutil, subprocess, sys, tempfile, unittest
+import hashlib, html, io, json, pathlib, re, shutil, subprocess, sys, tempfile, unittest
 from collections import Counter
 from unittest import mock
-from tpw.cli import ingest, backfill, persist_seasonality, swap_all, verify_site
+from tpw.cli import ingest, backfill, main, persist_seasonality, refresh_seasonality, swap_all, verify_site
 from tpw.market import UpstreamUnavailable
 ROOT=pathlib.Path(__file__).parents[2]
+def official_seasonality_rows(month_number):
+ return [
+  {'category':'fruit','display_name':'香蕉','variety':'北蕉','county':'屏東縣','district':'高樹鄉','months':[month_number]},
+  {'category':'vegetable','display_name':'胡瓜','variety':'黑刺','county':'屏東縣','district':'里港鄉','months':[month_number]},
+ ]
 class BuildTest(unittest.TestCase):
  def command(self,*args): subprocess.run([sys.executable,"-m","tpw",*args],cwd=ROOT,check=True,capture_output=True,text=True)
  def test_double_build_and_site_contract(self):
@@ -89,6 +94,74 @@ class BuildTest(unittest.TestCase):
    self.assertEqual(result['source_status'],'stale')
    self.assertEqual(len(json.loads(before)),result['catalog_count'])
    self.assertTrue(all(row['source_status']=='stale' for row in json.loads((isolated/'data/seasonality/catalog/2026-08.json').read_text())))
+ def test_seasonality_refresh_reuses_live_and_force_fetches(self):
+  with tempfile.TemporaryDirectory() as raw:
+   isolated=pathlib.Path(raw);(isolated/'config').mkdir();(isolated/'data').mkdir()
+   shutil.copy2(ROOT/'config/produce.yml',isolated/'config/produce.yml');shutil.copy2(ROOT/'config/seasonality.manual.json',isolated/'config/seasonality.manual.json')
+   rows=official_seasonality_rows(8)
+   with mock.patch('tpw.cli.ROOT',isolated),mock.patch('tpw.cli.fetch_official',return_value=rows):
+    persist_seasonality('2026-08',fetched_at='initial')
+    catalog_path=isolated/'data/seasonality/catalog/2026-08.json';watch_path=isolated/'data/seasonality/2026-08.json';before=(catalog_path.read_bytes(),watch_path.read_bytes())
+    fetcher=mock.Mock()
+    reused=refresh_seasonality('2026-08',fetcher=fetcher)
+    fetcher.assert_not_called();self.assertEqual(reused['action'],'reuse');self.assertEqual(before,(catalog_path.read_bytes(),watch_path.read_bytes()))
+    refreshed=refresh_seasonality('2026-08',force=True,fetcher=lambda month:persist_seasonality(month,fetched_at='forced'))
+   self.assertEqual((refreshed['action'],refreshed['reason'],refreshed['source_status']),('refresh','forced','live'))
+   catalog=json.loads(catalog_path.read_text());self.assertTrue(all(row['fetched_at']=='forced' and row['source_status']=='live' for row in catalog))
+ def test_seasonality_month_boundary_preserves_history_and_uses_new_month_fallback(self):
+  with tempfile.TemporaryDirectory() as raw:
+   isolated=pathlib.Path(raw);(isolated/'config').mkdir();(isolated/'data').mkdir()
+   shutil.copy2(ROOT/'config/produce.yml',isolated/'config/produce.yml');shutil.copy2(ROOT/'config/seasonality.manual.json',isolated/'config/seasonality.manual.json')
+   with mock.patch('tpw.cli.ROOT',isolated),mock.patch('tpw.cli.fetch_official',return_value=official_seasonality_rows(8)):
+    persist_seasonality('2026-08',fetched_at='august')
+   august_paths=(isolated/'data/seasonality/2026-08.json',isolated/'data/seasonality/catalog/2026-08.json');august_before=tuple(path.read_bytes() for path in august_paths)
+   with mock.patch('tpw.cli.ROOT',isolated),mock.patch('tpw.cli.fetch_official',return_value=official_seasonality_rows(9)):
+    september=refresh_seasonality('2026-09',fetcher=lambda month:persist_seasonality(month,fetched_at='september'))
+   self.assertEqual((september['action'],september['reason'],september['source_status']),('refresh','missing_snapshot','live'));self.assertEqual(august_before,tuple(path.read_bytes() for path in august_paths))
+   september_paths=(isolated/'data/seasonality/2026-09.json',isolated/'data/seasonality/catalog/2026-09.json');september_before=tuple(path.read_bytes() for path in september_paths)
+   with mock.patch('tpw.cli.ROOT',isolated),mock.patch('tpw.cli.fetch_official',side_effect=UpstreamUnavailable('temporary')):
+    october=refresh_seasonality('2026-10')
+   self.assertEqual((october['action'],october['reason'],october['source_status']),('refresh','missing_snapshot','fallback'));self.assertEqual(august_before,tuple(path.read_bytes() for path in august_paths));self.assertEqual(september_before,tuple(path.read_bytes() for path in september_paths))
+   self.assertTrue(all(row['month']=='2026-10' and row['source_status']=='fallback' for row in json.loads((isolated/'data/seasonality/2026-10.json').read_text())))
+ def test_wrong_month_cache_is_never_reused_as_target_month_lkg(self):
+  with tempfile.TemporaryDirectory() as raw:
+   isolated=pathlib.Path(raw);(isolated/'config').mkdir();(isolated/'data').mkdir()
+   shutil.copy2(ROOT/'config/produce.yml',isolated/'config/produce.yml');shutil.copy2(ROOT/'config/seasonality.manual.json',isolated/'config/seasonality.manual.json')
+   with mock.patch('tpw.cli.ROOT',isolated),mock.patch('tpw.cli.fetch_official',return_value=official_seasonality_rows(8)):
+    persist_seasonality('2026-08',fetched_at='august')
+   for source,target in ((isolated/'data/seasonality/2026-08.json',isolated/'data/seasonality/2026-09.json'),(isolated/'data/seasonality/catalog/2026-08.json',isolated/'data/seasonality/catalog/2026-09.json')):shutil.copy2(source,target)
+   with mock.patch('tpw.cli.ROOT',isolated),mock.patch('tpw.cli.fetch_official',side_effect=UpstreamUnavailable('temporary')):
+    result=refresh_seasonality('2026-09')
+   self.assertEqual((result['action'],result['reason'],result['source_status']),('refresh','month_mismatch','fallback'))
+   for path in (isolated/'data/seasonality/2026-09.json',isolated/'data/seasonality/catalog/2026-09.json'):
+    self.assertTrue(all(row['month']=='2026-09' and row['source_status']=='fallback' for row in json.loads(path.read_text())))
+ def test_forced_seasonality_failure_keeps_same_month_lkg_and_schema_drift_bytes(self):
+  with tempfile.TemporaryDirectory() as raw:
+   isolated=pathlib.Path(raw);(isolated/'config').mkdir();(isolated/'data').mkdir()
+   shutil.copy2(ROOT/'config/produce.yml',isolated/'config/produce.yml');shutil.copy2(ROOT/'config/seasonality.manual.json',isolated/'config/seasonality.manual.json')
+   with mock.patch('tpw.cli.ROOT',isolated),mock.patch('tpw.cli.fetch_official',return_value=official_seasonality_rows(8)):
+    persist_seasonality('2026-08',fetched_at='initial')
+   catalog_path=isolated/'data/seasonality/catalog/2026-08.json';watch_path=isolated/'data/seasonality/2026-08.json';live_count=len(json.loads(catalog_path.read_text()))
+   with mock.patch('tpw.cli.ROOT',isolated),mock.patch('tpw.cli.fetch_official',side_effect=UpstreamUnavailable('temporary')):
+    stale=refresh_seasonality('2026-08',force=True)
+   self.assertEqual((stale['action'],stale['reason'],stale['source_status'],stale['catalog_count']),('refresh','forced','stale',live_count))
+   for path in (catalog_path,watch_path):self.assertTrue(all(row['source_status']=='stale' for row in json.loads(path.read_text())))
+   before=(catalog_path.read_bytes(),watch_path.read_bytes())
+   with mock.patch('tpw.cli.ROOT',isolated),mock.patch('tpw.cli.fetch_official',side_effect=ValueError('schema drift')):
+    with self.assertRaisesRegex(ValueError,'schema drift'):refresh_seasonality('2026-08',force=True)
+   self.assertEqual(before,(catalog_path.read_bytes(),watch_path.read_bytes()))
+ def test_seasonality_refresh_rejects_malformed_json_and_workflow_uses_shared_policy(self):
+  with tempfile.TemporaryDirectory() as raw:
+   isolated=pathlib.Path(raw);path=isolated/'data/seasonality/catalog/2026-08.json';path.parent.mkdir(parents=True);path.write_text('{')
+   with mock.patch('tpw.cli.ROOT',isolated),self.assertRaisesRegex(ValueError,'valid JSON'):refresh_seasonality('2026-08',force=True)
+  workflow=(ROOT/'.github/workflows/daily-update.yml').read_text();dispatch=workflow.split('concurrency:',1)[0]
+  self.assertIn('force_seasonality_refresh:',dispatch);self.assertRegex(dispatch,r'force_seasonality_refresh:[\s\S]*type: boolean[\s\S]*default: false')
+  self.assertIn('refresh-seasonality',workflow);self.assertIn('seasonality_args+=(--force)',workflow);self.assertNotIn('row.get("source_status")=="live"',workflow)
+ def test_seasonality_refresh_cli_forwards_force_and_prints_json_result(self):
+  result={'action':'refresh','reason':'forced','month':'2026-08','source_status':'live'}
+  with mock.patch('tpw.cli.refresh_seasonality',return_value=result) as refresh,mock.patch('sys.stdout',new_callable=io.StringIO) as output:
+   main(['refresh-seasonality','--month','2026-08','--force'])
+  refresh.assert_called_once_with('2026-08',True);self.assertIn(json.dumps(result,ensure_ascii=False,sort_keys=True),output.getvalue())
  def test_two_date_history_survives(self):
   first=json.loads((ROOT/'tests/fixtures/market_success.json').read_text()); ingest(first,'2026-08-25','2026-08-25'); self.command('build','--as-of','2026-08-25')
   second=[dict(r,交易日期='115.08.24') for r in first]; ingest(second,'2026-08-24','2026-08-24'); self.command('build','--as-of','2026-08-24')

@@ -80,6 +80,7 @@ python3 -m http.server 8000 --directory site
 | `seed-prototype --as-of DATE` | 建立 35 日、2 市場、20 品項的 deterministic fixture history |
 | `fetch-market --start DATE --end DATE` | 呼叫 market adapter 並保存 normalized watchlist data |
 | `fetch-seasonality --month YYYY-MM` | 抓取並驗證農糧署水果／蔬菜完整分頁；暫時性故障使用 LKG／fallback |
+| `refresh-seasonality --month YYYY-MM [--force]` | 依月份 cache policy 重用或更新產季；`--force` 只略過同月 live reuse，不略過來源與 LKG 驗證 |
 | `fetch-traceability --month YYYY-MM` | 保存 watchlist-only minimized fixture records |
 | `backfill --days N --end DATE` | 以最多 4 日的 bounded windows 抓取市場資料 |
 | `build --as-of DATE` | 從 retained normalized history 重建所有衍生資料與網站 |
@@ -133,7 +134,7 @@ VERIFICATION.md         本地與遠端 acceptance evidence
 - Prototype fixture：可重建、可測試、可部署。
 - Live market adapter：已實作 bounded fetch path；本版未進行 live 120-day release 驗證。
 - External AI provider：未啟用；固定走 deterministic fallback。
-- Seasonality：官方 HTML adapter 已實作並保存月份 catalog；同月份 live snapshot 可重用，失敗狀態明確標示。
+- Seasonality：官方 HTML adapter 已實作並保存月份 catalog；同月份 live snapshot 可重用，Actions 手動執行可要求安全強制更新，失敗狀態明確標示。
 - Traceability：目前仍為明確標示的 minimized fixture；live adapter 尚未實作。
 
 視覺語言來自使用者提供的分析型 HTML（navy gradient、paper cards、status badges、responsive grids）；README 資訊架構參考 [AgentSec README.zh-TW](https://github.com/trionnemesis/AgentSec/blob/main/README.zh-TW.md)，但內容與資料邊界皆針對本專案重寫。
