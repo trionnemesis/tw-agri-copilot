@@ -1,4 +1,5 @@
-import hashlib, json, pathlib, shutil, subprocess, sys, tempfile, unittest
+import hashlib, html, json, pathlib, re, shutil, subprocess, sys, tempfile, unittest
+from collections import Counter
 from unittest import mock
 from tpw.cli import ingest, backfill, persist_seasonality, swap_all, verify_site
 from tpw.market import UpstreamUnavailable
@@ -48,6 +49,11 @@ class BuildTest(unittest.TestCase):
    html=(root/'index.html').read_text();current=json.loads((root/'data/current.json').read_text())
    self.assertIn('2026-08-27 今日休市',html);self.assertIn('並非網站漏更新',html)
    self.assertEqual(current['publication_status'],status)
+ def test_season_search_name_is_html_escaped(self):
+  from tpw.render import _season_page
+  catalog=[{'canonical_id':None,'display_name':"木瓜' <script>",'category':'fruit','county_count':1,'variety_count':0,'counties':['高雄市']}]
+  rendered=_season_page(catalog,[],[])
+  self.assertIn("data-search-name='木瓜&#x27; &lt;script&gt;'",rendered);self.assertNotIn('<script>',rendered)
  def test_seasonality_transient_failure_uses_fallback_then_lkg(self):
   with tempfile.TemporaryDirectory() as raw:
    isolated=pathlib.Path(raw);(isolated/'config').mkdir();(isolated/'data').mkdir()
@@ -103,15 +109,24 @@ class BuildTest(unittest.TestCase):
    self.assertEqual([(base/n/'v').read_text() for n in ('data','site','reports')],['old','old','old'])
  def test_prototype_routes_context_and_determinism(self):
   self.command('seed-prototype','--as-of','2026-08-25');catalog_path=ROOT/'data/seasonality/catalog/2026-08.json';catalog_before=catalog_path.read_bytes();self.command('build','--as-of','2026-08-25');self.assertEqual(catalog_before,catalog_path.read_bytes())
-  tracked=[ROOT/'site/index.html',ROOT/'site/data/current.json',ROOT/'data/advice/2026/08/2026-08-25.json']
+  tracked=[ROOT/'site/index.html',ROOT/'site/season/current.html',ROOT/'site/assets/js/app.js',ROOT/'site/assets/css/app.css',ROOT/'site/data/current.json',ROOT/'data/advice/2026/08/2026-08-25.json']
   before=[hashlib.sha256(path.read_bytes()).hexdigest() for path in tracked];self.command('build','--as-of','2026-08-25');self.assertEqual(before,[hashlib.sha256(path.read_bytes()).hexdigest() for path in tracked])
   current=json.loads((ROOT/'site/data/current.json').read_text());self.assertTrue(current['prototype_complete']);self.assertGreaterEqual(current['eligible_recommendations'],3);self.assertEqual(len(current['scores']),20);self.assertEqual(current['advice']['generation_mode'],'deterministic_fallback')
   self.assertEqual(len(list((ROOT/'site/produce').glob('*.html'))),20);self.assertEqual(len(list((ROOT/'site/traceability').glob('*.html'))),21)
   for route in ('season/current.html','trends/daily.html','trends/weekly.html','trends/monthly.html','trends/quarterly.html','traceability/index.html'):
    self.assertTrue((ROOT/'site'/route).exists(),route)
   self.assertEqual(len(list((ROOT/'data/series').glob('*.json'))),20);self.assertTrue((ROOT/'data/seasonality/2026-08.json').exists());self.assertTrue((ROOT/'data/traceability/monthly/2026-08.json').exists())
-  season=(ROOT/'site/season/current.html').read_text();self.assertEqual(season.count("class='card season-card'"),len(current['season_catalog']));self.assertIn("data-season-source='live'",season)
-  for token in ("data-filter='all'","data-filter='fruit'","data-filter='vegetable'",'有行情資料','無行情資料','有相關履歷'):self.assertIn(token,season)
+  season=(ROOT/'site/season/current.html').read_text();self.assertEqual(season.count("class='card season-card'"),len(current['season_catalog']));self.assertEqual(season.count('data-search-name='),len(current['season_catalog']));self.assertIn("data-season-source='live'",season)
+  card_tags=re.findall(r"<article class='card season-card'[^>]*>",season);search_names=[html.unescape(value) for value in re.findall(r"data-search-name='([^']*)'",season)]
+  self.assertEqual(Counter(search_names),Counter(row['display_name'] for row in current['season_catalog']));self.assertTrue(all(' hidden' not in tag for tag in card_tags))
+  for token in ("data-filter='all'","data-filter='fruit'","data-filter='vegetable'","type='search'",'data-season-search','data-season-result-count',"role='status'","aria-live='polite'","aria-atomic='true'",'data-season-empty','有行情資料','無行情資料','有相關履歷'):self.assertIn(token,season)
+  for token in ('data-season-search','data-season-result-count','data-season-empty'):self.assertEqual(season.count(token),1)
+  self.assertIn('data-season-empty hidden',season)
+  self.assertNotIn('data-season-search',(ROOT/'site/index.html').read_text())
+  from tpw.cli import css, js, market_status_css
+  script=(ROOT/'site/assets/js/app.js').read_text();self.assertEqual(script,js());self.assertEqual((ROOT/'site/assets/css/app.css').read_text(),css()+market_status_css())
+  for token in ("normalize('NFKC')",'dataset.searchName','const applyFilters','textContent'):self.assertIn(token,script)
+  for token in ('fetch(','XMLHttpRequest'):self.assertNotIn(token,script)
   trace=(ROOT/'data/traceability/current.json').read_text();self.assertNotIn('不得保存的姓名',trace);self.assertNotIn('不得保存的通路明細',trace)
   self.assertNotIn('PR 1 不產生推薦',(ROOT/'reports/daily/2026/08/2026-08-25.md').read_text())
  def test_site_guard_rejects_secret_and_oversize(self):

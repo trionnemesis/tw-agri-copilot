@@ -139,7 +139,8 @@ def _season_page(catalog, series, traceability):
             else "<span class='small'>目前不在行情觀察清單</span>"
         )
         cards.append(
-            f"<article class='card season-card' data-category='{_escape(row['category'])}'>"
+            f"<article class='card season-card' data-category='{_escape(row['category'])}' "
+            f"data-search-name='{_escape(row['display_name'])}'>"
             f"<div class='label'>{'水果' if row['category']=='fruit' else '蔬菜'}</div>"
             f"<h2>{_escape(row['display_name'])}</h2>"
             f"<p>{row['county_count']} 個產地縣市 · {row.get('variety_count', 0)} 個品種</p>"
@@ -155,10 +156,15 @@ def _season_page(catalog, series, traceability):
         + _toolbar("../")
         + "<main id='main' class='wrap'><section class='section'><div class='section-heading'><div>"
         + f"<h2>完整清單</h2><p class='lead'>共 {len(catalog)} 項：水果 {fruit_count} 項、蔬菜 {vegetable_count} 項。</p></div>"
-        + "<div class='filter-group' aria-label='當季品項篩選'><button data-filter='all' aria-pressed='true'>全部</button>"
-        + "<button data-filter='fruit'>水果</button><button data-filter='vegetable'>蔬菜</button></div></div>"
+        + "<div class='filter-group' aria-label='當季品項篩選'><button type='button' data-filter='all' aria-pressed='true'>全部</button>"
+        + "<button type='button' data-filter='fruit' aria-pressed='false'>水果</button><button type='button' data-filter='vegetable' aria-pressed='false'>蔬菜</button></div></div>"
         + _season_source_notice(catalog)
-        + f"<div class='grid grid-3' data-season-grid>{''.join(cards)}</div></section></main>"
+        + "<div class='season-controls'><label class='season-search' for='season-search'><span>搜尋蔬果名稱</span>"
+        + "<input id='season-search' type='search' data-season-search aria-controls='season-grid' "
+        + "aria-describedby='season-result-count' autocomplete='off' placeholder='輸入蔬果名稱，例如：甘藍、木瓜'></label>"
+        + f"<p class='season-result-count' id='season-result-count' data-season-result-count role='status' aria-live='polite' aria-atomic='true'>顯示 {len(catalog)} 項</p></div>"
+        + f"<div class='grid grid-3' id='season-grid' data-season-grid>{''.join(cards)}</div>"
+        + "<p class='note warn season-empty' data-season-empty hidden>找不到符合目前搜尋與分類條件的當季蔬果。</p></section></main>"
     )
 
 
@@ -317,7 +323,7 @@ def _home(items, scores, series, seasonality, advice, traceability, quality, as_
         + f"<p class='disclaimer'>{DISCLAIM}</p><div class='recommendation-grid'>{cards}</div></section>"
         + _advice_section(advice, items)
         + "<section class='section' id='season'><div class='section-heading'><div><div class='eyebrow ink'>SEASONALITY</div><h2>本月當季蔬果</h2></div>"
-        + "<div class='filter-group' aria-label='當季品項篩選'><button data-filter='all' aria-pressed='true'>全部</button><button data-filter='fruit'>水果</button><button data-filter='vegetable'>蔬菜</button></div></div>"
+        + "<div class='filter-group' aria-label='當季品項篩選'><button type='button' data-filter='all' aria-pressed='true'>全部</button><button type='button' data-filter='fruit' aria-pressed='false'>水果</button><button type='button' data-filter='vegetable' aria-pressed='false'>蔬菜</button></div></div>"
         + _season_source_notice(seasonality)
         + f"<div class='grid grid-3' data-season-grid>{season_cards}</div><p><a href='season/current.html'>查看完整當季清單 →</a></p></section>"
         + "<section class='section' id='movers'><h2>今日變便宜／今日變貴</h2><p class='lead'>以各品項前一個有效交易日為基準。</p>"
