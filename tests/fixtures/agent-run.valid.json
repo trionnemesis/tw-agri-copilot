@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "run_id": "chatgpt-schedule-20260827t000000z",
+  "trigger": "schedule",
+  "requested_at": "2026-08-27T00:00:00Z",
+  "as_of_date": "2026-08-26",
+  "operation": "refresh-fields",
+  "source_refs": ["https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx"],
+  "model": "fixture-model",
+  "prompt_version": "agent-run-contract-v1",
+  "input_hash": "sha256:6c80199c57f92b76d269c6e37bf01cfb1635d8338e98f3ab727e74efc590f86c",
+  "fields_changed": [],
+  "analysis": {},
+  "assumptions": [],
+  "status": "proposed"
+}
