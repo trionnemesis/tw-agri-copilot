@@ -1,0 +1,128 @@
+<svg xmlns="http://www.w3.org/2000/svg">
+  <!-- Original vector paths authored for Taiwan Produce Watch; no third-party icon paths, fonts, or images are embedded. -->
+  <symbol id="produce-fruit-pomelo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 5c-5 0-8 3.5-8 8s3.2 7 8 7 8-2.5 8-7-3-8-8-8Z"/><path d="M12 6v13M5 13h14M12 5c1-2 3-3 5-2-1 2-3 3-5 2Z"/>
+  </symbol>
+  <symbol id="produce-fruit-papaya" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3c4 0 6 4.5 6 9s-2 9-6 9-6-4.5-6-9 2-9 6-9Z"/><ellipse cx="12" cy="12" rx="2.8" ry="5"/><circle cx="11" cy="10" r=".35"/><circle cx="13" cy="12" r=".35"/><circle cx="11.5" cy="14" r=".35"/>
+  </symbol>
+  <symbol id="produce-fruit-persimmon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 11c0-4 3-6 7-6s7 2 7 6c0 5-2.8 9-7 9s-7-4-7-9Z"/><path d="m12 6-3-3 1 4-4-1 3 3m3-3 3-3-1 4 4-1-3 3"/>
+  </symbol>
+  <symbol id="produce-fruit-starfruit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <polygon points="12,3 14.7,9 21,9.6 16.2,13.8 17.7,20 12,16.7 6.3,20 7.8,13.8 3,9.6 9.3,9"/><circle cx="12" cy="12" r="2.2"/>
+  </symbol>
+  <symbol id="produce-fruit-lemon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 6c3-3 8-2 11 1s4 8 1 11-8 2-11-1S3 9 6 6Z"/><path d="M6 6 3 5l1 3m14 10 3 1-1-3M13 4c1-2 3-2 5-1-1 2-3 3-5 1Z"/>
+  </symbol>
+  <symbol id="produce-fruit-temperate-pear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 6c-1 3-6 5-6 9 0 3.5 2.7 6 6 6s6-2.5 6-6c0-4-5-6-6-9Z"/><path d="M12 6c0-2 .5-3 2-4m0 2c2-1 3-.5 4 .5-1.5 1-3 1-4-.5Z"/>
+  </symbol>
+  <symbol id="produce-fruit-melon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="8.5"/><path d="M7 5.5c2 3 2 10 0 13m10-13c-2 3-2 10 0 13M4 9h16M4 15h16M12 3.5v17"/>
+  </symbol>
+  <symbol id="produce-fruit-guava" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 5c5 0 8 3 8 7.5S17 20 12 20s-8-3-8-7.5S7 5 12 5Z"/><path d="M12 5c0-2 2-3 4-3-1 2-2 3-4 3Z"/><circle cx="12" cy="13" r="3"/><path d="m10 12 .5.5m3-1 .5.5m-2 2 .5.5"/>
+  </symbol>
+  <symbol id="produce-fruit-passion-fruit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5"/><circle cx="10" cy="10" r=".45"/><circle cx="14" cy="11" r=".45"/><circle cx="11" cy="14" r=".45"/><circle cx="15" cy="14" r=".45"/>
+  </symbol>
+  <symbol id="produce-fruit-dragon-fruit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 4c4 0 7 4 7 8.5S16 21 12 21s-7-4-7-8.5S8 4 12 4Z"/><path d="m9 5-3-2 1 4m6-3 2-3v4m3 3 3-1-2 3m0 5 2 2-3-.2M7 12l-3 1 2 2m5 6-2 2v-3"/><path d="M10 9c1 1 1 5 0 7m4-7c-1 1-1 5 0 7"/>
+  </symbol>
+  <symbol id="produce-fruit-grapes" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 6c0-2 1-3 3-4m-2 2c2-2 5-1 6 1-2 1-4 1-6-1Z"/><circle cx="9" cy="8" r="2.2"/><circle cx="14" cy="8" r="2.2"/><circle cx="7" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="17" cy="12" r="2.2"/><circle cx="9.5" cy="16" r="2.2"/><circle cx="14.5" cy="16" r="2.2"/><circle cx="12" cy="20" r="2.2"/>
+  </symbol>
+  <symbol id="produce-fruit-wax-apple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 5c0-2 1-3 3-3m0 4c4 0 7 3 6 7l-2 7H8l-2-7c-1-4 2-7 6-7Z"/><path d="M8 20c1-2 2-2 4 0 2-2 3-2 4 0M11 5c-1-2-3-2-4-1 1 2 2 2 4 1Z"/>
+  </symbol>
+  <symbol id="produce-fruit-apple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 7c-2-2-7-2-8 3-1 4 2 10 6 11 1 .2 1.5-.5 2-.5s1 .7 2 .5c4-1 7-7 6-11-1-5-6-5-8-3Z"/><path d="M12 7c0-3 1-5 3-6m-2 3c2-2 5-1 6 1-2 1-4 1-6-1Z"/>
+  </symbol>
+  <symbol id="produce-fruit-watermelon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 17a10 10 0 0 1 18 0H3Z"/><path d="M5 17a8 8 0 0 1 14 0M9 13l.5 1m5.5-2-.5 1m-2.5-3v1"/>
+  </symbol>
+  <symbol id="produce-fruit-avocado" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3c-2 0-3 4-5 7-3 5-1 11 5 11s8-6 5-11c-2-3-3-7-5-7Z"/><circle cx="12" cy="15" r="3.2"/>
+  </symbol>
+  <symbol id="produce-fruit-custard-apple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 4c5 0 8 4 7 9-1 5-4 8-7 8s-6-3-7-8c-1-5 2-9 7-9Z"/><path d="M9 5.5 12 8l3-2.5M6 9l3 2 3-3 3 3 3-2M5 13l4 2 3-4 3 4 4-2M7 17l3 1 2-3 2 3 3-1M12 4V2"/>
+  </symbol>
+  <symbol id="produce-fruit-banana" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 4c1 8 5 13 14 14-4 4-11 3-14-1C2 13 2 8 5 4Z"/><path d="m5 4-1-2m15 16 2 1"/>
+  </symbol>
+  <symbol id="produce-fruit-grafted-pear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 5c5 0 8 3 8 7.5S17 20 12 20s-8-3-8-7.5S7 5 12 5Z"/><path d="M12 5c0-2 1-3 2-4m0 3c2-1 4 0 5 1-2 1-3 1-5-1ZM6 13h12"/>
+  </symbol>
+  <symbol id="produce-fruit-pineapple" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 10c0-3 2-4 5-4s5 1 5 4v5c0 4-2 6-5 6s-5-2-5-6v-5Z"/><path d="m12 6-3-4 3 2 3-2-3 4Zm-5 6 10 6M7 17l10-6M7 14h10"/>
+  </symbol>
+  <symbol id="produce-fruit-longan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 6c0-2 2-3 4-4m-2 2c2-1 4 0 5 2-2 1-4 1-5-2Z"/><circle cx="8" cy="10" r="2.8"/><circle cx="14" cy="9" r="2.8"/><circle cx="17" cy="14" r="2.8"/><circle cx="11" cy="15" r="2.8"/><circle cx="8" cy="10" r=".8"/>
+  </symbol>
+
+  <symbol id="produce-vegetable-cabbage" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="13" r="8"/><path d="M12 5c-4 3-5 8 0 16 5-8 4-13 0-16ZM5 11c4 0 6 3 7 10m7-10c-4 0-6 3-7 10M7 7c2 2 3 4 2 7m8-7c-2 2-3 4-2 7"/>
+  </symbol>
+  <symbol id="produce-vegetable-sweet-pepper" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 6c-5-2-8 2-7 7 .5 4 2 8 5 8 1 0 1.5-1 2-1s1 1 2 1c3 0 4.5-4 5-8 1-5-2-9-7-7Z"/><path d="M12 6c0-3 2-4 4-4m-4 5c-2 4-2 9 0 13m-5-8h10"/>
+  </symbol>
+  <symbol id="produce-vegetable-tomato" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="13" r="8"/><path d="m12 7-3-4 1 5-5-1 4 3m3-3 3-4-1 5 5-1-4 3"/>
+  </symbol>
+  <symbol id="produce-vegetable-arrow-bamboo-shoot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2c4 5 5 12 4 19H8C7 14 8 7 12 2Z"/><path d="m9 8 6 3m-7 2 8 3M12 2v19"/>
+  </symbol>
+  <symbol id="produce-vegetable-napa-cabbage" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3c-6 3-7 11-5 18h10c2-7 1-15-5-18Z"/><path d="M12 4v17M8 7c3 2 4 5 4 8m4-8c-3 2-4 5-4 8M7 13l5 4 5-4"/>
+  </symbol>
+  <symbol id="produce-vegetable-loofah" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 5c3-2 8 0 9 4l2 8c.5 3-2 5-5 4-2-.5-3-2-3.5-4L6 9C5 7 5.5 6 7 5Z"/><path d="m8 6 6 14M10 5l6 13M7 10l9-1M9 14l8-1M6 5 4 2m4-2C8 3 9 2 11 2"/>
+  </symbol>
+  <symbol id="produce-vegetable-green-bamboo-shoot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3c5 5 6 11 5 18H7C6 14 7 8 12 3Z"/><path d="m8 10 8 4m-9 1 10 4M12 3v18m4-12c2-2 4-2 5-1-1 2-3 3-5 1Z"/>
+  </symbol>
+  <symbol id="produce-vegetable-cucumber" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M5 6c3-3 10-1 13 2s2 8-1 10-8 1-11-2S2 9 5 6Z"/><path d="m7 8 .5.5m4-1 .5.5m4 3 .5.5m-8 3 .5.5m4 2 .5.5"/>
+  </symbol>
+  <symbol id="produce-vegetable-cauliflower" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 12a3 3 0 0 1 0-6 4 4 0 0 1 7-1 3.5 3.5 0 1 1 2 7H8Z"/><path d="M10 12v9m4-9v9M10 18l-5-3c0 4 2 6 5 6m4-3 5-3c0 4-2 6-5 6"/>
+  </symbol>
+  <symbol id="produce-vegetable-bitter-melon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 4c4-2 8 1 9 6s-1 10-5 11-7-3-7-8 0-8 3-9Z"/><path d="m8 7 2-1 1 2 2-1 1 2 2-1M6 11l2-1 1 2 2-1 1 2 2-1 2 1M7 15l2-1 1 2 2-1 1 2 2-1"/>
+  </symbol>
+  <symbol id="produce-vegetable-eggplant" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10 7c-4 1-7 5-6 9 1 5 7 6 12 3 5-3 5-8 2-11-2-2-5-2-8-1Z"/><path d="m10 7-3-2 4 1-1-4 3 4 3-3-1 4m-5 0c2 2 6 2 8 1"/>
+  </symbol>
+  <symbol id="produce-vegetable-water-bamboo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M11 2c4 6 5 13 3 20H8c-1-8 0-14 3-20Z"/><path d="M9 7h5m-6 5h7m-7 5h7M11 2l1 20"/>
+  </symbol>
+  <symbol id="produce-vegetable-mushrooms" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3 12a6 6 0 0 1 12 0H3Zm5 0v8h3v-8M12 10a5 5 0 0 1 9 3h-7m2 0v7h3v-7"/>
+  </symbol>
+  <symbol id="produce-vegetable-radish" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 8c4 0 6 2 6 5 0 4-3 7-6 9-3-2-6-5-6-9 0-3 2-5 6-5Z"/><path d="M12 8c-1-4-4-5-7-4 1 3 4 5 7 4Zm0 0c1-4 4-6 7-5 0 3-3 5-7 5Zm0 0V3"/>
+  </symbol>
+  <symbol id="produce-vegetable-chili" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 7c1 7 4 11 11 12-4 3-9 2-12-2C4 13 5 9 8 7Z"/><path d="M8 7c0-3 2-4 4-4m-3 3c-2-2-4-1-5 0"/>
+  </symbol>
+  <symbol id="produce-vegetable-daylily-bud" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8 21V9m6 12V6m4 15V11M6 9c0-3 1-5 2-6 2 2 2 4 0 6H6Zm6-3c0-3 1-5 2-6 2 2 2 4 0 6h-2Zm4 5c0-3 1-5 2-6 2 2 2 4 0 6h-2Z"/>
+  </symbol>
+  <symbol id="produce-vegetable-yardlong-bean" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M7 3c-3 4-3 10 1 14 3 3 7 2 7-1 0-2-2-3-4-2-3 1-2 5 1 7 3 2 7 0 7-4 0-5-5-6-8-4"/><path d="M7 3c2 0 3 0 4-1"/>
+  </symbol>
+  <symbol id="produce-vegetable-scallion" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 21c-1-5-1-11 0-18m3 18V2m3 19c1-6 1-12 0-17M8 21h8M9 15c-2-2-4-2-6-1 1 3 3 4 6 4m6-5c2-2 4-2 6-1-1 3-3 4-6 4"/>
+  </symbol>
+  <symbol id="produce-vegetable-makino-bamboo-shoot" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 2c6 6 7 13 5 20H7C5 15 6 8 12 2Z"/><path d="m8 8 8 5m-9 1 10 6M12 2v20m-3-7 6-4"/>
+  </symbol>
+
+  <symbol id="produce-fruit-fallback" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="13" r="7.5"/><path d="M12 6c0-2 1-4 3-5m-2 3c2-2 5-1 6 1-2 1-4 1-6-1Z"/>
+  </symbol>
+  <symbol id="produce-vegetable-fallback" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 21V8m0 4C8 8 5 8 3 9c1 4 4 6 9 6m0-3c4-4 7-4 9-3-1 4-4 6-9 6M12 8c-2-3-2-5 0-7 2 2 2 4 0 7Z"/>
+  </symbol>
+</svg>

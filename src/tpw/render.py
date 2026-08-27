@@ -1,6 +1,7 @@
 import html
 import json
 
+from .produce_icons import read_produce_icon_sprite, resolve_produce_icon
 from .publication import validate_market_status
 
 
@@ -130,6 +131,7 @@ def _season_page(catalog, series, traceability):
     trace_ids = {row["canonical_id"] for row in traceability}
     cards = []
     for row in sorted(catalog, key=lambda value: value["display_name"]):
+        icon = resolve_produce_icon(row["category"], row["display_name"])
         canonical_id = row.get("canonical_id")
         market_available = canonical_id in market_ids
         trace_available = canonical_id in trace_ids
@@ -142,7 +144,10 @@ def _season_page(catalog, series, traceability):
             f"<article class='card season-card' data-category='{_escape(row['category'])}' "
             f"data-search-name='{_escape(row['display_name'])}'>"
             f"<div class='label'>{'水果' if row['category']=='fruit' else '蔬菜'}</div>"
-            f"<h2>{_escape(row['display_name'])}</h2>"
+            f"<div class='season-card-title'><svg class='produce-icon produce-icon--{_escape(row['category'])}' "
+            f"aria-hidden='true' focusable='false' data-icon-fidelity='{_escape(icon.fidelity)}'>"
+            f"<use href='../assets/icons/produce.svg#{_escape(icon.symbol_id)}'></use></svg>"
+            f"<h2>{_escape(row['display_name'])}</h2></div>"
             f"<p>{row['county_count']} 個產地縣市 · {row.get('variety_count', 0)} 個品種</p>"
             f"<div class='reasons'><span class='reason'>{'有行情資料' if market_available else '無行情資料'}</span>"
             f"<span class='reason'>{'有相關履歷' if trace_available else '無相關履歷'}</span></div>"
@@ -467,6 +472,8 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
     }
     (root / "assets/css").mkdir(parents=True, exist_ok=True)
     (root / "assets/js").mkdir(parents=True, exist_ok=True)
+    (root / "assets/icons").mkdir(parents=True, exist_ok=True)
+    (root / "assets/icons/produce.svg").write_bytes(read_produce_icon_sprite())
     (root / "data").mkdir(exist_ok=True)
     (root / "daily" / as_of[:4] / as_of[5:7]).mkdir(parents=True, exist_ok=True)
     (root / "archive").mkdir(exist_ok=True)

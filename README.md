@@ -27,8 +27,9 @@
 | PR 4 · Advice | provider-neutral input、strict zh-Hant schema、guardrails、deterministic fallback | AI 只能解釋既有 evidence，不能改數字或 verdict |
 | PR 5 · Traceability | watchlist filtering、nullable fields、粗粒度縣市、品項與履歷頁 | 履歷不加入 Buy Score，也不代表本日成交來源 |
 | Issue #8 · Live seasonality | 農糧署 HTML adapter、完整分頁、月份 catalog、LKG／fallback、完整當季清單 | 只做明確名稱 mapping；不做 fuzzy matching |
+| Issue #19 · Produce icons | 專案自有 SVG sprite、39 個現有顯示名稱的 exact registry、分類 fallback、列印與 responsive 樣式 | 圖示是裝飾性提示；文字名稱仍是唯一語意來源 |
 
-首頁核心內容不依賴 JavaScript；JS 只提供當季篩選與列印。桌機／平板／手機採 3／2／1 欄 responsive cards。
+首頁核心內容與當季圖示不依賴 JavaScript；JS 只提供當季搜尋／篩選、URL 狀態同步與列印。桌機／平板／手機採 3／2／1 欄 responsive cards。
 
 ## 資料流程
 
@@ -85,7 +86,7 @@ python3 -m http.server 8000 --directory site
 | `backfill --days N --end DATE` | 以最多 4 日的 bounded windows 抓取市場資料 |
 | `build --as-of DATE` | 從 retained normalized history 重建所有衍生資料與網站 |
 | `validate-data --as-of DATE` | 驗證 normalized 與 PR2–PR5 衍生資料樹 |
-| `verify-site --as-of DATE` | 檢查 routes、links、disclaimers、secrets、size 與 prototype gates |
+| `verify-site --as-of DATE` | 檢查 routes、links、SVG sprite／fragment、disclaimers、secrets、size 與 prototype gates |
 
 ## 公開頁面
 
@@ -97,7 +98,7 @@ python3 -m http.server 8000 --directory site
 | `/trends/weekly.html` | 7 日 rolling view |
 | `/trends/monthly.html` | 30 日 rolling view |
 | `/trends/quarterly.html` | 90 日 rolling view |
-| `/season/current.html` | 本月完整盛產清單、全部／水果／蔬菜篩選、產地數與行情／履歷狀態 |
+| `/season/current.html` | 本月完整盛產清單、專案自有蔬果圖示、搜尋／分類篩選、產地數與行情／履歷狀態 |
 | `/traceability/index.html` | watchlist 相關履歷索引與 non-join 警示 |
 | `/daily/YYYY/MM/YYYY-MM-DD.html` | 每日靜態快照 |
 | `/archive/index.html` | retained history |
@@ -108,6 +109,8 @@ python3 -m http.server 8000 --directory site
 - Market prototype fixture 是可重現測試資料，不是 live Dataset 8066 snapshot。
 - Seasonality 優先使用農糧署官方月份清單，逐頁驗證分類、月份與欄位；transient failure 才使用 `stale`／`fallback`，schema drift 直接失敗。
 - Watchlist 與官方產季名稱只允許 `config/produce.yml` 的明確對照；`unknown` 不等於非當季。
+- 當季圖示只依 `(category, display_name)` exact registry 選取；`representative` 代表同類代表圖，未知名稱只使用水果／蔬菜分類 fallback，不做 fuzzy matching。SVG paths 為本專案新作並隨站點發布，不在 runtime 讀取第三方資產、CDN 或 data URI。
+- 當季圖示標記為裝飾性 `aria-hidden`；可存取名稱與搜尋文字一律沿用已轉義的蔬果文字名稱。
 - Advice 預設為 `deterministic_fallback`，provider 只接收已驗證 metrics、score 與 reason codes。
 - Traceability 只保留 watchlist 所需欄位，移除 farmer/store details，place 降為縣市。
 - **此為同品項的公開產銷履歷紀錄，非本日市場成交來源證明。**
@@ -117,7 +120,8 @@ python3 -m http.server 8000 --directory site
 
 ```text
 config/                 watchlist、score、fixture 與 fallback 設定
-src/tpw/                adapters、normalization、analytics、score、advice、render、CLI
+src/tpw/                adapters、normalization、analytics、score、advice、render、CLI 與圖示 registry
+src/tpw/assets/         專案自有 SVG sprite 原始資產
 data/                   normalized history、月份產季 catalog、Agent Run 寫入區與可重建的衍生 JSON
 data/market-status/     最近一次市場日檢查與休市／延遲狀態
 schema/                 Agent Run JSON Schema
@@ -135,6 +139,7 @@ VERIFICATION.md         本地與遠端 acceptance evidence
 - Live market adapter：已實作 bounded fetch path；本版未進行 live 120-day release 驗證。
 - External AI provider：未啟用；固定走 deterministic fallback。
 - Seasonality：官方 HTML adapter 已實作並保存月份 catalog；同月份 live snapshot 可重用，Actions 手動執行可要求安全強制更新，失敗狀態明確標示。
+- Produce icons：完整當季頁以 exact registry 選取本地 sprite symbol，未知品項安全降級為分類 fallback；不改變公開 JSON、搜尋或資料判定。
 - Traceability：目前仍為明確標示的 minimized fixture；live adapter 尚未實作。
 
 視覺語言來自使用者提供的分析型 HTML（navy gradient、paper cards、status badges、responsive grids）；README 資訊架構參考 [AgentSec README.zh-TW](https://github.com/trionnemesis/AgentSec/blob/main/README.zh-TW.md)，但內容與資料邊界皆針對本專案重寫。
