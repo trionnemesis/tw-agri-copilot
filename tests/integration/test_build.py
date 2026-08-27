@@ -125,8 +125,8 @@ class BuildTest(unittest.TestCase):
   self.assertNotIn('data-season-search',(ROOT/'site/index.html').read_text())
   from tpw.cli import css, js, market_status_css
   script=(ROOT/'site/assets/js/app.js').read_text();self.assertEqual(script,js());self.assertEqual((ROOT/'site/assets/css/app.css').read_text(),css()+market_status_css())
-  for token in ("normalize('NFKC')",'dataset.searchName','const applyFilters','textContent'):self.assertIn(token,script)
-  for token in ('fetch(','XMLHttpRequest'):self.assertNotIn(token,script)
+  for token in ("normalize('NFKC')",'dataset.searchName','const applyFilters','textContent','URLSearchParams','replaceState','pushState','popstate'):self.assertIn(token,script)
+  for token in ('fetch(','XMLHttpRequest','localStorage','sessionStorage'):self.assertNotIn(token,script)
   trace=(ROOT/'data/traceability/current.json').read_text();self.assertNotIn('不得保存的姓名',trace);self.assertNotIn('不得保存的通路明細',trace)
   self.assertNotIn('PR 1 不產生推薦',(ROOT/'reports/daily/2026/08/2026-08-25.md').read_text())
  def test_site_guard_rejects_secret_and_oversize(self):
