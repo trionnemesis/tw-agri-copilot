@@ -6,7 +6,7 @@ from .analytics import aggregate
 from .render import build_site,render_report,DISCLAIM
 from .prototype import generate_market_rows
 from .analytics import build_series
-from .seasonality import build_catalog,catalog_from_seasonality,fetch_official,load_manual,map_catalog,with_source_status
+from .seasonality import build_catalog,catalog_from_seasonality,fetch_official,load_manual,map_catalog,seasonality_refresh_decision,with_source_status
 from .scoring import score_all
 from .advice import generate_advice
 from .traceability import filter_traceability
@@ -118,11 +118,14 @@ def persist_seasonality(month,opener=None,fetched_at=None):
   watch,_=map_catalog(configured,catalog,month);status='live'
  except UpstreamUnavailable:
   previous=json.loads(watch_path.read_text()) if watch_path.exists() else []
-  if previous and all(row.get('source_status') in ('live','stale') for row in previous):
-   if catalog_path.exists():
-    catalog=with_source_status(json.loads(catalog_path.read_text()),'stale');watch,_=map_catalog(configured,catalog,month)
-   else:
-    watch=with_source_status(previous,'stale');catalog=with_source_status(catalog_from_seasonality(watch),'stale')
+  previous_catalog=json.loads(catalog_path.read_text()) if catalog_path.exists() else []
+  catalog_lkg=isinstance(previous_catalog,list) and bool(previous_catalog) and all(isinstance(row,dict) and row.get('month')==month and row.get('source_status') in ('live','stale') for row in previous_catalog)
+  if catalog_lkg:catalog_lkg={row.get('category') for row in previous_catalog}=={'fruit','vegetable'}
+  expected={item['canonical_id'] for item in configured}
+  watch_lkg=isinstance(previous,list) and len(previous)==len(expected) and all(isinstance(row,dict) and row.get('month')==month and row.get('source_status') in ('live','stale') for row in previous) and {row.get('canonical_id') for row in previous}==expected
+  if catalog_lkg or watch_lkg:
+   if catalog_lkg:catalog=with_source_status(previous_catalog,'stale');watch,_=map_catalog(configured,catalog,month)
+   else:watch=with_source_status(previous,'stale');catalog=with_source_status(catalog_from_seasonality(watch),'stale')
    status='stale'
   else:
    watch=load_manual(ROOT/'config/seasonality.manual.json',configured,month);catalog=catalog_from_seasonality(watch);status='fallback'
@@ -133,6 +136,15 @@ def persist_seasonality(month,opener=None,fetched_at=None):
   write_json(sd/'seasonality'/(month+'.json'),watch);write_json(sd/'seasonality/catalog'/(month+'.json'),catalog);swap(sd,ROOT/'data')
  finally:shutil.rmtree(stage,ignore_errors=True)
  return {'catalog_count':len(catalog),'watchlist_count':len(watch),'source_status':status}
+def refresh_seasonality(month,force=False,fetcher=None):
+ catalog_path=ROOT/'data/seasonality/catalog'/(month+'.json');rows=None
+ if catalog_path.exists():
+  try:rows=json.loads(catalog_path.read_text())
+  except json.JSONDecodeError as exc:raise ValueError('seasonality cache is not valid JSON') from exc
+ decision=seasonality_refresh_decision(rows,month,force)
+ if decision['action']=='reuse':return {**decision,'month':month,'catalog_count':len(rows),'source_status':'live'}
+ result=(fetcher or persist_seasonality)(month)
+ return {**decision,'month':month,**result}
 def traceability_rows(month):
  fixture=json.loads((ROOT/'config/traceability.fixture.json').read_text())
  return filter_traceability(fixture.get('items',fixture.get('records',[])),config(),month+'-01T00:00:00Z')
@@ -242,6 +254,7 @@ def main(argv=None):
  seed=s.add_parser('seed-prototype');seed.add_argument('--as-of',required=True)
  f=s.add_parser('fetch-market');f.add_argument('--start',required=True);f.add_argument('--end',required=True)
  fs=s.add_parser('fetch-seasonality');fs.add_argument('--month',default=dt.date.today().strftime('%Y-%m'))
+ rs=s.add_parser('refresh-seasonality');rs.add_argument('--month',default=dt.date.today().strftime('%Y-%m'));rs.add_argument('--force',action='store_true')
  ft=s.add_parser('fetch-traceability');ft.add_argument('--month',default=dt.date.today().strftime('%Y-%m'))
  b=s.add_parser('build');b.add_argument('--as-of',required=True)
  bf=s.add_parser('backfill');bf.add_argument('--days',type=int,default=120);bf.add_argument('--end',default=dt.date.today().isoformat())
@@ -255,6 +268,7 @@ def main(argv=None):
   fixture=json.loads((ROOT/'config/prototype.fixture.json').read_text());raw=generate_market_rows(config(),fixture,a.as_of);start=(dt.date.fromisoformat(a.as_of)-dt.timedelta(days=int(fixture.get('days',35))-1)).isoformat();print('seeded normalized rows:',ingest(raw,start,a.as_of,'fixture'))
  elif a.cmd=='fetch-market':print('persisted normalized rows:',fetch_market(a.start,a.end))
  elif a.cmd=='fetch-seasonality':print('persisted seasonality:',persist_seasonality(a.month))
+ elif a.cmd=='refresh-seasonality':print('seasonality refresh:',json.dumps(refresh_seasonality(a.month,a.force),ensure_ascii=False,sort_keys=True))
  elif a.cmd=='fetch-traceability':print('persisted minimized fixture rows:',persist_context('traceability',a.month))
  elif a.cmd=='backfill':print('backfill windows:',backfill(a.days,a.end))
  elif a.cmd=='build':build(a.as_of);print('build promoted safely')

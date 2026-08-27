@@ -1,9 +1,59 @@
 import unittest
 
-from tpw.seasonality import build_catalog, build_seasonality, map_catalog
+from tpw.seasonality import build_catalog, build_seasonality, map_catalog, seasonality_refresh_decision
 
 
 class SeasonalityTest(unittest.TestCase):
+    def test_refresh_policy_reuses_only_complete_same_month_live_catalog(self):
+        rows = [
+            {"month": "2026-08", "category": "fruit", "source_status": "live"},
+            {"month": "2026-08", "category": "vegetable", "source_status": "live"},
+        ]
+        self.assertEqual(
+            seasonality_refresh_decision(rows, "2026-08"),
+            {"action": "reuse", "reason": "verified_live_snapshot"},
+        )
+        self.assertEqual(
+            seasonality_refresh_decision(rows, "2026-08", force=True),
+            {"action": "refresh", "reason": "forced"},
+        )
+
+    def test_refresh_policy_covers_month_boundary_and_non_live_states(self):
+        fruit = {"month": "2026-08", "category": "fruit", "source_status": "live"}
+        vegetable = {"month": "2026-08", "category": "vegetable", "source_status": "live"}
+        cases = (
+            (None, "missing_snapshot"),
+            ([], "empty_snapshot"),
+            ([{**fruit, "month": "2026-07"}, {**vegetable, "month": "2026-07"}], "month_mismatch"),
+            ([fruit], "incomplete_categories"),
+            ([{**fruit, "source_status": "stale"}, {**vegetable, "source_status": "stale"}], "non_live_snapshot"),
+            ([fruit, {**vegetable, "source_status": "stale"}], "non_live_snapshot"),
+            ([fruit, {**vegetable, "source_status": "fallback"}], "non_live_snapshot"),
+            ([{**fruit, "source_status": "fallback"}, {**vegetable, "source_status": "fallback"}], "non_live_snapshot"),
+        )
+        for rows, reason in cases:
+            with self.subTest(reason=reason):
+                self.assertEqual(
+                    seasonality_refresh_decision(rows, "2026-08"),
+                    {"action": "refresh", "reason": reason},
+                )
+
+    def test_refresh_policy_rejects_invalid_month_and_cache_shape(self):
+        valid = {"month": "2026-08", "category": "fruit", "source_status": "live"}
+        with self.assertRaises(ValueError):
+            seasonality_refresh_decision(None, "2026-8")
+        for rows in (
+            {},
+            [None],
+            [{"month": "2026-08", "category": "fruit"}],
+            [{**valid, "month": None}],
+            [{**valid, "month": "2026-8"}],
+            [{**valid, "category": "grain"}],
+            [{**valid, "source_status": "unknown"}],
+        ):
+            with self.subTest(rows=rows), self.assertRaises(ValueError):
+                seasonality_refresh_decision(rows, "2026-08", force=True)
+
     def test_manual_fallback_preserves_unknown_and_origin_counts(self):
         items = [
             {"canonical_id": "banana", "display_name": "香蕉", "category": "fruit"},

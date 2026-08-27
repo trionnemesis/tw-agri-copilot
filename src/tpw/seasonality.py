@@ -422,6 +422,44 @@ def catalog_from_seasonality(rows):
     ]
 
 
+def seasonality_refresh_decision(rows, month, force=False):
+    _month_number(month)
+    if rows is not None and not isinstance(rows, list):
+        raise ValueError("seasonality cache must be a list")
+    if rows is not None:
+        if any(not isinstance(row, dict) for row in rows):
+            raise ValueError("seasonality cache rows must be objects")
+        required = ("month", "category", "source_status")
+        if any(any(field not in row for field in required) for row in rows):
+            raise ValueError("seasonality cache row lacks refresh fields")
+        for row in rows:
+            try:
+                _month_number(row["month"])
+            except (TypeError, ValueError) as exc:
+                raise ValueError("invalid seasonality cache month") from exc
+            if not isinstance(row["category"], str) or not isinstance(row["source_status"], str):
+                raise ValueError("invalid seasonality cache refresh fields")
+        statuses = {row["source_status"] for row in rows}
+        if not statuses.issubset({"live", "stale", "fallback"}):
+            raise ValueError("invalid seasonality cache source status")
+        categories = {row["category"] for row in rows}
+        if not categories.issubset(CATEGORIES):
+            raise ValueError("invalid seasonality cache category")
+    if force:
+        return {"action": "refresh", "reason": "forced"}
+    if rows is None:
+        return {"action": "refresh", "reason": "missing_snapshot"}
+    if not rows:
+        return {"action": "refresh", "reason": "empty_snapshot"}
+    if any(row["month"] != month for row in rows):
+        return {"action": "refresh", "reason": "month_mismatch"}
+    if categories != set(CATEGORIES):
+        return {"action": "refresh", "reason": "incomplete_categories"}
+    if statuses != {"live"}:
+        return {"action": "refresh", "reason": "non_live_snapshot"}
+    return {"action": "reuse", "reason": "verified_live_snapshot"}
+
+
 def with_source_status(rows, status):
     if status not in ("live", "stale", "fallback"):
         raise ValueError("invalid seasonality source status")
