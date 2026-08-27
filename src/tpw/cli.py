@@ -108,7 +108,14 @@ def persist_seasonality(month,opener=None,fetched_at=None):
  try:
   kwargs={'opener':opener} if opener else {}
   raw=fetch_official(month,**kwargs);fetched_at=fetched_at or dt.datetime.now(dt.UTC).isoformat()
-  catalog=build_catalog(raw,month,fetched_at);watch,_=map_catalog(configured,catalog,month);status='live'
+  catalog=build_catalog(raw,month,fetched_at)
+  previous_catalog=json.loads(catalog_path.read_text()) if catalog_path.exists() else []
+  if previous_catalog and all(row.get('month')==month and row.get('source_status') in ('live','stale') for row in previous_catalog):
+   previous_counts={category:sum(row.get('category')==category for row in previous_catalog) for category in ('fruit','vegetable')}
+   current_counts={category:sum(row.get('category')==category for row in catalog) for category in ('fruit','vegetable')}
+   if any(current_counts[category]<previous_counts[category] for category in previous_counts):
+    raise UpstreamUnavailable('seasonality catalog decreased from the same-month last-known-good snapshot')
+  watch,_=map_catalog(configured,catalog,month);status='live'
  except UpstreamUnavailable:
   previous=json.loads(watch_path.read_text()) if watch_path.exists() else []
   if previous and all(row.get('source_status') in ('live','stale') for row in previous):

@@ -70,6 +70,19 @@ class BuildTest(unittest.TestCase):
    with mock.patch('tpw.cli.ROOT',isolated),mock.patch('tpw.cli.fetch_official',side_effect=ValueError('schema drift')):
     with self.assertRaisesRegex(ValueError,'schema drift'):persist_seasonality('2026-08')
    self.assertEqual(before,(isolated/'data/seasonality/catalog/2026-08.json').read_bytes())
+ def test_seasonality_catalog_decrease_preserves_same_month_lkg(self):
+  with tempfile.TemporaryDirectory() as raw:
+   isolated=pathlib.Path(raw);(isolated/'config').mkdir();(isolated/'data/seasonality/catalog').mkdir(parents=True)
+   shutil.copy2(ROOT/'config/produce.yml',isolated/'config/produce.yml');shutil.copy2(ROOT/'config/seasonality.manual.json',isolated/'config/seasonality.manual.json')
+   shutil.copy2(ROOT/'data/seasonality/2026-08.json',isolated/'data/seasonality/2026-08.json')
+   shutil.copy2(ROOT/'data/seasonality/catalog/2026-08.json',isolated/'data/seasonality/catalog/2026-08.json')
+   before=(isolated/'data/seasonality/catalog/2026-08.json').read_bytes()
+   partial=[{'category':'fruit','display_name':'香蕉','variety':'北蕉','county':'屏東縣','district':'高樹鄉','months':[8]},{'category':'vegetable','display_name':'胡瓜','variety':'黑刺','county':'屏東縣','district':'里港鄉','months':[8]}]
+   with mock.patch('tpw.cli.ROOT',isolated),mock.patch('tpw.cli.fetch_official',return_value=partial):
+    result=persist_seasonality('2026-08',fetched_at='fixture')
+   self.assertEqual(result['source_status'],'stale')
+   self.assertEqual(len(json.loads(before)),result['catalog_count'])
+   self.assertTrue(all(row['source_status']=='stale' for row in json.loads((isolated/'data/seasonality/catalog/2026-08.json').read_text())))
  def test_two_date_history_survives(self):
   first=json.loads((ROOT/'tests/fixtures/market_success.json').read_text()); ingest(first,'2026-08-25','2026-08-25'); self.command('build','--as-of','2026-08-25')
   second=[dict(r,交易日期='115.08.24') for r in first]; ingest(second,'2026-08-24','2026-08-24'); self.command('build','--as-of','2026-08-24')

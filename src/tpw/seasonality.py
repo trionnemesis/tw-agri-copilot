@@ -25,6 +25,10 @@ class _SeasonalityPageParser(HTMLParser):
         self.table_found = False
         self.rows = []
         self.next_href = None
+        self.next_control_found = False
+        self.pagination_found = False
+        self.page_numbers = set()
+        self._pagination_depth = 0
         self._table_depth = 0
         self._row = None
         self._field = None
@@ -32,8 +36,21 @@ class _SeasonalityPageParser(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         attributes = dict(attrs)
-        if tag == "a" and attributes.get("title") == "下一頁":
-            self.next_href = attributes.get("href")
+        if tag == "ul":
+            classes = set(attributes.get("class", "").split())
+            if self._pagination_depth:
+                self._pagination_depth += 1
+            elif "pagination" in classes:
+                self.pagination_found = True
+                self._pagination_depth = 1
+        elif tag == "a" and self._pagination_depth:
+            title = attributes.get("title", "")
+            page_match = re.fullmatch(r"第(\d+)頁", title)
+            if page_match:
+                self.page_numbers.add(int(page_match.group(1)))
+            elif title == "下一頁":
+                self.next_control_found = True
+                self.next_href = attributes.get("href")
         if tag == "table":
             classes = set(attributes.get("class", "").split())
             if self._table_depth:
@@ -55,6 +72,8 @@ class _SeasonalityPageParser(HTMLParser):
             self._chunks.append(data)
 
     def handle_endtag(self, tag):
+        if tag == "ul" and self._pagination_depth:
+            self._pagination_depth -= 1
         if not self._table_depth:
             return
         if tag == "td" and self._field is not None:
@@ -111,6 +130,12 @@ def parse_page(body, category, month, current_page=1):
         )
     if not rows:
         raise UpstreamUnavailable("seasonality upstream returned no rows")
+    if not parser.pagination_found:
+        raise ValueError("seasonality response lacks the official pagination")
+    if not parser.next_control_found:
+        raise ValueError("seasonality pagination lacks the next-page control")
+    if current_page not in parser.page_numbers:
+        raise ValueError("seasonality pagination lacks the current page")
 
     next_page = None
     if parser.next_href and parser.next_href != "#":
@@ -125,7 +150,9 @@ def parse_page(body, category, month, current_page=1):
             raise ValueError("seasonality pagination changed category")
         if query.get("period", [None])[0] not in (str(expected_month), "now"):
             raise ValueError("seasonality pagination changed month")
-    return rows, next_page
+    if next_page is None and any(page > current_page for page in parser.page_numbers):
+        raise ValueError("seasonality pagination terminates before an advertised page")
+    return rows, next_page, max(parser.page_numbers)
 
 
 def _read_page(url, opener, timeout, attempts, backoff_seconds, sleeper):
@@ -174,6 +201,7 @@ def fetch_category(
     month_number = _month_number(month)
     rows = []
     page_signatures = set()
+    advertised_last_page = 1
     page = 1
     while page <= max_pages:
         query = urllib.parse.urlencode(
@@ -190,7 +218,8 @@ def fetch_category(
         if urls is not None:
             urls.append(url)
         body = _read_page(url, opener, timeout, attempts, backoff_seconds, sleeper)
-        page_rows, next_page = parse_page(body, category, month, page)
+        page_rows, next_page, page_last = parse_page(body, category, month, page)
+        advertised_last_page = max(advertised_last_page, page_last)
         signature = tuple(
             (row["display_name"], row["variety"], row["county"], row["district"], tuple(row["months"]))
             for row in page_rows
@@ -200,6 +229,8 @@ def fetch_category(
         page_signatures.add(signature)
         rows.extend(page_rows)
         if next_page is None:
+            if page < advertised_last_page:
+                raise ValueError("seasonality pagination terminated before a previously advertised page")
             break
         page = next_page
     else:

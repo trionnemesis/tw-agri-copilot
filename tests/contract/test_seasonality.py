@@ -15,7 +15,20 @@ class Response:
         return self._body
 
 
-def result_page(name="香蕉", category="水果", month="8月", next_href="#"):
+def result_page(
+    name="香蕉",
+    category="水果",
+    month="8月",
+    next_href="#",
+    current_page=1,
+    advertised_pages=(1,),
+    include_next=True,
+):
+    page_links = "".join(
+        f'<li class="{"active" if page == current_page else ""}"><a href="#" title="第{page}頁">{page}</a></li>'
+        for page in advertised_pages
+    )
+    next_link = f'<li><a title="下一頁" href="{next_href}">下一頁</a></li>' if include_next else ""
     return f"""<!doctype html><html><body>
     <table class="table table-a-products">
       <tr><th>種類</th><th>農產品</th></tr>
@@ -25,7 +38,7 @@ def result_page(name="香蕉", category="水果", month="8月", next_href="#"):
         <td data-th="行政區">高樹鄉</td><td data-th="盛產月份">{month}</td>
       </tr>
     </table>
-    <a title="下一頁" href="{next_href}">下一頁</a>
+    <ul class="pagination">{page_links}{next_link}</ul>
     </body></html>"""
 
 
@@ -33,9 +46,10 @@ class SeasonalityContractTest(unittest.TestCase):
     def test_fetches_sequential_pages_with_explicit_category_and_month(self):
         pages = {
             1: result_page(
-                next_href="index.php?code=list&amp;ids=1103&amp;mod_code=search&amp;type=1&amp;period=8&amp;page=2"
+                next_href="index.php?code=list&amp;ids=1103&amp;mod_code=search&amp;type=1&amp;period=8&amp;page=2",
+                advertised_pages=(1, 2),
             ),
-            2: result_page(name="鳳梨"),
+            2: result_page(name="鳳梨", current_page=2, advertised_pages=(1, 2)),
         }
         urls = []
 
@@ -59,14 +73,25 @@ class SeasonalityContractTest(unittest.TestCase):
 
     def test_duplicate_page_is_rejected(self):
         first = result_page(
-            next_href="index.php?code=list&amp;ids=1103&amp;mod_code=search&amp;type=1&amp;period=8&amp;page=2"
+            next_href="index.php?code=list&amp;ids=1103&amp;mod_code=search&amp;type=1&amp;period=8&amp;page=2",
+            advertised_pages=(1, 2),
         )
 
         def opener(url, **_kwargs):
-            return Response(result_page() if "page=2" in url else first)
+            return Response(result_page(current_page=2, advertised_pages=(1, 2)) if "page=2" in url else first)
 
         with self.assertRaisesRegex(ValueError, "duplicate seasonality"):
             fetch_category("fruit", "2026-08", opener=opener)
+
+    def test_missing_next_control_rejects_a_truncated_catalog(self):
+        body = result_page(advertised_pages=(1, 2), include_next=False)
+        with self.assertRaisesRegex(ValueError, "next-page control"):
+            parse_page(body, "fruit", "2026-08")
+
+    def test_disabled_next_control_rejects_an_advertised_later_page(self):
+        body = result_page(advertised_pages=(1, 2), next_href="#")
+        with self.assertRaisesRegex(ValueError, "terminates before an advertised page"):
+            parse_page(body, "fruit", "2026-08")
 
     def test_transient_transport_failure_retries_then_succeeds(self):
         calls = []
