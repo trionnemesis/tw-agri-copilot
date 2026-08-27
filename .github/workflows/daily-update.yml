@@ -69,6 +69,18 @@ jobs:
           printf '%s\n' "$refresh_output"
           if [ "$refresh_status" -ne 0 ]; then
             if [ "$ALLOW_FALLBACK" = 'true' ] && grep -q 'UpstreamUnavailable' <<<"$refresh_output"; then
+              set +e
+              probe_output="$(PYTHONPATH=src python3 -m tpw fetch-market --start "$AS_OF_DATE" --end "$AS_OF_DATE" 2>&1)"
+              probe_status=$?
+              set -e
+              printf '%s\n' "$probe_output"
+              if [ "$probe_status" -eq 0 ]; then
+                echo "status=success" >> "$GITHUB_OUTPUT"
+                echo "::notice::Rolling refresh was unavailable; the bounded single-day probe recorded today's market status."
+                echo "Market refresh: single-day status probe succeeded." >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+              PYTHONPATH=src python3 -m tpw record-market-status --requested-date "$AS_OF_DATE" --status source_unavailable
               echo "status=degraded" >> "$GITHUB_OUTPUT"
               echo "::warning::MOA market refresh failed after retries; publishing the latest complete committed market date instead."
               echo "Market refresh: degraded; using last complete committed data." >> "$GITHUB_STEP_SUMMARY"
