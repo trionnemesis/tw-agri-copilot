@@ -103,6 +103,10 @@ T-000 → T-101 → T-102 → T-103 → T-104 → T-105
   - AgentSec-inspired README, fixture CI, active official Pages workflow, independent Sol acceptance, direct main push, observed CI/deploy and live desktop/mobile verification.
   - Evidence: `VERIFICATION.md` records the observed remote commit, successful workflow runs, live HTTP response and browser checks.
 
+- [x] **T-206 — Official current-month seasonality catalog** (`FR-003`)
+  - Official AFA HTML adapter for fruit/vegetable pagination, strict contract validation, explicit watchlist name mapping, monthly catalog persistence and transient-only LKG/fallback.
+  - Evidence: seasonality contract/unit/integration tests plus generated 39-item August catalog and static page assertions.
+
 ## Completion definition for this work order
 
-This work order completes the **PR 1–5 side-project prototype**, not the full production P0 Definition of Done. Live 120-day bootstrap, live seasonality/traceability adapters, an external AI provider, long-running scheduled publication and production data freshness remain explicitly unverified.
+This work order completes the **PR 1–5 side-project prototype**, not the full production P0 Definition of Done. Live 120-day bootstrap, live traceability, an external AI provider, long-running scheduled publication and production data freshness remain explicitly unverified. Issue #8 adds the live seasonality adapter without expanding those remaining scopes.

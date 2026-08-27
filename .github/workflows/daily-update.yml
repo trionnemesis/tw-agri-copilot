@@ -101,7 +101,7 @@ jobs:
             resolved="$(PYTHONPATH=src python3 -m tpw.schedule --on-or-before "$REQUESTED_DATE")"
           fi
           echo "date=$resolved" >> "$GITHUB_OUTPUT"
-          echo "month=${resolved:0:7}" >> "$GITHUB_OUTPUT"
+          echo "month=${REQUESTED_DATE:0:7}" >> "$GITHUB_OUTPUT"
           echo "Requested market date: $REQUESTED_DATE" >> "$GITHUB_STEP_SUMMARY"
           echo "Resolved market date: $resolved" >> "$GITHUB_STEP_SUMMARY"
           if [ "$resolved" != "$REQUESTED_DATE" ]; then
@@ -112,7 +112,11 @@ jobs:
         env:
           AS_OF_MONTH: ${{ steps.resolved.outputs.month }}
         run: |
-          PYTHONPATH=src python3 -m tpw fetch-seasonality --month "$AS_OF_MONTH"
+          if python3 -c 'import json, os, pathlib, sys; p=pathlib.Path("data/seasonality/catalog")/(os.environ["AS_OF_MONTH"]+".json"); rows=json.loads(p.read_text()) if p.exists() else []; sys.exit(0 if rows and all(row.get("source_status")=="live" for row in rows) else 1)'; then
+            echo "Seasonality: reusing the verified official snapshot for $AS_OF_MONTH."
+          else
+            PYTHONPATH=src python3 -m tpw fetch-seasonality --month "$AS_OF_MONTH"
+          fi
           PYTHONPATH=src python3 -m tpw fetch-traceability --month "$AS_OF_MONTH"
       - name: Build, normalize, and validate
         env:

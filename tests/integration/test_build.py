@@ -1,6 +1,7 @@
 import hashlib, json, pathlib, shutil, subprocess, sys, tempfile, unittest
 from unittest import mock
-from tpw.cli import ingest, backfill, swap_all, verify_site
+from tpw.cli import ingest, backfill, persist_seasonality, swap_all, verify_site
+from tpw.market import UpstreamUnavailable
 ROOT=pathlib.Path(__file__).parents[2]
 class BuildTest(unittest.TestCase):
  def command(self,*args): subprocess.run([sys.executable,"-m","tpw",*args],cwd=ROOT,check=True,capture_output=True,text=True)
@@ -47,6 +48,28 @@ class BuildTest(unittest.TestCase):
    html=(root/'index.html').read_text();current=json.loads((root/'data/current.json').read_text())
    self.assertIn('2026-08-27 今日休市',html);self.assertIn('並非網站漏更新',html)
    self.assertEqual(current['publication_status'],status)
+ def test_seasonality_transient_failure_uses_fallback_then_lkg(self):
+  with tempfile.TemporaryDirectory() as raw:
+   isolated=pathlib.Path(raw);(isolated/'config').mkdir();(isolated/'data').mkdir()
+   shutil.copy2(ROOT/'config/produce.yml',isolated/'config/produce.yml');shutil.copy2(ROOT/'config/seasonality.manual.json',isolated/'config/seasonality.manual.json')
+   unavailable=mock.patch('tpw.cli.fetch_official',side_effect=UpstreamUnavailable('temporary'))
+   with mock.patch('tpw.cli.ROOT',isolated),unavailable:
+    result=persist_seasonality('2026-08')
+   self.assertEqual(result['source_status'],'fallback')
+   fallback=json.loads((isolated/'data/seasonality/2026-08.json').read_text())
+   self.assertTrue(all(row['source_status']=='fallback' for row in fallback))
+   shutil.copy2(ROOT/'data/seasonality/2026-08.json',isolated/'data/seasonality/2026-08.json')
+   (isolated/'data/seasonality/catalog').mkdir(exist_ok=True)
+   shutil.copy2(ROOT/'data/seasonality/catalog/2026-08.json',isolated/'data/seasonality/catalog/2026-08.json')
+   with mock.patch('tpw.cli.ROOT',isolated),mock.patch('tpw.cli.fetch_official',side_effect=UpstreamUnavailable('temporary')):
+    result=persist_seasonality('2026-08')
+   self.assertEqual(result['source_status'],'stale')
+   stale=json.loads((isolated/'data/seasonality/catalog/2026-08.json').read_text())
+   self.assertTrue(all(row['source_status']=='stale' for row in stale))
+   before=(isolated/'data/seasonality/catalog/2026-08.json').read_bytes()
+   with mock.patch('tpw.cli.ROOT',isolated),mock.patch('tpw.cli.fetch_official',side_effect=ValueError('schema drift')):
+    with self.assertRaisesRegex(ValueError,'schema drift'):persist_seasonality('2026-08')
+   self.assertEqual(before,(isolated/'data/seasonality/catalog/2026-08.json').read_bytes())
  def test_two_date_history_survives(self):
   first=json.loads((ROOT/'tests/fixtures/market_success.json').read_text()); ingest(first,'2026-08-25','2026-08-25'); self.command('build','--as-of','2026-08-25')
   second=[dict(r,交易日期='115.08.24') for r in first]; ingest(second,'2026-08-24','2026-08-24'); self.command('build','--as-of','2026-08-24')
@@ -66,7 +89,7 @@ class BuildTest(unittest.TestCase):
    with self.assertRaises(OSError): swap_all(pairs,fail)
    self.assertEqual([(base/n/'v').read_text() for n in ('data','site','reports')],['old','old','old'])
  def test_prototype_routes_context_and_determinism(self):
-  self.command('seed-prototype','--as-of','2026-08-25');self.command('build','--as-of','2026-08-25')
+  self.command('seed-prototype','--as-of','2026-08-25');catalog_path=ROOT/'data/seasonality/catalog/2026-08.json';catalog_before=catalog_path.read_bytes();self.command('build','--as-of','2026-08-25');self.assertEqual(catalog_before,catalog_path.read_bytes())
   tracked=[ROOT/'site/index.html',ROOT/'site/data/current.json',ROOT/'data/advice/2026/08/2026-08-25.json']
   before=[hashlib.sha256(path.read_bytes()).hexdigest() for path in tracked];self.command('build','--as-of','2026-08-25');self.assertEqual(before,[hashlib.sha256(path.read_bytes()).hexdigest() for path in tracked])
   current=json.loads((ROOT/'site/data/current.json').read_text());self.assertTrue(current['prototype_complete']);self.assertGreaterEqual(current['eligible_recommendations'],3);self.assertEqual(len(current['scores']),20);self.assertEqual(current['advice']['generation_mode'],'deterministic_fallback')
@@ -74,6 +97,8 @@ class BuildTest(unittest.TestCase):
   for route in ('season/current.html','trends/daily.html','trends/weekly.html','trends/monthly.html','trends/quarterly.html','traceability/index.html'):
    self.assertTrue((ROOT/'site'/route).exists(),route)
   self.assertEqual(len(list((ROOT/'data/series').glob('*.json'))),20);self.assertTrue((ROOT/'data/seasonality/2026-08.json').exists());self.assertTrue((ROOT/'data/traceability/monthly/2026-08.json').exists())
+  season=(ROOT/'site/season/current.html').read_text();self.assertEqual(season.count("class='card season-card'"),len(current['season_catalog']));self.assertIn("data-season-source='live'",season)
+  for token in ("data-filter='all'","data-filter='fruit'","data-filter='vegetable'",'有行情資料','無行情資料','有相關履歷'):self.assertIn(token,season)
   trace=(ROOT/'data/traceability/current.json').read_text();self.assertNotIn('不得保存的姓名',trace);self.assertNotIn('不得保存的通路明細',trace)
   self.assertNotIn('PR 1 不產生推薦',(ROOT/'reports/daily/2026/08/2026-08-25.md').read_text())
  def test_site_guard_rejects_secret_and_oversize(self):
