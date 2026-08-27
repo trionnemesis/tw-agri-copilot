@@ -59,6 +59,7 @@ class BuildTest(unittest.TestCase):
   catalog=[{'canonical_id':None,'display_name':"木瓜' <script>",'category':'fruit','county_count':1,'variety_count':0,'counties':['高雄市']}]
   rendered=_season_page(catalog,[],[])
   self.assertIn("data-search-name='木瓜&#x27; &lt;script&gt;'",rendered);self.assertNotIn('<script>',rendered)
+  self.assertIn("href='../assets/icons/produce.svg#produce-fruit-fallback'",rendered);self.assertIn("data-icon-fidelity='category_fallback'",rendered)
  def test_seasonality_transient_failure_uses_fallback_then_lkg(self):
   with tempfile.TemporaryDirectory() as raw:
    isolated=pathlib.Path(raw);(isolated/'config').mkdir();(isolated/'data').mkdir()
@@ -182,7 +183,7 @@ class BuildTest(unittest.TestCase):
    self.assertEqual([(base/n/'v').read_text() for n in ('data','site','reports')],['old','old','old'])
  def test_prototype_routes_context_and_determinism(self):
   self.command('seed-prototype','--as-of','2026-08-25');catalog_path=ROOT/'data/seasonality/catalog/2026-08.json';catalog_before=catalog_path.read_bytes();self.command('build','--as-of','2026-08-25');self.assertEqual(catalog_before,catalog_path.read_bytes())
-  tracked=[ROOT/'site/index.html',ROOT/'site/season/current.html',ROOT/'site/assets/js/app.js',ROOT/'site/assets/css/app.css',ROOT/'site/data/current.json',ROOT/'data/advice/2026/08/2026-08-25.json']
+  tracked=[ROOT/'site/index.html',ROOT/'site/season/current.html',ROOT/'site/assets/js/app.js',ROOT/'site/assets/css/app.css',ROOT/'site/assets/icons/produce.svg',ROOT/'site/data/current.json',ROOT/'data/advice/2026/08/2026-08-25.json']
   before=[hashlib.sha256(path.read_bytes()).hexdigest() for path in tracked];self.command('build','--as-of','2026-08-25');self.assertEqual(before,[hashlib.sha256(path.read_bytes()).hexdigest() for path in tracked])
   current=json.loads((ROOT/'site/data/current.json').read_text());self.assertTrue(current['prototype_complete']);self.assertGreaterEqual(current['eligible_recommendations'],3);self.assertEqual(len(current['scores']),20);self.assertEqual(current['advice']['generation_mode'],'deterministic_fallback')
   self.assertEqual(len(list((ROOT/'site/produce').glob('*.html'))),20);self.assertEqual(len(list((ROOT/'site/traceability').glob('*.html'))),21)
@@ -196,6 +197,14 @@ class BuildTest(unittest.TestCase):
   for token in ('data-season-search','data-season-result-count','data-season-empty'):self.assertEqual(season.count(token),1)
   self.assertIn('data-season-empty hidden',season)
   self.assertNotIn('data-season-search',(ROOT/'site/index.html').read_text())
+  from tpw.produce_icons import PRODUCE_ICON_REGISTRY, read_produce_icon_sprite, resolve_produce_icon
+  self.assertEqual((ROOT/'site/assets/icons/produce.svg').read_bytes(),read_produce_icon_sprite())
+  self.assertEqual(season.count("class='produce-icon "),len(current['season_catalog']));self.assertEqual(season.count("aria-hidden='true' focusable='false'"),len(current['season_catalog']));self.assertEqual(season.count("<use href='../assets/icons/produce.svg#"),len(current['season_catalog']))
+  expected_fidelity=Counter(resolve_produce_icon(row['category'],row['display_name']).fidelity for row in current['season_catalog'])
+  for fidelity,count in expected_fidelity.items():self.assertEqual(season.count("data-icon-fidelity='"+fidelity+"'"),count)
+  for row in current['season_catalog']:
+   spec=resolve_produce_icon(row['category'],row['display_name']);self.assertIn("href='../assets/icons/produce.svg#"+spec.symbol_id+"'",season);self.assertNotIn('icon',row)
+  self.assertEqual({(row['category'],row['display_name']) for row in current['season_catalog']},set(PRODUCE_ICON_REGISTRY))
   from tpw.cli import css, js, market_status_css
   script=(ROOT/'site/assets/js/app.js').read_text();self.assertEqual(script,js());self.assertEqual((ROOT/'site/assets/css/app.css').read_text(),css()+market_status_css())
   for token in ("normalize('NFKC')",'dataset.searchName','const applyFilters','textContent','URLSearchParams','replaceState','pushState','popstate'):self.assertIn(token,script)
@@ -212,3 +221,16 @@ class BuildTest(unittest.TestCase):
    build_site(rows,'2026-08-25',root); large=root/'large.bin'
    with large.open('wb') as handle: handle.truncate(901*1024*1024)
    with self.assertRaises(ValueError): verify_site(root)
+ def test_site_guard_rejects_unsafe_or_missing_svg_references(self):
+  from tpw.render import build_site
+  from tpw.produce_icons import read_produce_icon_sprite
+  rows=[{'canonical_id':'banana','display_name':'香蕉','category':'fruit','weighted_avg_price_twd_per_kg':None,'total_volume_kg':0}]
+  references=('https://example.invalid/icons.svg#produce-fruit-banana','HtTpS://example.invalid/icons.svg#produce-fruit-banana','file:assets/icons/produce.svg#produce-fruit-banana','javascript:alert(1)#produce-fruit-banana',' data.svg#produce-fruit-banana',r'assets\icons\produce.svg#produce-fruit-banana','assets/%70roduce.svg#produce-fruit-banana','assets/icons/produce.svg?cache=1#produce-fruit-banana','assets/icons/produce.svg#missing','missing.svg#produce-fruit-banana','#produce-fruit-banana','../outside.svg#produce-fruit-banana')
+  with tempfile.TemporaryDirectory() as raw:
+   base=pathlib.Path(raw);root=base/'site';(base/'outside.svg').write_bytes(read_produce_icon_sprite())
+   for reference in references:
+    with self.subTest(reference=reference):
+     build_site(rows,'2026-08-25',root);index=root/'index.html';index.write_text(index.read_text().replace('</body>',"<svg><use href='"+reference+"'></use></svg></body>"))
+     with self.assertRaises(ValueError):verify_site(root)
+   build_site(rows,'2026-08-25',root);sprite=root/'assets/icons/produce.svg';sprite.write_bytes(sprite.read_bytes().replace(b'</svg>',b'<!-- ghp_example -->\n</svg>'))
+   with self.assertRaises(ValueError):verify_site(root)
