@@ -7,6 +7,7 @@ import re
 
 RUN_ID = re.compile(r"^[a-z0-9][a-z0-9._-]{2,127}$")
 INPUT_HASH = re.compile(r"^sha256:[0-9a-f]{64}$")
+FULL_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 TRIGGERS = {"schedule", "manual", "agent-request"}
 OPERATIONS = {"upsert-data", "add-analysis", "refresh-fields"}
 STATUSES = {"proposed"}
@@ -64,9 +65,13 @@ def validate_agent_run(run):
         raise ValueError("requested_at must be ISO-8601") from exc
     if requested.tzinfo is None:
         raise ValueError("requested_at must include a timezone")
+    if not isinstance(run["as_of_date"], str) or not FULL_DATE.fullmatch(
+        run["as_of_date"]
+    ):
+        raise ValueError("as_of_date must be YYYY-MM-DD")
     try:
         dt.date.fromisoformat(run["as_of_date"])
-    except (TypeError, ValueError) as exc:
+    except ValueError as exc:
         raise ValueError("as_of_date must be YYYY-MM-DD") from exc
     for field in ("source_refs", "fields_changed", "assumptions"):
         if not isinstance(run[field], list) or not all(
@@ -81,11 +86,17 @@ def validate_agent_run(run):
     return run
 
 
+def _reject_json_constant(value):
+    raise ValueError("invalid JSON constant: " + value)
+
+
 def validate_agent_run_file(path):
     path = pathlib.Path(path)
     try:
-        run = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+        run = json.loads(
+            path.read_text(encoding="utf-8"), parse_constant=_reject_json_constant
+        )
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
         raise ValueError(f"invalid agent run file {path}: {exc}") from exc
     validate_agent_run(run)
     if path.parent.name == "agent-runs" and path.name != run["run_id"] + ".json":
