@@ -1,4 +1,5 @@
-import hashlib, json, pathlib, subprocess, sys, tempfile, unittest
+import hashlib, json, pathlib, shutil, subprocess, sys, tempfile, unittest
+from unittest import mock
 from tpw.cli import ingest, backfill, swap_all, verify_site
 ROOT=pathlib.Path(__file__).parents[2]
 class BuildTest(unittest.TestCase):
@@ -27,6 +28,25 @@ class BuildTest(unittest.TestCase):
   saved=path.read_bytes()
   with self.assertRaises(ValueError): ingest([], '2026-08-25','2026-08-25')
   self.assertEqual(saved,path.read_bytes()); self.assertNotEqual(before,b'')
+ def test_market_closure_is_persisted_without_fake_market_rows(self):
+  closed=json.loads((ROOT/'tests/fixtures/market_closed.json').read_text())
+  with tempfile.TemporaryDirectory() as raw:
+   isolated=pathlib.Path(raw);(isolated/'config').mkdir();(isolated/'data').mkdir()
+   shutil.copy2(ROOT/'config/produce.yml',isolated/'config/produce.yml')
+   with mock.patch('tpw.cli.ROOT',isolated):
+    self.assertEqual(ingest(closed,'2026-08-27','2026-08-27','live-check'),0)
+   status=json.loads((isolated/'data/market-status/current.json').read_text())
+   self.assertEqual(status['status'],'market_closed');self.assertEqual(status['requested_date'],'2026-08-27')
+   self.assertFalse((isolated/'data/market/daily/2026/08/2026-08-27.json').exists())
+ def test_market_closure_banner_matches_public_json(self):
+  from tpw.render import build_site
+  rows=[{'canonical_id':'banana','display_name':'香蕉','category':'fruit','weighted_avg_price_twd_per_kg':20,'total_volume_kg':10}]
+  status={'schema_version':'1.0','requested_date':'2026-08-27','resolved_date':'2026-08-26','status':'market_closed','source_status':'success','expected_watchlist_count':20,'covered_watchlist_count':0,'observed_record_count':4}
+  with tempfile.TemporaryDirectory() as raw:
+   root=pathlib.Path(raw);build_site(rows,'2026-08-26',root,publication_status=status)
+   html=(root/'index.html').read_text();current=json.loads((root/'data/current.json').read_text())
+   self.assertIn('2026-08-27 今日休市',html);self.assertIn('並非網站漏更新',html)
+   self.assertEqual(current['publication_status'],status)
  def test_two_date_history_survives(self):
   first=json.loads((ROOT/'tests/fixtures/market_success.json').read_text()); ingest(first,'2026-08-25','2026-08-25'); self.command('build','--as-of','2026-08-25')
   second=[dict(r,交易日期='115.08.24') for r in first]; ingest(second,'2026-08-24','2026-08-24'); self.command('build','--as-of','2026-08-24')

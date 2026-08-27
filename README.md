@@ -48,6 +48,8 @@ flowchart LR
 
 Build 只從已保存的 normalized history 重算，不從生成後的 HTML 或 aggregate history 反推資料。`data/`、`site/`、`reports/` 以 staging + rollback promotion 一次更新。
 
+首頁會分開顯示「今日資料檢查」與「最近完整交易日」。官方資料標示休市、行情尚未完整或來源暫時不可用時，網站會保留最近完整交易日並顯示對應狀態，不會把舊日期冒充成今日行情；相同狀態也會寫入 `site/data/current.json` 的 `publication_status`。
+
 ## 快速開始
 
 需求：Python 3.11+；prototype build 不需額外套件或 API key。
@@ -113,6 +115,7 @@ python3 -m http.server 8000 --directory site
 config/                 watchlist、score、fixture 與 fallback 設定
 src/tpw/                adapters、normalization、analytics、score、advice、render、CLI
 data/                   normalized history、Agent Run 寫入區與可重建的衍生 JSON
+data/market-status/     最近一次市場日檢查與休市／延遲狀態
 schema/                 Agent Run JSON Schema
 site/                   GitHub Pages 靜態成品
 reports/                每日 Markdown 快照

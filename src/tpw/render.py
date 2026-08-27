@@ -1,6 +1,8 @@
 import html
 import json
 
+from .publication import validate_market_status
+
 
 DISCLAIM = "批發市場平均行情，非實際零售通路售價。"
 TRACE_WARNING = "此為同品項的公開產銷履歷紀錄，非本日市場成交來源證明。"
@@ -65,19 +67,47 @@ def _toolbar(prefix=""):
     ) + "<button type='button' data-print>列印 / 存 PDF</button></div></nav>"
 
 
-def _hero(as_of, source_status, in_season_count, recommendation_count):
+def _hero(as_of, source_status, in_season_count, recommendation_count, publication_status):
     return (
         "<header class='hero'><div class='wrap'>"
         "<div class='eyebrow'>TAIWAN PRODUCE WATCH</div>"
         "<h1>今天吃什麼？</h1>"
         "<p>台灣當季蔬果 × 每日批發行情 × AI 採買情報</p>"
         "<div class='meta'>"
-        f"<span>資料日期：{_escape(as_of)}</span>"
-        f"<span>最後成功更新：{_escape(as_of)}</span>"
+        f"<span>最近完整交易日：{_escape(as_of)}</span>"
+        f"<span>今日資料檢查：{_escape(publication_status['requested_date'])}</span>"
         f"<span>當季品項：{in_season_count}</span>"
         f"<span>推薦品項：{recommendation_count}</span>"
         f"<span>資料狀態：{_escape(source_status)}</span>"
         "</div></div></header>"
+    )
+
+
+def _market_status_notice(status):
+    state = status["status"]
+    requested = status["requested_date"]
+    resolved = status["resolved_date"]
+    if state == "complete":
+        heading = f"行情已更新至 {resolved}"
+        expected = status["expected_watchlist_count"]
+        message = f"已檢查 {requested} 的官方行情，{expected} 項觀察清單資料完整。"
+    elif state == "market_closed":
+        heading = f"{requested} 今日休市"
+        message = f"農業部資料已標示休市；目前沿用最近完整交易日 {resolved}，並非網站漏更新。"
+    elif state == "incomplete":
+        heading = f"{requested} 行情尚未完整"
+        message = f"今日資料已檢查，但尚未涵蓋完整觀察清單；目前顯示最近完整交易日 {resolved}。"
+    elif state == "pending":
+        heading = f"{requested} 尚無完整行情"
+        message = f"今日資料已檢查，目前尚無可發布的完整交易行情；先顯示最近完整交易日 {resolved}。"
+    else:
+        heading = f"{requested} 官方資料暫時無法取得"
+        message = f"系統已完成重試並保留 last-known-good；目前顯示最近完整交易日 {resolved}。"
+    return (
+        f"<aside class='market-status market-status--{_escape(state)}' "
+        f"data-market-status='{_escape(state)}' role='status' aria-live='polite'>"
+        f"<div class='wrap'><strong>{_escape(heading)}</strong><span>{_escape(message)}</span>"
+        "</div></aside>"
     )
 
 
@@ -190,7 +220,7 @@ def _sparkline(points):
     )
 
 
-def _home(items, scores, series, seasonality, advice, traceability, quality, as_of, source_status):
+def _home(items, scores, series, seasonality, advice, traceability, quality, as_of, source_status, publication_status):
     item_map = {item["canonical_id"]: item for item in items}
     series_map = {row["canonical_id"]: row for row in series}
     trace_ids = {row["canonical_id"] for row in traceability}
@@ -226,7 +256,8 @@ def _home(items, scores, series, seasonality, advice, traceability, quality, as_
     )
     warning_text = "、".join(quality["warnings"]) or "無"
     return (
-        _hero(as_of, source_status, len(in_season), len(recommendations))
+        _hero(as_of, source_status, len(in_season), len(recommendations), publication_status)
+        + _market_status_notice(publication_status)
         + _toolbar()
         + "<main id='main' class='wrap'>"
         + "<section class='section recommendations' id='recommendations'><div class='section-heading'><div>"
@@ -314,19 +345,27 @@ def _trend_page(label, window_name, items, series):
     )
 
 
-def _methodology(source_status, quality):
+def _methodology(source_status, quality, publication_status):
     warnings = "".join(f"<li>{_escape(value)}</li>" for value in quality["warnings"]) or "<li>無</li>"
+    status_labels = {
+        "complete": "行情完整",
+        "market_closed": "今日休市",
+        "incomplete": "行情尚未完整",
+        "pending": "尚無完整行情",
+        "source_unavailable": "官方資料暫時無法取得",
+    }
+    status_label = status_labels[publication_status["status"]]
     return (
         "<header class='page-hero'><div class='wrap'><div class='eyebrow'>METHODOLOGY</div><h1>資料來源、公式與限制</h1></div></header>"
         + _toolbar()
         + "<main id='main' class='wrap'><section class='section'><h2>價格與 rolling windows</h2>"
         + f"<p>{DISCLAIM}</p><p>單日與區間價格皆使用 <code>sum(price × volume) / sum(volume)</code>；日比較採前一個有有效資料的交易日，7／30／90D 依日曆日回看。</p></section>"
         + "<section class='section'><h2>Buy Score</h2><p>產季、7D／30D 相對價、交易量、資料品質與 7D 波動度皆為 deterministic component。產銷履歷不加分，AI 不改變 score 或 verdict。</p></section>"
-        + f"<section class='section'><h2>資料狀態</h2><p>Market status：{_escape(source_status)}</p><ul>{warnings}</ul><p class='note warn'>fixture／fallback 僅供原型展示，不是即時官方快照。</p></section></main>"
+        + f"<section class='section'><h2>資料狀態</h2><p>行情來源：{_escape(source_status)}</p><p>每日檢查：{_escape(publication_status['requested_date'])} · 最近完整交易日：{_escape(publication_status['resolved_date'])} · 狀態：{_escape(status_label)}</p><ul>{warnings}</ul><p class='note warn'>fixture／fallback 僅供原型展示，不是即時官方快照。</p></section></main>"
     )
 
 
-def build_site(rows, as_of, root, source_status="validated", *, series=None, scores=None, seasonality=None, advice=None, traceability=None, quality=None):
+def build_site(rows, as_of, root, source_status="validated", *, series=None, scores=None, seasonality=None, advice=None, traceability=None, quality=None, publication_status=None):
     if not rows:
         raise ValueError("requested as-of date has no valid mapped aggregates")
     series = series or []
@@ -334,6 +373,14 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
     seasonality = seasonality or []
     traceability = traceability or []
     quality = quality or {"warnings": []}
+    publication_status = validate_market_status(publication_status or {
+        "schema_version": "1.0", "requested_date": as_of, "resolved_date": as_of,
+        "status": "complete", "source_status": source_status,
+        "expected_watchlist_count": len(rows), "covered_watchlist_count": len(rows),
+        "observed_record_count": len(rows),
+    })
+    if publication_status.get("resolved_date") != as_of:
+        raise ValueError("publication status resolved_date must match site as_of date")
     items = [
         {"canonical_id": row["canonical_id"], "display_name": row["display_name"], "category": row["category"]}
         for row in rows
@@ -359,9 +406,9 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
     (root / "traceability").mkdir(exist_ok=True)
     complete = bool(series and scores and seasonality)
     if complete:
-        home = _home(items, scores, series, seasonality, advice, traceability, quality, as_of, source_status)
+        home = _home(items, scores, series, seasonality, advice, traceability, quality, as_of, source_status, publication_status)
     else:
-        home = _hero(as_of, source_status, 0, 0) + "<nav class='toolbar' aria-label='主要導覽'><div class='inner'><a href='archive/index.html'>歷史</a><a href='methodology.html'>方法</a></div></nav>" + "<main id='main' class='wrap'><section class='section' id='recommendations'><h2>今日推薦採買</h2><p>資料不足，暫不判定。</p></section>" + _market_table(rows, "fruit") + _market_table(rows, "vegetable") + "</main>"
+        home = _hero(as_of, source_status, 0, 0, publication_status) + _market_status_notice(publication_status) + "<nav class='toolbar' aria-label='主要導覽'><div class='inner'><a href='archive/index.html'>歷史</a><a href='methodology.html'>方法</a></div></nav>" + "<main id='main' class='wrap'><section class='section' id='recommendations'><h2>今日推薦採買</h2><p>資料不足，暫不判定。</p></section>" + _market_table(rows, "fruit") + _market_table(rows, "vegetable") + "</main>"
     (root / "index.html").write_text(_document("Taiwan Produce Watch", home, "assets/css/app.css", "assets/js/app.js"), encoding="utf-8")
     daily_body = _toolbar("../../../") + f"<main id='main' class='wrap'><section class='section'><h1>每日行情 {as_of}</h1><p class='disclaimer'>{DISCLAIM}</p></section>"
     if complete:
@@ -397,11 +444,11 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
             table_rows = "".join(f"<tr><th scope='row'>{_escape(row['tracecode'])}</th><td>{_escape(row['producer'] or '—')}</td><td>{_escape(row['place'] or '—')}</td><td>{_escape(row['pack_date'] or '—')}</td><td>{_escape(row['certification_name'] or '—')}</td></tr>" for row in related) or "<tr><td colspan='5'>目前沒有相關紀錄。</td></tr>"
             trace_body = f"<header class='page-hero'><div class='wrap'><div class='eyebrow'>TRACEABILITY DETAIL</div><h1>{_escape(item['display_name'])}</h1></div></header>" + _toolbar("../") + f"<main id='main' class='wrap'><section class='section'><p class='note warn'>{TRACE_WARNING}</p><div class='table-wrap'><table><thead><tr><th>履歷代碼</th><th>組織</th><th>縣市</th><th>包裝日</th><th>驗證</th></tr></thead><tbody>{table_rows}</tbody></table></div></section></main>"
             (root / "traceability" / f"{item['canonical_id']}.html").write_text(_document(f"{item['display_name']}相關履歷", trace_body, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
-    (root / "methodology.html").write_text(_document("方法說明", _methodology(source_status, quality), "assets/css/app.css", "assets/js/app.js"), encoding="utf-8")
+    (root / "methodology.html").write_text(_document("方法說明", _methodology(source_status, quality, publication_status), "assets/css/app.css", "assets/js/app.js"), encoding="utf-8")
     links = "".join(f"<li><a href='../daily/{path.parent.parent.name}/{path.parent.name}/{path.stem}.html'>{path.stem}</a></li>" for path in sorted((root / "daily").rglob("*.html"), reverse=True))
     archive_body = "<header class='page-hero'><div class='wrap'><div class='eyebrow'>ARCHIVE</div><h1>歷史日期</h1></div></header>" + _toolbar("../") + f"<main id='main' class='wrap'><section class='section'><ul class='archive-list'>{links}</ul></section></main>"
     (root / "archive/index.html").write_text(_document("歷史封存", archive_body, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
-    (root / "data/current.json").write_text(json.dumps({"as_of_date": as_of, "source_status": source_status, "generation_mode": advice["generation_mode"], "prototype_complete": complete, "eligible_recommendations": len([row for row in scores if row.get("eligible")]), "items": rows, "scores": scores, "seasonality": seasonality, "advice": advice, "traceability": traceability, "quality": quality}, ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+    (root / "data/current.json").write_text(json.dumps({"as_of_date": as_of, "source_status": source_status, "publication_status": publication_status, "generation_mode": advice["generation_mode"], "prototype_complete": complete, "eligible_recommendations": len([row for row in scores if row.get("eligible")]), "items": rows, "scores": scores, "seasonality": seasonality, "advice": advice, "traceability": traceability, "quality": quality}, ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
 
 
 def render_report(rows, scores, advice, quality, as_of):
