@@ -72,6 +72,7 @@ python3 -m http.server 8000 --directory site
 | Command | 用途 |
 |---|---|
 | `validate-config` | 驗證 10 水果 + 10 蔬菜 mapping |
+| `validate-agent-run PATH [PATH ...]` | 驗證 proposed Agent Run JSON 契約；不執行分析或發布 |
 | `seed-prototype --as-of DATE` | 建立 35 日、2 市場、20 品項的 deterministic fixture history |
 | `fetch-market --start DATE --end DATE` | 呼叫 market adapter 並保存 normalized watchlist data |
 | `fetch-seasonality --month YYYY-MM` | 保存 manual fallback；目前不宣稱為 live snapshot |
@@ -111,7 +112,8 @@ python3 -m http.server 8000 --directory site
 ```text
 config/                 watchlist、score、fixture 與 fallback 設定
 src/tpw/                adapters、normalization、analytics、score、advice、render、CLI
-data/                   normalized history 與可重建的衍生 JSON
+data/                   normalized history、Agent Run 寫入區與可重建的衍生 JSON
+schema/                 Agent Run JSON Schema
 site/                   GitHub Pages 靜態成品
 reports/                每日 Markdown 快照
 tests/                  unit、contract、integration tests

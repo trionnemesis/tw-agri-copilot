@@ -10,6 +10,7 @@ from .seasonality import load_manual
 from .scoring import score_all
 from .advice import generate_advice
 from .traceability import filter_traceability
+from .agent_run import validate_agent_run_file
 ROOT=pathlib.Path.cwd(); SECRET=('AKIA','ghp_','glpat-','github_pat_','sk-','-----BEGIN PRIVATE KEY-----','bearer ','base64,')
 def config(): return json.loads((ROOT/'config/produce.yml').read_text())['items']
 def write_json(p,v): p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(v,ensure_ascii=False,sort_keys=True,separators=(',',':')),encoding='utf-8')
@@ -173,7 +174,8 @@ def main(argv=None):
  b=s.add_parser('build');b.add_argument('--as-of',required=True)
  bf=s.add_parser('backfill');bf.add_argument('--days',type=int,default=120);bf.add_argument('--end',default=dt.date.today().isoformat())
  d=s.add_parser('validate-data');d.add_argument('--as-of',required=True)
- v=s.add_parser('verify-site');v.add_argument('--as-of');a=p.parse_args(argv)
+ v=s.add_parser('verify-site');v.add_argument('--as-of')
+ ar=s.add_parser('validate-agent-run');ar.add_argument('paths',nargs='+');a=p.parse_args(argv)
  if a.cmd=='validate-config':
   items=config();canonical_map(items);assert sum(x['category']=='fruit' and x.get('enabled') for x in items)>=10 and sum(x['category']=='vegetable' and x.get('enabled') for x in items)>=10;print('config valid: 20 mapped items')
  elif a.cmd=='seed-prototype':
@@ -184,4 +186,7 @@ def main(argv=None):
  elif a.cmd=='backfill':print('backfill windows:',backfill(a.days,a.end))
  elif a.cmd=='build':build(a.as_of);print('build promoted safely')
  elif a.cmd=='validate-data':validate_data(a.as_of);print('data valid')
+ elif a.cmd=='validate-agent-run':
+  for path in a.paths:validate_agent_run_file(path)
+  print('agent run valid:',len(a.paths))
  else:verify_site(date=a.as_of);print('site verified')
