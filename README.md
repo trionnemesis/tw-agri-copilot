@@ -13,7 +13,7 @@
 
 「今天吃什麼」不該只靠一個價格數字。Taiwan Produce Watch 將 20 項台灣常見蔬果的市場資料轉成前一交易日、7／30／90 日趨勢、coverage、產季與 deterministic Buy Score；AI 層只負責解釋，不能改寫分數或 verdict。
 
-本專案目前是 **side-project prototype**。公開頁面使用 deterministic fixture、manual seasonality fallback、minimized traceability fixture 與 deterministic advice fallback，讓資料契約、UI 與 GitHub Pages 發布路徑可以先被驗證；它不是即時官方行情服務。
+本專案目前是 **side-project prototype**。行情與產季各自保存來源狀態；產季可抓取農糧署完整月份清單，暫時性故障才沿用 last-known-good 或 manual fallback。產銷履歷與 advice 仍使用 minimized fixture／deterministic fallback，因此它不是完整的即時官方服務。
 
 > **價格邊界：批發市場平均行情，非實際零售通路售價。**
 
@@ -26,6 +26,7 @@
 | PR 3 · Recommendation | manual seasonality adapter、Buy Score、首頁推薦卡、price movers | 產季／市場數／7D／30D／品質是 hard gates |
 | PR 4 · Advice | provider-neutral input、strict zh-Hant schema、guardrails、deterministic fallback | AI 只能解釋既有 evidence，不能改數字或 verdict |
 | PR 5 · Traceability | watchlist filtering、nullable fields、粗粒度縣市、品項與履歷頁 | 履歷不加入 Buy Score，也不代表本日成交來源 |
+| Issue #8 · Live seasonality | 農糧署 HTML adapter、完整分頁、月份 catalog、LKG／fallback、完整當季清單 | 只做明確名稱 mapping；不做 fuzzy matching |
 
 首頁核心內容不依賴 JavaScript；JS 只提供當季篩選與列印。桌機／平板／手機採 3／2／1 欄 responsive cards。
 
@@ -37,7 +38,8 @@ flowchart LR
   N --> U[Correction-safe upsert]
   U --> A[Weighted daily aggregate]
   A --> S[Previous day + 7/30/90D series]
-  F[Seasonality fallback] --> B[Deterministic Buy Score]
+  F[Official seasonality or LKG/fallback] --> B[Deterministic Buy Score]
+  F --> H
   S --> B
   B --> D[Advice provider contract]
   D --> H[Static HTML + JSON + Markdown]
@@ -77,7 +79,7 @@ python3 -m http.server 8000 --directory site
 | `validate-agent-run PATH [PATH ...]` | 驗證 proposed Agent Run JSON 契約；不執行分析或發布 |
 | `seed-prototype --as-of DATE` | 建立 35 日、2 市場、20 品項的 deterministic fixture history |
 | `fetch-market --start DATE --end DATE` | 呼叫 market adapter 並保存 normalized watchlist data |
-| `fetch-seasonality --month YYYY-MM` | 保存 manual fallback；目前不宣稱為 live snapshot |
+| `fetch-seasonality --month YYYY-MM` | 抓取並驗證農糧署水果／蔬菜完整分頁；暫時性故障使用 LKG／fallback |
 | `fetch-traceability --month YYYY-MM` | 保存 watchlist-only minimized fixture records |
 | `backfill --days N --end DATE` | 以最多 4 日的 bounded windows 抓取市場資料 |
 | `build --as-of DATE` | 從 retained normalized history 重建所有衍生資料與網站 |
@@ -94,7 +96,7 @@ python3 -m http.server 8000 --directory site
 | `/trends/weekly.html` | 7 日 rolling view |
 | `/trends/monthly.html` | 30 日 rolling view |
 | `/trends/quarterly.html` | 90 日 rolling view |
-| `/season/current.html` | 本月產季與 fallback 產地脈絡 |
+| `/season/current.html` | 本月完整盛產清單、全部／水果／蔬菜篩選、產地數與行情／履歷狀態 |
 | `/traceability/index.html` | watchlist 相關履歷索引與 non-join 警示 |
 | `/daily/YYYY/MM/YYYY-MM-DD.html` | 每日靜態快照 |
 | `/archive/index.html` | retained history |
@@ -103,7 +105,8 @@ python3 -m http.server 8000 --directory site
 ## 資料信任邊界
 
 - Market prototype fixture 是可重現測試資料，不是 live Dataset 8066 snapshot。
-- Seasonality 目前是 manual fallback，頁面必須顯示 `fallback`；`unknown` 不等於非當季。
+- Seasonality 優先使用農糧署官方月份清單，逐頁驗證分類、月份與欄位；transient failure 才使用 `stale`／`fallback`，schema drift 直接失敗。
+- Watchlist 與官方產季名稱只允許 `config/produce.yml` 的明確對照；`unknown` 不等於非當季。
 - Advice 預設為 `deterministic_fallback`，provider 只接收已驗證 metrics、score 與 reason codes。
 - Traceability 只保留 watchlist 所需欄位，移除 farmer/store details，place 降為縣市。
 - **此為同品項的公開產銷履歷紀錄，非本日市場成交來源證明。**
@@ -114,7 +117,7 @@ python3 -m http.server 8000 --directory site
 ```text
 config/                 watchlist、score、fixture 與 fallback 設定
 src/tpw/                adapters、normalization、analytics、score、advice、render、CLI
-data/                   normalized history、Agent Run 寫入區與可重建的衍生 JSON
+data/                   normalized history、月份產季 catalog、Agent Run 寫入區與可重建的衍生 JSON
 data/market-status/     最近一次市場日檢查與休市／延遲狀態
 schema/                 Agent Run JSON Schema
 site/                   GitHub Pages 靜態成品
@@ -130,6 +133,7 @@ VERIFICATION.md         本地與遠端 acceptance evidence
 - Prototype fixture：可重建、可測試、可部署。
 - Live market adapter：已實作 bounded fetch path；本版未進行 live 120-day release 驗證。
 - External AI provider：未啟用；固定走 deterministic fallback。
-- Traceability／seasonality：目前為明確標示的 fixture／fallback，下一步才是 live adapters。
+- Seasonality：官方 HTML adapter 已實作並保存月份 catalog；同月份 live snapshot 可重用，失敗狀態明確標示。
+- Traceability：目前仍為明確標示的 minimized fixture；live adapter 尚未實作。
 
 視覺語言來自使用者提供的分析型 HTML（navy gradient、paper cards、status badges、responsive grids）；README 資訊架構參考 [AgentSec README.zh-TW](https://github.com/trionnemesis/AgentSec/blob/main/README.zh-TW.md)，但內容與資料邊界皆針對本專案重寫。

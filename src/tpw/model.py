@@ -16,11 +16,17 @@ def number(value):
     return n
 
 def canonical_map(items):
-    result = {}; ids=set()
+    result = {}; ids=set(); seasonality_names=set()
     for item in items:
         if item.get("category") not in ("fruit","vegetable"): raise ValueError("invalid category")
         if item["canonical_id"] in ids: raise ValueError("duplicate canonical_id")
         ids.add(item["canonical_id"])
+        names=item.get("seasonality_names") or [item.get("display_name")]
+        if not names or any(not isinstance(name,str) or not name.strip() for name in names): raise ValueError("invalid seasonality_names")
+        for name in names:
+            key=(item["category"],name)
+            if key in seasonality_names: raise ValueError("duplicate seasonality name")
+            seasonality_names.add(key)
         if item.get("enabled"):
             for code in item["market_crop_codes"]:
                 if code in result: raise ValueError("duplicate crop code")

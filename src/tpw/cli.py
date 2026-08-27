@@ -1,12 +1,12 @@
 import argparse,datetime as dt,hashlib,json,os,pathlib,shutil,tempfile
 from html.parser import HTMLParser
 from .model import canonical_map,normalize,upsert
-from .market import fetch
+from .market import UpstreamUnavailable,fetch
 from .analytics import aggregate
 from .render import build_site,render_report,DISCLAIM
 from .prototype import generate_market_rows
 from .analytics import build_series
-from .seasonality import load_manual
+from .seasonality import build_catalog,catalog_from_seasonality,fetch_official,load_manual,map_catalog,with_source_status
 from .scoring import score_all
 from .advice import generate_advice
 from .traceability import filter_traceability
@@ -90,7 +90,49 @@ def market_status_css():
 def js():
  return """(()=>{document.querySelectorAll('[data-print]').forEach(button=>button.addEventListener('click',()=>window.print()));const grid=document.querySelector('[data-season-grid]');if(!grid)return;document.querySelectorAll('[data-filter]').forEach(button=>button.addEventListener('click',()=>{const selected=button.dataset.filter;document.querySelectorAll('[data-filter]').forEach(item=>item.setAttribute('aria-pressed',String(item===button)));grid.querySelectorAll('[data-category]').forEach(card=>{card.hidden=selected!=='all'&&card.dataset.category!==selected})}))})();"""
 def seasonality_rows(month):
- return load_manual(ROOT/'config/seasonality.manual.json',config(),month)
+ path=ROOT/'data/seasonality'/(month+'.json');catalog_path=ROOT/'data/seasonality/catalog'/(month+'.json')
+ source_catalog=json.loads(catalog_path.read_text()) if catalog_path.exists() else []
+ if source_catalog and all(row.get('source_status') in ('live','stale') for row in source_catalog):rows,_=map_catalog(config(),source_catalog,month)
+ else:rows=json.loads(path.read_text()) if path.exists() else load_manual(ROOT/'config/seasonality.manual.json',config(),month)
+ expected={item['canonical_id'] for item in config()}
+ if len(rows)!=len(expected) or {row.get('canonical_id') for row in rows}!=expected or any(row.get('month')!=month for row in rows):raise ValueError('seasonality snapshot does not match configured items and month')
+ return rows
+def seasonality_catalog(month,season=None):
+ path=ROOT/'data/seasonality/catalog'/(month+'.json')
+ rows=json.loads(path.read_text()) if path.exists() else catalog_from_seasonality(season or seasonality_rows(month))
+ if rows and all(row.get('source_status') in ('live','stale') for row in rows):_,rows=map_catalog(config(),rows,month)
+ if not rows or any(row.get('month')!=month or row.get('category') not in ('fruit','vegetable') for row in rows):raise ValueError('seasonality catalog is empty or mismatched')
+ return rows
+def persist_seasonality(month,opener=None,fetched_at=None):
+ configured=config();watch_path=ROOT/'data/seasonality'/(month+'.json');catalog_path=ROOT/'data/seasonality/catalog'/(month+'.json')
+ try:
+  kwargs={'opener':opener} if opener else {}
+  raw=fetch_official(month,**kwargs);fetched_at=fetched_at or dt.datetime.now(dt.UTC).isoformat()
+  catalog=build_catalog(raw,month,fetched_at)
+  previous_catalog=json.loads(catalog_path.read_text()) if catalog_path.exists() else []
+  if previous_catalog and all(row.get('month')==month and row.get('source_status') in ('live','stale') for row in previous_catalog):
+   previous_counts={category:sum(row.get('category')==category for row in previous_catalog) for category in ('fruit','vegetable')}
+   current_counts={category:sum(row.get('category')==category for row in catalog) for category in ('fruit','vegetable')}
+   if any(current_counts[category]<previous_counts[category] for category in previous_counts):
+    raise UpstreamUnavailable('seasonality catalog decreased from the same-month last-known-good snapshot')
+  watch,_=map_catalog(configured,catalog,month);status='live'
+ except UpstreamUnavailable:
+  previous=json.loads(watch_path.read_text()) if watch_path.exists() else []
+  if previous and all(row.get('source_status') in ('live','stale') for row in previous):
+   if catalog_path.exists():
+    catalog=with_source_status(json.loads(catalog_path.read_text()),'stale');watch,_=map_catalog(configured,catalog,month)
+   else:
+    watch=with_source_status(previous,'stale');catalog=with_source_status(catalog_from_seasonality(watch),'stale')
+   status='stale'
+  else:
+   watch=load_manual(ROOT/'config/seasonality.manual.json',configured,month);catalog=catalog_from_seasonality(watch);status='fallback'
+ stage=pathlib.Path(tempfile.mkdtemp(prefix='tpw-seasonality-',dir=ROOT));sd=stage/'data'
+ try:
+  if (ROOT/'data').exists():shutil.copytree(ROOT/'data',sd)
+  else:sd.mkdir()
+  write_json(sd/'seasonality'/(month+'.json'),watch);write_json(sd/'seasonality/catalog'/(month+'.json'),catalog);swap(sd,ROOT/'data')
+ finally:shutil.rmtree(stage,ignore_errors=True)
+ return {'catalog_count':len(catalog),'watchlist_count':len(watch),'source_status':status}
 def traceability_rows(month):
  fixture=json.loads((ROOT/'config/traceability.fixture.json').read_text())
  return filter_traceability(fixture.get('items',fixture.get('records',[])),config(),month+'-01T00:00:00Z')
@@ -98,10 +140,7 @@ def persist_context(kind,month):
  stage=pathlib.Path(tempfile.mkdtemp(prefix='tpw-context-',dir=ROOT));sd=stage/'data'
  try:
   shutil.copytree(ROOT/'data',sd)
-  if kind=='seasonality':
-   rows=seasonality_rows(month);write_json(sd/'seasonality'/(month+'.json'),rows)
-  else:
-   rows=traceability_rows(month);write_json(sd/'traceability/current.json',rows);write_json(sd/'traceability/monthly'/(month+'.json'),rows)
+  rows=traceability_rows(month);write_json(sd/'traceability/current.json',rows);write_json(sd/'traceability/monthly'/(month+'.json'),rows)
   swap(sd,ROOT/'data');return len(rows)
  finally:shutil.rmtree(stage,ignore_errors=True)
 def build(date):
@@ -117,14 +156,17 @@ def build(date):
   ds=stage/'data';shutil.copytree(ROOT/'data',ds)
   write_json(ds/'aggregates/daily'/date[:4]/date[5:7]/(date+'.json'),aggs)
   meta=ROOT/'data/source-meta'/(date+'.json');status=json.loads(meta.read_text()).get('status','validated') if meta.exists() else 'validated'
-  publication=load_resolved_market_status(ROOT/'data',date,status,len(configured));write_json(ds/'market-status/current.json',publication)
-  series=build_series(all_aggs,date);season=seasonality_rows(date[:7]);scores=score_all(series,season);advice=generate_advice(scores,date);trace=traceability_rows(date[:7])
+  publication=load_resolved_market_status(ROOT/'data',date,status,len(configured));write_json(ds/'market-status/current.json',publication);context_month=publication['requested_date'][:7]
+  series=build_series(all_aggs,date);season=seasonality_rows(context_month);season_catalog=seasonality_catalog(context_month,season);scores=score_all(series,season);advice=generate_advice(scores,date);trace=traceability_rows(context_month)
   warnings=[]
   if status=='fixture':warnings.append('market data is deterministic prototype fixture')
-  warnings.extend(('seasonality uses manual fallback','traceability uses minimized fixture records','advice uses deterministic fallback'))
+  season_status=season[0]['source_status']
+  if season_status=='fallback':warnings.append('seasonality uses manual fallback')
+  elif season_status=='stale':warnings.append('seasonality uses stale last-known-good data')
+  warnings.extend(('traceability uses minimized fixture records','advice uses deterministic fallback'))
   quality={'as_of_date':date,'warnings':warnings}
-  write_json(ds/'seasonality'/(date[:7]+'.json'),season)
-  write_json(ds/'traceability/current.json',trace);write_json(ds/'traceability/monthly'/(date[:7]+'.json'),trace)
+  write_json(ds/'seasonality'/(context_month+'.json'),season)
+  write_json(ds/'traceability/current.json',trace);write_json(ds/'traceability/monthly'/(context_month+'.json'),trace)
   for row in series:write_json(ds/'series'/(row['canonical_id']+'.json'),row)
   write_json(ds/'advice'/date[:4]/date[5:7]/(date+'.json'),advice)
   write_json(ds/'quality'/date[:4]/date[5:7]/(date+'.json'),quality)
@@ -132,7 +174,7 @@ def build(date):
   if (ROOT/'site').exists():shutil.copytree(ROOT/'site',site)
   (site/'assets/css').mkdir(parents=True,exist_ok=True);(site/'assets/js').mkdir(parents=True,exist_ok=True)
   (site/'.nojekyll').write_text('');(site/'assets/css/app.css').write_text(css()+market_status_css(),encoding='utf-8');(site/'assets/js/app.js').write_text(js(),encoding='utf-8')
-  build_site(aggs,date,site,status,series=series,scores=scores,seasonality=season,advice=advice,traceability=trace,quality=quality,publication_status=publication)
+  build_site(aggs,date,site,status,series=series,scores=scores,seasonality=season,season_catalog=season_catalog,advice=advice,traceability=trace,quality=quality,publication_status=publication)
   reports=stage/'reports'
   if (ROOT/'reports').exists():shutil.copytree(ROOT/'reports',reports)
   rp=reports/'daily'/date[:4]/date[5:7];rp.mkdir(parents=True,exist_ok=True);rp.joinpath(date+'.md').write_text(render_report(aggs,scores,advice,quality,date),encoding='utf-8')
@@ -178,13 +220,17 @@ def verify_site(root=ROOT/'site',date=None):
    missing.extend('traceability/'+item+'.html' for item in ids if not (root/'traceability'/(item+'.html')).exists())
    if missing:raise ValueError('prototype routes missing: '+', '.join(sorted(missing)))
    if len(ids)!=20:raise ValueError('prototype must render the configured 20-item watchlist')
+   catalog=current.get('season_catalog',[]);season_html=(root/'season/current.html').read_text()
+   if not catalog or season_html.count("class='card season-card'")!=len(catalog):raise ValueError('season page does not match published catalog')
+   if any(token not in season_html for token in ("data-filter='all'","data-filter='fruit'","data-filter='vegetable'")):raise ValueError('season page lacks required filters')
    if current.get('source_status')=='fixture':
     if current.get('eligible_recommendations',0)<3:raise ValueError('fixture must produce at least three eligible recommendations')
     if index.read_text().count("class='recommendation-card")<3:raise ValueError('first prototype surface lacks three recommendation cards')
    if current.get('generation_mode') not in ('deterministic_fallback','ai'):raise ValueError('advice generation mode missing')
 def validate_data(date):
  load_date(date)
- required=(ROOT/'data/aggregates/daily'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/seasonality'/(date[:7]+'.json'),ROOT/'data/traceability/current.json',ROOT/'data/advice'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/quality'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/market-status/current.json')
+ publication=validate_market_status(json.loads((ROOT/'data/market-status/current.json').read_text()));context_month=publication['requested_date'][:7]
+ required=(ROOT/'data/aggregates/daily'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/seasonality'/(context_month+'.json'),ROOT/'data/seasonality/catalog'/(context_month+'.json'),ROOT/'data/traceability/current.json',ROOT/'data/advice'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/quality'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/market-status/current.json')
  missing=[str(path.relative_to(ROOT)) for path in required if not path.exists()]
  if missing:raise ValueError('derived data missing: '+', '.join(missing))
  if len(list((ROOT/'data/series').glob('*.json')))!=20:raise ValueError('series data must cover 20 configured items')
@@ -205,7 +251,7 @@ def main(argv=None):
  elif a.cmd=='seed-prototype':
   fixture=json.loads((ROOT/'config/prototype.fixture.json').read_text());raw=generate_market_rows(config(),fixture,a.as_of);start=(dt.date.fromisoformat(a.as_of)-dt.timedelta(days=int(fixture.get('days',35))-1)).isoformat();print('seeded normalized rows:',ingest(raw,start,a.as_of,'fixture'))
  elif a.cmd=='fetch-market':print('persisted normalized rows:',fetch_market(a.start,a.end))
- elif a.cmd=='fetch-seasonality':print('persisted manual fallback rows:',persist_context('seasonality',a.month))
+ elif a.cmd=='fetch-seasonality':print('persisted seasonality:',persist_seasonality(a.month))
  elif a.cmd=='fetch-traceability':print('persisted minimized fixture rows:',persist_context('traceability',a.month))
  elif a.cmd=='backfill':print('backfill windows:',backfill(a.days,a.end))
  elif a.cmd=='build':build(a.as_of);print('build promoted safely')

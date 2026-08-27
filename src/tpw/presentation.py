@@ -36,6 +36,7 @@ REPLACEMENTS = (
     ),
     ("品質警示：", "資料邊界："),
     ("seasonality uses manual fallback", "產季資訊：內建參考資料"),
+    ("seasonality uses stale last-known-good data", "產季資訊：同月份最近驗證資料"),
     ("traceability uses minimized fixture records", "產銷履歷：最小化原型資料"),
     ("advice uses deterministic fallback", "採買建議：規則分析模式"),
     ("market data is deterministic prototype fixture", "行情資料：原型測試資料"),
@@ -61,7 +62,7 @@ REPLACEMENTS = (
     ("Watch items", "觀察項目"),
     ("Data quality", "資料品質"),
     ("Sources and boundaries", "資料來源與邊界"),
-    ("產季與履歷目前為 prototype fallback／fixture", "產季與產銷履歷目前仍使用原型參考資料，非即時官方查詢結果"),
+    ("產季來源狀態與履歷資料邊界保存於公開 JSON", "產季清單會標示官方更新、最近驗證資料或內建參考資料；產銷履歷目前仍為原型參考資料"),
     ("Taiwan Produce Watch · side-project prototype", "Taiwan Produce Watch · 台灣蔬果公開資料觀察"),
 )
 

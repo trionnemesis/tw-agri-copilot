@@ -1,4 +1,27 @@
-# PR 1–5 prototype verification — 2026-08-26
+# PR 1–5 prototype verification + issue #8 extension
+
+## Issue #8 live seasonality evidence — 2026-08-27
+
+- Official AFA fruit and vegetable pagination fetched successfully for `2026-08`.
+- Aggregated catalog: 39 products (20 fruit, 19 vegetables); 13 exact-name mappings to the configured 20-item market watchlist. The generic official `花椰菜` row is intentionally not mapped to the narrower `青梗花椰菜` market item.
+- Generated `season/current.html`: 39 server-rendered cards, all/fruit/vegetable filter metadata, origin-county counts, market-data status, traceability status and base-path-safe detail links.
+- Source status is `live` in both `data/seasonality/catalog/2026-08.json` and `site/data/current.json`; no fuzzy mapping is used.
+- Contract tests cover sequential pagination, schema/category/month drift, duplicate pages and transient retry classification.
+- Integration tests cover manual fallback, stale last-known-good reuse, catalog/page parity and required filters.
+
+~~~text
+PYTHONPATH=src python3 -m compileall -q src tests
+PYTHONPATH=src python3 -m unittest discover -s tests -t . -v
+Ran 48 tests
+OK
+
+PYTHONPATH=src python3 -m tpw validate-data --as-of 2026-08-26
+data valid
+PYTHONPATH=src python3 -m tpw verify-site --as-of 2026-08-26
+site verified
+~~~
+
+Remote PR checks and deployment are recorded separately after GitHub completes them; this section does not claim main or Pages deployment yet.
 
 ## Acceptance status
 
