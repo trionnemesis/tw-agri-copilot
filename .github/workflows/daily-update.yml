@@ -2,7 +2,7 @@ name: Daily market update
 # Scheduled runs publish the latest complete watchlist date when today's feed is not complete yet.
 on:
   schedule:
-    - cron: '0 2,5 * * *'
+    - cron: '0 9,18 * * *'
       timezone: 'Asia/Taipei'
   push:
     branches: [main]
