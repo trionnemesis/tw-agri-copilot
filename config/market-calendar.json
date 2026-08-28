@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "sources": [
+    {
+      "source_id": "tapmc_market_calendar",
+      "source_role": "calendar",
+      "market_codes": [
+        {
+          "market_code": "109",
+          "market_name": "臺北一"
+        },
+        {
+          "market_code": "104",
+          "market_name": "臺北二"
+        }
+      ],
+      "documents": [
+        {
+          "calendar_year": 2026,
+          "roc_year": 115,
+          "calendar_version": "115-114.07.30-fruit-vegetable",
+          "document_url": "https://www.tapmc.com.tw/webatt/115%E5%B9%B4%E4%BC%91%E5%B8%82%E6%97%A5%E7%A8%8B%E8%A1%A8.pdf?20250820=",
+          "expected_content_hash": "sha256:97775f09206973fb5c9f77d9c9777736710ce4a93c6e6e911a59388c53552b55",
+          "expected_closed_days": 80,
+          "expected_trading_days": 285,
+          "parser_version": "tapmc-calendar-v1",
+          "normalized_path": "data/market-calendar/tapmc/2026.json"
+        }
+      ]
+    }
+  ]
+}

@@ -7,6 +7,9 @@ name = "taiwan-produce-watch"
 version = "0.2.0"
 requires-python = ">=3.11"
 
+[project.optional-dependencies]
+calendar = ["pypdf==6.10.0"]
+
 [project.scripts]
 tpw = "tpw.cli:main"
 
