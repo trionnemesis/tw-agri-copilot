@@ -13,7 +13,7 @@
 
 「今天吃什麼」不該只靠一個價格數字。Taiwan Produce Watch 將 20 項台灣常見蔬果的市場資料轉成前一交易日、7／30／90 日趨勢、coverage、產季與 deterministic Buy Score；AI 層只負責解釋，不能改寫分數或 verdict。
 
-本專案目前是 **side-project prototype**。行情、官方市場日曆與產季各自保存來源狀態；臺北一／臺北二使用已驗證的臺北農產年度休市日曆，產季則可抓取農糧署完整月份清單。暫時性故障才沿用 last-known-good 或 manual fallback。產銷履歷與 advice 仍使用 minimized fixture／deterministic fallback，因此它不是完整的即時官方服務。
+本專案目前是 **side-project prototype**。行情、官方市場日曆、產季與產銷履歷各自保存來源狀態；臺北一／臺北二使用已驗證的臺北農產年度休市日曆，產季可抓取農糧署完整月份清單，產銷履歷則由農業部 7556 adapter 產生隱私最小化 registry snapshot。暫時性故障才沿用同來源 last-known-good 或明確標示的 fixture／manual fallback。Advice 仍使用 deterministic fallback，因此它不是完整的即時官方服務。
 
 > **價格邊界：批發市場平均行情，非實際零售通路售價。**
 
@@ -25,7 +25,7 @@
 | PR 2 · Analytics | 前一有效交易日、7／30／90D、coverage、20 個品項頁、日／週／月／季頁與 SVG chart fallback | coverage 不足時不產生正向判定 |
 | PR 3 · Recommendation | manual seasonality adapter、Buy Score、首頁推薦卡、price movers | 產季／市場數／7D／30D／品質是 hard gates |
 | PR 4 · Advice | provider-neutral input、strict zh-Hant schema、guardrails、deterministic fallback | AI 只能解釋既有 evidence，不能改數字或 verdict |
-| PR 5 · Traceability | watchlist filtering、nullable fields、粗粒度縣市、品項與履歷頁 | 履歷不加入 Buy Score，也不代表本日成交來源 |
+| Issue #3 · Traceability PR A | 農業部 7556 bounded adapter、schema／pagination 驗證、exact mapping、active／expired、LKG、粗粒度縣市與來源 profile | 生產者姓名、精確地址、地段地號、通路與作業明細不發布；履歷不加入 Buy Score |
 | Issue #8 · Live seasonality | 農糧署 HTML adapter、完整分頁、月份 catalog、LKG／fallback、完整當季清單 | 只做明確名稱 mapping；不做 fuzzy matching |
 | Issue #19 · Produce icons | 專案自有 SVG sprite、39 個現有顯示名稱的 exact registry、分類 fallback、列印與 responsive 樣式 | 圖示是裝飾性提示；文字名稱仍是唯一語意來源 |
 | Issue #3 · Official calendar | 臺北農產 115 年休市日曆、臺北一／臺北二 market registry、calendar／feed 分離與 discrepancy 狀態 | 日曆不加入行情 aggregate 或 Buy Score；未知年度不宣稱官方休市 |
@@ -52,14 +52,17 @@ flowchart LR
   B --> D[Advice provider contract]
   D --> H[Static HTML + JSON + Markdown]
   P --> H
-  T[Traceability records] --> X[Watchlist filter + minimization]
+  T[MOA 7556 registry] --> X[Schema + exact map + minimization]
+  X --> L[Registry profile + LKG]
   X --> H
   X -. no score join .-> B
 ```
 
 Build 只從已保存的 normalized history 重算，不從生成後的 HTML 或 aggregate history 反推資料。`data/`、`site/`、`reports/` 以 staging + rollback promotion 一次更新。
 
-交易 adapter 先產生帶 lineage 的 observation；policy 以 `(transaction_date, market_code, crop_code, dataset_semantics)` 作 economic identity。只有唯一的 `authoritative_final` 可標記 `eligible_for_aggregate=true`，其他 provisional／validation／contextual observation 只保留為 evidence。同優先序的不同正式來源會 fail closed，不會以 `source_id` 擴充 key 後直接相加。
+交易 adapter 先產生帶 lineage 的 observation；policy 以 `(transaction_date, market_code, crop_code, dataset_semantics)` 作 economic identity。只有唯一的 `authoritative_final` 可標記 `eligible_for_aggregate=true`，其他 provisional／validation／contextual observation 只保留為 evidence。同優先序的不同正式來源會 fail closed，不會以 `source_id` 擴充 key 後直接相加。7556 是獨立的 `authoritative_registry`，不會進入上述行情 resolution 或聚合。
+
+產銷履歷 live refresh 以 `$top`／`$skip` bounded pages 擷取，檢查 HTTP、Content-Type、JSON collection、18 個官方欄位、重複頁、最大頁數與內容 hash。公開 snapshot 只保留追溯碼、公開經營業者／組織代碼、品項、縣市、包裝日、驗證機構與有效日期；同一追溯碼只能有一份一致紀錄。來源暫時失敗時沿用同來源 LKG 並標示 `stale`，schema drift、追溯碼衝突或原始筆數低於 LKG 80% 時不覆寫既有資料。
 
 首頁會分開顯示「今日資料檢查」與「最近完整交易日」。`calendar.schedule_status` 與 `feed_status` 分開保存：預期開市但 feed 空白時不會誤標休市，日曆與交易資料衝突時會顯示 `calendar_feed_discrepancy`。網站會保留最近完整交易日，不把舊日期冒充成今日行情；相同證據也會寫入 `site/data/current.json` 的 `publication_status`。
 
@@ -76,6 +79,7 @@ PYTHONPATH=src python3 -m tpw validate-market-calendar --year 2026
 PYTHONPATH=src python3 -m tpw seed-prototype --as-of 2026-08-25
 PYTHONPATH=src python3 -m tpw build --as-of 2026-08-25
 PYTHONPATH=src python3 -m tpw validate-data --as-of 2026-08-25
+PYTHONPATH=src python3 -m tpw validate-traceability
 PYTHONPATH=src python3 -m tpw verify-site --as-of 2026-08-25
 
 python3 -m http.server 8000 --directory site
@@ -98,7 +102,8 @@ python3 -m http.server 8000 --directory site
 | `fetch-market --start DATE --end DATE` | 透過 8066 `SourceAdapter` 抓取 bounded batch，完成來源解析後保存 normalized watchlist data 與 source-run evidence |
 | `fetch-seasonality --month YYYY-MM` | 抓取並驗證農糧署水果／蔬菜完整分頁；暫時性故障使用 LKG／fallback |
 | `refresh-seasonality --month YYYY-MM [--force]` | 依月份 cache policy 重用或更新產季；`--force` 只略過同月 live reuse，不略過來源與 LKG 驗證 |
-| `fetch-traceability --month YYYY-MM` | 保存 watchlist-only minimized fixture records |
+| `fetch-traceability --as-of DATE` | 受控更新農業部 7556 registry；暫時失敗使用同來源 LKG，契約／品質漂移 fail closed |
+| `validate-traceability` | 驗證公開 registry、source profile、唯一追溯碼、有效狀態與禁止欄位 |
 | `backfill --days N --end DATE` | 以最多 4 日的 bounded windows 抓取市場資料 |
 | `build --as-of DATE` | 從 retained normalized history 重建所有衍生資料與網站 |
 | `validate-data --as-of DATE` | 驗證 normalized 與 PR2–PR5 衍生資料樹 |
@@ -115,7 +120,7 @@ python3 -m http.server 8000 --directory site
 | `/trends/monthly.html` | 30 日 rolling view |
 | `/trends/quarterly.html` | 90 日 rolling view |
 | `/season/current.html` | 本月完整盛產清單、專案自有蔬果圖示、搜尋／分類篩選、產地數與行情／履歷狀態 |
-| `/traceability/index.html` | watchlist 相關履歷索引與 non-join 警示 |
+| `/traceability/index.html` | 有效履歷批次、驗證經營者、涵蓋品項、來源狀態與 non-join 警示 |
 | `/daily/YYYY/MM/YYYY-MM-DD.html` | 每日靜態快照 |
 | `/archive/index.html` | retained history |
 | `/methodology.html` | 算法、coverage、fallback 與限制 |
@@ -133,7 +138,10 @@ python3 -m http.server 8000 --directory site
 - 當季圖示只依 `(category, display_name)` exact registry 選取；`representative` 代表同類代表圖，未知名稱只使用水果／蔬菜分類 fallback，不做 fuzzy matching。SVG paths 為本專案新作並隨站點發布，不在 runtime 讀取第三方資產、CDN 或 data URI。
 - 當季圖示標記為裝飾性 `aria-hidden`；可存取名稱與搜尋文字一律沿用已轉義的蔬果文字名稱。
 - Advice 預設為 `deterministic_fallback`，provider 只接收已驗證 metrics、score 與 reason codes。
-- Traceability 只保留 watchlist 所需欄位，移除 farmer/store details，place 降為縣市。
+- Traceability registry 的 source role 固定為 `authoritative_registry`；只允許 `config/produce.yml` 的 display name／explicit aliases，不做 fuzzy mapping，也不把 `canonical_id` 當成 live upstream 欄位。
+- `data/traceability/source-profile.json` 保存 adapter／schema version、擷取時間、content hash、raw／published／active／expired／unknown／unmapped／missing／duplicate counts；原始筆數低於前次 live／stale LKG 的 80% 時拒絕 promotion。
+- 公開履歷只保留追溯碼、公開經營業者／組織代碼、品項、粗粒度縣市、包裝日、驗證機構與有效日期。`FarmerName`、`StoreInfo`、精確地址、`LandSecNO`、栽種／履歷／加工明細與一籤一碼清單均不發布。
+- `valid_date < as_of_date` 明確標示 `expired`，不計入有效履歷批次；缺少有效日標示 `unknown`，也不計入 active count。
 - **此為同品項的公開產銷履歷紀錄，非本日市場成交來源證明。**
 - 不提交上游全量 dump、credentials、`.env`、private keys 或 base64 圖片。
 
@@ -143,11 +151,11 @@ python3 -m http.server 8000 --directory site
 config/                 watchlist、market registry、calendar 文件契約、score、fixture 與 fallback 設定
 src/tpw/                adapters、normalization、analytics、score、advice、render、CLI 與圖示 registry
 src/tpw/assets/         專案自有 SVG sprite 原始資產
-data/                   normalized history、source-run evidence、月份產季 catalog、Agent Run 寫入區與可重建的衍生 JSON
+data/                   normalized history、source-run evidence、月份產季 catalog、產銷履歷 registry/profile、Agent Run 寫入區與可重建的衍生 JSON
 data/market-status/     最近一次市場日檢查與休市／延遲狀態
 data/market-calendar/   已驗證的官方年度 normalized calendar fixture
 data/source-runs/       transaction adapter lineage 與 economic-observation resolution evidence
-schema/                 Agent Run、market calendar 與 source-run JSON Schema
+schema/                 Agent Run、market calendar、source-run 與 traceability JSON Schema
 site/                   GitHub Pages 靜態成品
 reports/                每日 Markdown 快照
 tests/                  unit、contract、integration tests
@@ -165,6 +173,7 @@ VERIFICATION.md         本地與遠端 acceptance evidence
 - External AI provider：未啟用；固定走 deterministic fallback。
 - Seasonality：官方 HTML adapter 已實作並保存月份 catalog；同月份 live snapshot 可重用，Actions 手動執行可要求安全強制更新，失敗狀態明確標示。
 - Produce icons：完整當季頁以 exact registry 選取本地 sprite symbol，未知品項安全降級為分類 fallback；不改變公開 JSON、搜尋或資料判定。
-- Traceability：目前仍為明確標示的 minimized fixture；live adapter 尚未實作。
+- Traceability PR A：7556 live registry adapter、bounded pagination、strict schema、exact mapping、privacy minimization、active／expired、source profile、LKG 與 Pages UI 已實作。Repository 仍提交小型 fixture 作 deterministic CI；排程成功後才會把狀態標成 `live`，不把 fixture 冒充官方即時快照。
+- Traceability PR B（獨立堆疊 PR）：H44 市場事件會使用獨立 schema 與頁面證據；不得併入 8066 aggregate 或 Buy Score。
 
 視覺語言來自使用者提供的分析型 HTML（navy gradient、paper cards、status badges、responsive grids）；README 資訊架構參考 [AgentSec README.zh-TW](https://github.com/trionnemesis/AgentSec/blob/main/README.zh-TW.md)，但內容與資料邊界皆針對本專案重寫。

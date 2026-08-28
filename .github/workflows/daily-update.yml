@@ -117,6 +117,7 @@ jobs:
         if: github.event_name != 'push'
         env:
           AS_OF_MONTH: ${{ steps.resolved.outputs.month }}
+          AS_OF_DATE: ${{ steps.dates.outputs.requested }}
           FORCE_SEASONALITY_REFRESH: ${{ inputs.force_seasonality_refresh || false }}
         run: |
           seasonality_args=(--month "$AS_OF_MONTH")
@@ -126,7 +127,7 @@ jobs:
           seasonality_output="$(PYTHONPATH=src python3 -m tpw refresh-seasonality "${seasonality_args[@]}")"
           printf '%s\n' "$seasonality_output"
           echo "$seasonality_output" >> "$GITHUB_STEP_SUMMARY"
-          PYTHONPATH=src python3 -m tpw fetch-traceability --month "$AS_OF_MONTH"
+          PYTHONPATH=src python3 -m tpw fetch-traceability --as-of "$AS_OF_DATE"
       - name: Build, normalize, and validate
         env:
           AS_OF_DATE: ${{ steps.resolved.outputs.date }}

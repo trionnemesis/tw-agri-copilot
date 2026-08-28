@@ -1,5 +1,29 @@
 # Prototype verification evidence
 
+## Issue #3 Traceability PR A — 2026-08-28
+
+- 農業部 7556 registry adapter 使用 bounded `$top`／`$skip` pagination，並檢查 HTTP、Content-Type、JSON collection、18 個官方欄位、重複頁與最大頁數。
+- Public snapshot 只保留 tracecode、公開經營業者／組織代碼、explicit-mapped product、粗粒度縣市、包裝日、驗證機構與有效日。姓名、精確地址、地段地號、通路、作業明細與一籤一碼資料不會進入 artifact。
+- Contract／integration tests 覆蓋 active、expired、missing tracecode、duplicate、conflicting tracecode、unknown item、schema drift、HTML／empty／non-JSON、retry、80% count regression、atomic promotion 與 same-source LKG。
+- H44 market event、8066 aggregate 與 Buy Score 變更不在本 PR。
+
+~~~text
+PYTHONPATH=src python3 -m compileall -q src tests
+PYTHONPATH=src python3 -m unittest discover -s tests -t . -v
+Ran 102 tests
+OK
+
+PYTHONPATH=src python3 -m tpw validate-traceability
+valid traceability registry: fixture 5
+
+PYTHONPATH=src python3 -m tpw validate-data --as-of 2026-08-25
+data valid
+PYTHONPATH=src python3 -m tpw verify-site --as-of 2026-08-25
+site verified
+~~~
+
+Committed Pages artifacts intentionally remain `fixture` until a scheduled live refresh succeeds; this evidence does not claim that PR A has been merged or deployed to the public `main` Pages site.
+
 ## Issue #3 Phase 2A source contract — 2026-08-28
 
 - `moa_market_8066` now enters ingestion through the same `SourceAdapter`／`RawBatch` contract used by a second, differently shaped offline fixture adapter.

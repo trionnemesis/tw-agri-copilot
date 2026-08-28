@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trionnemesis.github.io/tw-agri-copilot/schema/traceability-registry.schema.json",
+  "title": "Published traceability registry lot",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "schema_version",
+      "record_type",
+      "tracecode",
+      "producer",
+      "org_id",
+      "product_name_raw",
+      "canonical_id",
+      "place",
+      "pack_date",
+      "certification_name",
+      "valid_date",
+      "certification_status",
+      "source_updated_date",
+      "source_id",
+      "source_role",
+      "source_status",
+      "retrieved_at",
+      "source_url",
+      "semantic_warning"
+    ],
+    "properties": {
+      "schema_version": {"const": "2.0"},
+      "record_type": {"const": "traceability_registry_lot"},
+      "tracecode": {"type": "string", "minLength": 1},
+      "producer": {"type": ["string", "null"]},
+      "org_id": {"type": ["string", "null"]},
+      "product_name_raw": {"type": "string", "minLength": 1},
+      "canonical_id": {"type": "string", "minLength": 1},
+      "place": {"type": ["string", "null"]},
+      "pack_date": {"type": ["string", "null"], "format": "date"},
+      "certification_name": {"type": ["string", "null"]},
+      "valid_date": {"type": ["string", "null"], "format": "date"},
+      "certification_status": {"enum": ["active", "expired", "unknown"]},
+      "source_updated_date": {"type": ["string", "null"], "format": "date"},
+      "source_id": {"const": "moa_traceability_7556"},
+      "source_role": {"const": "authoritative_registry"},
+      "source_status": {"enum": ["fixture", "live", "stale"]},
+      "retrieved_at": {"type": "string", "minLength": 1},
+      "source_url": {"type": "string", "format": "uri"},
+      "semantic_warning": {"type": "string", "minLength": 1}
+    }
+  }
+}
