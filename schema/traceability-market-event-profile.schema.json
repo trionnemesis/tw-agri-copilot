@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trionnemesis.github.io/tw-agri-copilot/schema/traceability-market-event-profile.schema.json",
+  "title": "H44 traceability market event source profile",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version", "record_type", "source_id", "source_role",
+    "dataset_semantics", "source_status", "source_schema_version",
+    "adapter_version", "requested_date", "retrieved_at", "content_hash",
+    "raw_record_count", "published_record_count", "mapped_item_count",
+    "market_count", "eligible_for_market_aggregate", "affects_buy_score"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "record_type": {"const": "traceability_market_event_profile"},
+    "source_id": {"const": "moa_traceability_market_h44"},
+    "source_role": {"const": "authoritative_market_event"},
+    "dataset_semantics": {"const": "traceability_market_event"},
+    "source_status": {"enum": ["fixture", "live", "stale"]},
+    "source_schema_version": {"type": "string", "minLength": 1},
+    "adapter_version": {"type": "string", "minLength": 1},
+    "requested_date": {"type": "string", "format": "date"},
+    "retrieved_at": {"type": "string", "minLength": 1},
+    "content_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "raw_record_count": {"type": "integer", "minimum": 1},
+    "published_record_count": {"type": "integer", "minimum": 0},
+    "mapped_item_count": {"type": "integer", "minimum": 0},
+    "market_count": {"type": "integer", "minimum": 0},
+    "eligible_for_market_aggregate": {"const": false},
+    "affects_buy_score": {"const": false}
+  }
+}

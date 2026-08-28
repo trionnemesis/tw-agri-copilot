@@ -200,10 +200,11 @@ class BuildTest(unittest.TestCase):
   tracked=[ROOT/'site/index.html',ROOT/'site/season/current.html',ROOT/'site/assets/js/app.js',ROOT/'site/assets/css/app.css',ROOT/'site/assets/icons/produce.svg',ROOT/'site/data/current.json',ROOT/'data/advice/2026/08/2026-08-25.json']
   before=[hashlib.sha256(path.read_bytes()).hexdigest() for path in tracked];self.command('build','--as-of','2026-08-25');self.assertEqual(before,[hashlib.sha256(path.read_bytes()).hexdigest() for path in tracked])
   current=json.loads((ROOT/'site/data/current.json').read_text());self.assertTrue(current['prototype_complete']);self.assertGreaterEqual(current['eligible_recommendations'],3);self.assertEqual(len(current['scores']),20);self.assertEqual(current['advice']['generation_mode'],'deterministic_fallback')
-  self.assertEqual(len(list((ROOT/'site/produce').glob('*.html'))),20);self.assertEqual(len(list((ROOT/'site/traceability').glob('*.html'))),21)
-  for route in ('season/current.html','trends/daily.html','trends/weekly.html','trends/monthly.html','trends/quarterly.html','traceability/index.html'):
+  self.assertEqual(len(list((ROOT/'site/produce').glob('*.html'))),20);self.assertEqual(len(list((ROOT/'site/traceability').glob('*.html'))),22)
+  for route in ('season/current.html','trends/daily.html','trends/weekly.html','trends/monthly.html','trends/quarterly.html','traceability/index.html','traceability/market-events.html'):
    self.assertTrue((ROOT/'site'/route).exists(),route)
-  self.assertEqual(len(list((ROOT/'data/series').glob('*.json'))),20);self.assertTrue((ROOT/'data/seasonality/2026-08.json').exists());self.assertTrue((ROOT/'data/traceability/monthly/2026-08.json').exists())
+  event_date=current['traceability_event_status']['requested_date'];event_path=ROOT/'data/traceability/market-events/daily'/event_date[:4]/event_date[5:7]/(event_date+'.json')
+  self.assertEqual(len(list((ROOT/'data/series').glob('*.json'))),20);self.assertTrue((ROOT/'data/seasonality/2026-08.json').exists());self.assertTrue((ROOT/'data/traceability/monthly/2026-08.json').exists());self.assertTrue(event_path.exists())
   season=(ROOT/'site/season/current.html').read_text();self.assertEqual(season.count("class='card season-card'"),len(current['season_catalog']));self.assertEqual(season.count('data-search-name='),len(current['season_catalog']));self.assertIn("data-season-source='live'",season)
   card_tags=re.findall(r"<article class='card season-card'[^>]*>",season);search_names=[html.unescape(value) for value in re.findall(r"data-search-name='([^']*)'",season)]
   self.assertEqual(Counter(search_names),Counter(row['display_name'] for row in current['season_catalog']));self.assertTrue(all(' hidden' not in tag for tag in card_tags))
@@ -224,6 +225,9 @@ class BuildTest(unittest.TestCase):
   for token in ("normalize('NFKC')",'dataset.searchName','const applyFilters','textContent','URLSearchParams','replaceState','pushState','popstate'):self.assertIn(token,script)
   for token in ('fetch(','XMLHttpRequest','localStorage','sessionStorage'):self.assertNotIn(token,script)
   trace=(ROOT/'data/traceability/current.json').read_text();self.assertNotIn('不得保存的姓名',trace);self.assertNotIn('不得保存的通路明細',trace)
+  self.assertTrue(current['traceability_events']);self.assertTrue(all(row['record_type']=='traceability_market_event' and row['eligible_for_market_aggregate'] is False and row['affects_buy_score'] is False for row in current['traceability_events']))
+  self.assertIs(current['traceability_event_status']['eligible_for_market_aggregate'],False);self.assertIs(current['traceability_event_status']['affects_buy_score'],False)
+  event_page=(ROOT/'site/traceability/market-events.html').read_text();self.assertIn("data-traceability-event-source='fixture'",event_page);self.assertIn('不納入行情彙總或 Buy Score',event_page);self.assertIn('H44',event_page);self.assertIn('溯源代號',event_page)
   self.assertNotIn('PR 1 不產生推薦',(ROOT/'reports/daily/2026/08/2026-08-25.md').read_text())
  def test_site_guard_rejects_secret_and_oversize(self):
   from tpw.render import build_site

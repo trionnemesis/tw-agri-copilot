@@ -10,6 +10,7 @@ from .seasonality import build_catalog,catalog_from_seasonality,fetch_official,l
 from .scoring import score_all
 from .advice import generate_advice
 from .traceability import fetch_registry,normalize_registry,validate_registry_snapshot
+from .traceability_events import fetch_market_events,normalize_market_events,validate_market_event_snapshot
 from .agent_run import validate_agent_run_file
 from .produce_icons import resolve_produce_icon, validate_produce_icon_sprite
 from .publication import apply_market_calendar,classify_market_status,load_resolved_market_status,source_unavailable_status,validate_market_status
@@ -243,6 +244,46 @@ def refresh_traceability(as_of_date,fetcher=fetch_registry,retrieved_at=None):
   previous_count=previous_profile['raw_record_count']
   if previous_count and profile['raw_record_count']*100<previous_count*80:raise ValueError('traceability registry row count fell below the 80 percent LKG threshold')
  _persist_traceability_snapshot(rows,profile);return profile
+def fixture_traceability_events(requested_date):
+ fixture=json.loads((ROOT/'config/traceability-events.fixture.json').read_text())
+ compact=dt.date.fromisoformat(requested_date).strftime('%Y%m%d');rows=[dict(row,交易日期=compact) for row in fixture.get('items',[])]
+ return normalize_market_events(rows,config(),requested_date,'fixture',source_status='fixture')
+def _traceability_event_snapshot_paths(requested_date):
+ requested_date=dt.date.fromisoformat(requested_date).isoformat();base=ROOT/'data/traceability/market-events';return (base/'daily'/requested_date[:4]/requested_date[5:7]/(requested_date+'.json'),base/'profiles'/requested_date[:4]/requested_date[5:7]/(requested_date+'.json'))
+def _load_current_traceability_events():
+ rows_path=ROOT/'data/traceability/market-events/current.json';profile_path=ROOT/'data/traceability/market-events/source-profile.json'
+ if not rows_path.exists() or not profile_path.exists():return None
+ rows=json.loads(rows_path.read_text());profile=json.loads(profile_path.read_text());validate_market_event_snapshot(rows,profile);return rows,profile
+def traceability_event_context(requested_date):
+ requested_date=dt.date.fromisoformat(requested_date).isoformat();rows_path,profile_path=_traceability_event_snapshot_paths(requested_date)
+ if rows_path.exists() and profile_path.exists():
+  rows=json.loads(rows_path.read_text());profile=json.loads(profile_path.read_text());validate_market_event_snapshot(rows,profile)
+  if profile.get('requested_date')!=requested_date:raise ValueError('date-scoped traceability market event profile does not match requested date')
+  return rows,profile
+ current=_load_current_traceability_events()
+ if current is not None and current[1].get('requested_date')==requested_date:return current
+ return fixture_traceability_events(requested_date)
+def _persist_traceability_event_snapshot(rows,profile):
+ stage=pathlib.Path(tempfile.mkdtemp(prefix='tpw-traceability-events-',dir=ROOT));sd=stage/'data'
+ try:
+  if (ROOT/'data').exists():shutil.copytree(ROOT/'data',sd)
+  else:sd.mkdir()
+  requested_date=profile['requested_date'];base=sd/'traceability/market-events';write_json(base/'current.json',rows);write_json(base/'daily'/requested_date[:4]/requested_date[5:7]/(requested_date+'.json'),rows);write_json(base/'source-profile.json',profile);write_json(base/'profiles'/requested_date[:4]/requested_date[5:7]/(requested_date+'.json'),profile)
+  swap(sd,ROOT/'data')
+ finally:shutil.rmtree(stage,ignore_errors=True)
+def refresh_traceability_events(requested_date,fetcher=fetch_market_events,retrieved_at=None):
+ requested_date=dt.date.fromisoformat(requested_date).isoformat();retrieved_at=retrieved_at or dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace('+00:00','Z');current=_load_current_traceability_events();previous_rows,previous_profile=(current if current is not None and current[1].get('requested_date')==requested_date else fixture_traceability_events(requested_date))
+ try:raw_rows,content_hash=fetcher(requested_date)
+ except UpstreamUnavailable:
+  if previous_profile.get('source_status') in ('live','stale'):
+   rows=[dict(row,source_status='stale') for row in previous_rows];profile=dict(previous_profile,source_status='stale',last_attempt_at=retrieved_at);validate_market_event_snapshot(rows,profile);_persist_traceability_event_snapshot(rows,profile);return profile
+  return {'source_status':'unavailable','preserved_status':previous_profile.get('source_status','none'),'requested_date':requested_date,'published_record_count':len(previous_rows)}
+ rows,profile=normalize_market_events(raw_rows,config(),requested_date,retrieved_at,source_status='live',content_hash=content_hash)
+ if not rows:raise ValueError('traceability market events have no explicitly mapped records')
+ if previous_profile.get('source_status') in ('live','stale'):
+  previous_count=previous_profile['raw_record_count']
+  if previous_count and profile['raw_record_count']*100<previous_count*80:raise ValueError('traceability market event row count fell below the 80 percent LKG threshold')
+ _persist_traceability_event_snapshot(rows,profile);return profile
 def build(date):
  rows=load_date(date);configured=config();items={i['canonical_id']:i for i in configured}
  all_rows=[]
@@ -262,7 +303,7 @@ def build(date):
    if dt.date.fromisoformat(requested)>=dt.date.fromisoformat(date):calendar_date=requested
   calendar=evaluate_market_calendar(ROOT,calendar_date)
   publication=load_resolved_market_status(ROOT/'data',date,status,len(configured),calendar);write_json(ds/'market-status/current.json',publication);context_month=publication['requested_date'][:7]
-  series=build_series(all_aggs,date);season=seasonality_rows(context_month);season_catalog=seasonality_catalog(context_month,season);scores=score_all(series,season);advice=generate_advice(scores,date);trace,trace_profile=traceability_context(publication['requested_date'])
+  series=build_series(all_aggs,date);season=seasonality_rows(context_month);season_catalog=seasonality_catalog(context_month,season);scores=score_all(series,season);advice=generate_advice(scores,date);trace,trace_profile=traceability_context(publication['requested_date']);trace_events,trace_event_profile=traceability_event_context(publication['requested_date'])
   warnings=[]
   if status=='fixture':warnings.append('market data is deterministic prototype fixture')
   season_status=season[0]['source_status']
@@ -270,10 +311,13 @@ def build(date):
   elif season_status=='stale':warnings.append('seasonality uses stale last-known-good data')
   if trace_profile['source_status']=='fixture':warnings.append('traceability uses minimized fixture records')
   elif trace_profile['source_status']=='stale':warnings.append('traceability uses stale last-known-good registry data')
+  if trace_event_profile['source_status']=='fixture':warnings.append('traceability market events use a shape-only fixture')
+  elif trace_event_profile['source_status']=='stale':warnings.append('traceability market events use stale last-known-good H44 data')
   warnings.append('advice uses deterministic fallback')
   quality={'as_of_date':date,'warnings':warnings}
   write_json(ds/'seasonality'/(context_month+'.json'),season)
   write_json(ds/'traceability/current.json',trace);write_json(ds/'traceability/monthly'/(context_month+'.json'),trace);write_json(ds/'traceability/source-profile.json',trace_profile)
+  event_date=trace_event_profile['requested_date'];event_base=ds/'traceability/market-events';write_json(event_base/'current.json',trace_events);write_json(event_base/'daily'/event_date[:4]/event_date[5:7]/(event_date+'.json'),trace_events);write_json(event_base/'source-profile.json',trace_event_profile);write_json(event_base/'profiles'/event_date[:4]/event_date[5:7]/(event_date+'.json'),trace_event_profile)
   for row in series:write_json(ds/'series'/(row['canonical_id']+'.json'),row)
   write_json(ds/'advice'/date[:4]/date[5:7]/(date+'.json'),advice)
   write_json(ds/'quality'/date[:4]/date[5:7]/(date+'.json'),quality)
@@ -281,7 +325,7 @@ def build(date):
   if (ROOT/'site').exists():shutil.copytree(ROOT/'site',site)
   (site/'assets/css').mkdir(parents=True,exist_ok=True);(site/'assets/js').mkdir(parents=True,exist_ok=True)
   (site/'.nojekyll').write_text('');(site/'assets/css/app.css').write_text(css()+market_status_css(),encoding='utf-8');(site/'assets/js/app.js').write_text(js(),encoding='utf-8')
-  build_site(aggs,date,site,status,series=series,scores=scores,seasonality=season,season_catalog=season_catalog,advice=advice,traceability=trace,traceability_status=trace_profile,quality=quality,publication_status=publication)
+  build_site(aggs,date,site,status,series=series,scores=scores,seasonality=season,season_catalog=season_catalog,advice=advice,traceability=trace,traceability_status=trace_profile,traceability_events=trace_events,traceability_event_status=trace_event_profile,quality=quality,publication_status=publication)
   reports=stage/'reports'
   if (ROOT/'reports').exists():shutil.copytree(ROOT/'reports',reports)
   rp=reports/'daily'/date[:4]/date[5:7];rp.mkdir(parents=True,exist_ok=True);rp.joinpath(date+'.md').write_text(render_report(aggs,scores,advice,quality,date),encoding='utf-8')
@@ -341,13 +385,16 @@ def verify_site(root=ROOT/'site',date=None):
     if any(market['market_name'] not in index_text for market in calendar['markets']):raise ValueError('homepage omits calendar markets')
   if publication['requested_date'] not in index_text:raise ValueError('homepage omits latest market check date')
   if current.get('prototype_complete'):
-   required=('season/current.html','trends/daily.html','trends/weekly.html','trends/monthly.html','trends/quarterly.html','traceability/index.html','archive/index.html','methodology.html')
+   required=('season/current.html','trends/daily.html','trends/weekly.html','trends/monthly.html','trends/quarterly.html','traceability/index.html','traceability/market-events.html','archive/index.html','methodology.html')
    missing=[path for path in required if not (root/path).exists()]
    ids={row['canonical_id'] for row in current.get('scores',[])}
    missing.extend('produce/'+item+'.html' for item in ids if not (root/'produce'/(item+'.html')).exists())
    missing.extend('traceability/'+item+'.html' for item in ids if not (root/'traceability'/(item+'.html')).exists())
    if missing:raise ValueError('prototype routes missing: '+', '.join(sorted(missing)))
    if len(ids)!=20:raise ValueError('prototype must render the configured 20-item watchlist')
+   events=current.get('traceability_events',[]);event_status=current.get('traceability_event_status',{})
+   if any(row.get('record_type')!='traceability_market_event' or row.get('eligible_for_market_aggregate') is not False or row.get('affects_buy_score') is not False for row in events):raise ValueError('traceability market events crossed an evidence boundary')
+   if event_status.get('eligible_for_market_aggregate') is not False or event_status.get('affects_buy_score') is not False:raise ValueError('traceability market event profile crossed an evidence boundary')
    catalog=current.get('season_catalog',[]);season_path=root/'season/current.html';season_html=season_path.read_text();season_parser=Links();season_parser.feed(season_html)
    if not catalog or season_html.count("class='card season-card'")!=len(catalog):raise ValueError('season page does not match published catalog')
    if any(token not in season_html for token in ("data-filter='all'","data-filter='fruit'","data-filter='vegetable'")):raise ValueError('season page lacks required filters')
@@ -367,7 +414,8 @@ def validate_data(date):
  if source_run_path.exists():validate_source_run_document(json.loads(source_run_path.read_text()))
  publication=validate_market_status(json.loads((ROOT/'data/market-status/current.json').read_text()));context_month=publication['requested_date'][:7]
  trace_rows=json.loads((ROOT/'data/traceability/current.json').read_text());trace_profile=json.loads((ROOT/'data/traceability/source-profile.json').read_text());validate_registry_snapshot(trace_rows,trace_profile)
- required=(ROOT/'data/aggregates/daily'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/seasonality'/(context_month+'.json'),ROOT/'data/seasonality/catalog'/(context_month+'.json'),ROOT/'data/traceability/current.json',ROOT/'data/traceability/source-profile.json',ROOT/'data/advice'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/quality'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/market-status/current.json')
+ event_rows=json.loads((ROOT/'data/traceability/market-events/current.json').read_text());event_profile=json.loads((ROOT/'data/traceability/market-events/source-profile.json').read_text());validate_market_event_snapshot(event_rows,event_profile)
+ required=(ROOT/'data/aggregates/daily'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/seasonality'/(context_month+'.json'),ROOT/'data/seasonality/catalog'/(context_month+'.json'),ROOT/'data/traceability/current.json',ROOT/'data/traceability/source-profile.json',ROOT/'data/traceability/market-events/current.json',ROOT/'data/traceability/market-events/source-profile.json',ROOT/'data/advice'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/quality'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/market-status/current.json')
  missing=[str(path.relative_to(ROOT)) for path in required if not path.exists()]
  if missing:raise ValueError('derived data missing: '+', '.join(missing))
  if len(list((ROOT/'data/series').glob('*.json')))!=20:raise ValueError('series data must cover 20 configured items')
@@ -378,6 +426,7 @@ def main(argv=None):
  fs=s.add_parser('fetch-seasonality');fs.add_argument('--month',default=dt.date.today().strftime('%Y-%m'))
  rs=s.add_parser('refresh-seasonality');rs.add_argument('--month',default=dt.date.today().strftime('%Y-%m'));rs.add_argument('--force',action='store_true')
  ft=s.add_parser('fetch-traceability');ft.add_argument('--as-of',default=dt.date.today().isoformat())
+ fte=s.add_parser('fetch-traceability-events');fte.add_argument('--as-of',default=dt.date.today().isoformat())
  b=s.add_parser('build');b.add_argument('--as-of',required=True)
  bf=s.add_parser('backfill');bf.add_argument('--days',type=int,default=120);bf.add_argument('--end',default=dt.date.today().isoformat())
  d=s.add_parser('validate-data');d.add_argument('--as-of',required=True)
@@ -387,6 +436,7 @@ def main(argv=None):
  mvc=s.add_parser('validate-market-calendar');mvc.add_argument('--year',required=True,type=int)
  sr=s.add_parser('validate-source-run');sr.add_argument('--date',required=True)
  s.add_parser('validate-traceability')
+ s.add_parser('validate-traceability-events')
  ar=s.add_parser('validate-agent-run');ar.add_argument('paths',nargs='+');a=p.parse_args(argv)
  if a.cmd=='validate-config':
   items=config();canonical_map(items);assert sum(x['category']=='fruit' and x.get('enabled') for x in items)>=10 and sum(x['category']=='vegetable' and x.get('enabled') for x in items)>=10;print('config valid: 20 mapped items')
@@ -396,6 +446,7 @@ def main(argv=None):
  elif a.cmd=='fetch-seasonality':print('persisted seasonality:',persist_seasonality(a.month))
  elif a.cmd=='refresh-seasonality':print('seasonality refresh:',json.dumps(refresh_seasonality(a.month,a.force),ensure_ascii=False,sort_keys=True))
  elif a.cmd=='fetch-traceability':print('traceability refresh:',json.dumps(refresh_traceability(a.as_of),ensure_ascii=False,sort_keys=True))
+ elif a.cmd=='fetch-traceability-events':print('traceability market event refresh:',json.dumps(refresh_traceability_events(a.as_of),ensure_ascii=False,sort_keys=True))
  elif a.cmd=='backfill':print('backfill windows:',backfill(a.days,a.end))
  elif a.cmd=='build':build(a.as_of);print('build promoted safely')
  elif a.cmd=='validate-data':validate_data(a.as_of);print('data valid')
@@ -415,4 +466,6 @@ def main(argv=None):
   payload=validate_source_run_document(json.loads(path.read_text()));print('valid source run:',payload['requested_start'],payload['requested_end'],len(payload['runs']))
  elif a.cmd=='validate-traceability':
   rows=json.loads((ROOT/'data/traceability/current.json').read_text());profile=json.loads((ROOT/'data/traceability/source-profile.json').read_text());validate_registry_snapshot(rows,profile);print('valid traceability registry:',profile['source_status'],len(rows))
+ elif a.cmd=='validate-traceability-events':
+  rows=json.loads((ROOT/'data/traceability/market-events/current.json').read_text());profile=json.loads((ROOT/'data/traceability/market-events/source-profile.json').read_text());validate_market_event_snapshot(rows,profile);print('valid traceability market events:',profile['source_status'],len(rows))
  else:verify_site(date=a.as_of);print('site verified')

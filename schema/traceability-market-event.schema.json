@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trionnemesis.github.io/tw-agri-copilot/schema/traceability-market-event.schema.json",
+  "title": "Published H44 traceability market event",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "schema_version", "record_type", "event_id", "transaction_date",
+      "market_code", "market_name", "crop_code", "crop_name_raw",
+      "canonical_id", "transaction_amount_twd", "transaction_volume_kg",
+      "traceability_class_code", "dataset_semantics", "source_id",
+      "source_role", "source_status", "retrieved_at", "source_url",
+      "eligible_for_market_aggregate", "affects_buy_score", "semantic_warning"
+    ],
+    "properties": {
+      "schema_version": {"const": "1.0"},
+      "record_type": {"const": "traceability_market_event"},
+      "event_id": {"type": "string", "pattern": "^h44:[0-9a-f]{64}$"},
+      "transaction_date": {"type": "string", "format": "date"},
+      "market_code": {"type": "string", "minLength": 1},
+      "market_name": {"type": "string", "minLength": 1},
+      "crop_code": {"type": "string", "minLength": 1},
+      "crop_name_raw": {"type": "string", "minLength": 1},
+      "canonical_id": {"type": "string", "minLength": 1},
+      "transaction_amount_twd": {"type": "number", "minimum": 0},
+      "transaction_volume_kg": {"type": "number", "minimum": 0},
+      "traceability_class_code": {"type": "string", "minLength": 1},
+      "dataset_semantics": {"const": "traceability_market_event"},
+      "source_id": {"const": "moa_traceability_market_h44"},
+      "source_role": {"const": "authoritative_market_event"},
+      "source_status": {"enum": ["fixture", "live", "stale"]},
+      "retrieved_at": {"type": "string", "minLength": 1},
+      "source_url": {"type": "string", "format": "uri"},
+      "eligible_for_market_aggregate": {"const": false},
+      "affects_buy_score": {"const": false},
+      "semantic_warning": {"type": "string", "minLength": 1}
+    }
+  }
+}

@@ -1,5 +1,31 @@
 # Prototype verification evidence
 
+## Issue #3 Traceability PR B — 2026-08-28
+
+- 農業部 H44 adapter 使用單日 `StartDate`／`EndDate` 與 bounded `$top`／`$skip` pagination，檢查 HTTP、Content-Type、JSON collection、8 個官方欄位、日期、非負有限數值、重複頁、最大頁數與 content hash。
+- 公開事件保留日期、市場、作物、交易金額、交易量與官方溯源代號；event identity 是完整官方欄位的 SHA-256。溯源代號不會被解讀為 7556 `Tracecode`。
+- H44 固定為 `authoritative_market_event`／`traceability_market_event`，profile 與每列皆有 `eligible_for_market_aggregate=false`、`affects_buy_score=false`；Pages 以 `/traceability/market-events.html` 與獨立區塊呈現。
+- Contract／unit／integration tests 覆蓋 bounded 日期分頁、empty／HTML／non-JSON、retry、schema／日期／數值漂移、exact mapping、exact duplicate、unknown item、80% count regression、atomic preservation 與 same-source LKG。
+
+~~~text
+PYTHONPATH=src python3 -m compileall -q src tests
+PYTHONPATH=src python3 -m unittest discover -s tests -t . -v
+Ran 111 tests
+OK
+
+PYTHONPATH=src python3 -m tpw validate-traceability
+valid traceability registry: fixture 5
+PYTHONPATH=src python3 -m tpw validate-traceability-events
+valid traceability market events: fixture 5
+
+PYTHONPATH=src python3 -m tpw validate-data --as-of 2026-08-26
+data valid
+PYTHONPATH=src python3 -m tpw verify-site --as-of 2026-08-26
+site verified
+~~~
+
+Committed H44 artifacts intentionally remain `fixture`; the endpoint and schema are based on the official H44 source description, but this verification does not claim a successful live H44 fetch, merge to `main`, or deployment to the public Pages site.
+
 ## Issue #3 Traceability PR A — 2026-08-28
 
 - 農業部 7556 registry adapter 使用 bounded `$top`／`$skip` pagination，並檢查 HTTP、Content-Type、JSON collection、18 個官方欄位、重複頁與最大頁數。
