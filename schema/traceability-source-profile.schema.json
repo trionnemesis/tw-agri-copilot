@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trionnemesis.github.io/tw-agri-copilot/schema/traceability-source-profile.schema.json",
+  "title": "Traceability registry source profile",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "record_type",
+    "source_id",
+    "source_role",
+    "source_status",
+    "source_schema_version",
+    "adapter_version",
+    "as_of_date",
+    "retrieved_at",
+    "content_hash",
+    "raw_record_count",
+    "published_record_count",
+    "active_record_count",
+    "operator_count",
+    "mapped_item_count"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "record_type": {"const": "traceability_registry_profile"},
+    "source_id": {"const": "moa_traceability_7556"},
+    "source_role": {"const": "authoritative_registry"},
+    "source_status": {"enum": ["fixture", "live", "stale"]},
+    "source_schema_version": {"type": "string", "minLength": 1},
+    "adapter_version": {"type": "string", "minLength": 1},
+    "as_of_date": {"type": "string", "format": "date"},
+    "retrieved_at": {"type": "string", "minLength": 1},
+    "content_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "raw_record_count": {"type": "integer", "minimum": 1},
+    "published_record_count": {"type": "integer", "minimum": 0},
+    "active_record_count": {"type": "integer", "minimum": 0},
+    "operator_count": {"type": "integer", "minimum": 0},
+    "mapped_item_count": {"type": "integer", "minimum": 0}
+  }
+}

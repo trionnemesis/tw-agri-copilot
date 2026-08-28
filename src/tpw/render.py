@@ -165,6 +165,20 @@ def _season_source_notice(rows):
     return f"<p class='{note_class}' data-season-source='{_escape(status)}'>{_escape(message)}{source}</p>"
 
 
+def _traceability_source_notice(profile):
+    status = profile.get("source_status", "fixture")
+    if status == "live":
+        message = "已由農業部 7556 產銷履歷資料集更新，並完成欄位、分頁、去重與隱私最小化驗證。"
+    elif status == "stale":
+        message = "本次官方資料暫時無法取得，目前沿用最近一次通過驗證的農業部 7556 資料。"
+    else:
+        message = "目前顯示可重建的示範資料；正式排程會改用農業部 7556，示範筆數不代表全臺覆蓋。"
+    source_url = profile.get("source_url", "")
+    source = f" <a href='{_escape(source_url)}' rel='noopener noreferrer'>查看官方資料集</a>" if source_url else ""
+    note_class = "note" if status == "live" else "note warn"
+    return f"<p class='{note_class}' data-traceability-source='{_escape(status)}'>{_escape(message)}{source}</p>"
+
+
 def _season_page(catalog, series, traceability):
     market_ids = {row["canonical_id"] for row in series}
     trace_ids = {row["canonical_id"] for row in traceability}
@@ -321,10 +335,10 @@ def _sparkline(points):
     )
 
 
-def _home(items, scores, series, seasonality, advice, traceability, quality, as_of, source_status, publication_status):
+def _home(items, scores, series, seasonality, advice, traceability, traceability_status, quality, as_of, source_status, publication_status):
     item_map = {item["canonical_id"]: item for item in items}
     series_map = {row["canonical_id"]: row for row in series}
-    trace_ids = {row["canonical_id"] for row in traceability}
+    trace_ids = {row["canonical_id"] for row in traceability if row.get("certification_status") == "active"}
     in_season = [row for row in seasonality if row["seasonality_status"] == "in_season"]
     recommendations = [row for row in scores if row["eligible"]][:6]
     cards = "".join(
@@ -378,7 +392,7 @@ def _home(items, scores, series, seasonality, advice, traceability, quality, as_
         + f"<div class='grid grid-4'>{trend_cards}</div></section>"
         + "<section class='section' id='origins'><h2>產地／產銷履歷入口</h2>"
         + f"<div class='grid grid-2'><div class='note'><strong>當季主要產地</strong><p>{len(in_season)} 項行情觀察品項具當季資料；產地只作季節背景，不代表當日成交來源。</p><a href='season/current.html'>查看當季與產地 →</a></div>"
-        + f"<div class='note warn'><strong>相關產銷履歷</strong><p>{len(traceability)} 筆最小化 prototype fixture。{TRACE_WARNING}</p><a href='traceability/index.html'>查看履歷邊界 →</a></div></div></section>"
+        + f"<div class='note warn'><strong>相關產銷履歷</strong><p>{traceability_status.get('active_record_count', 0)} 筆有效履歷批次、{traceability_status.get('operator_count', 0)} 個驗證經營者。{TRACE_WARNING}</p><a href='traceability/index.html'>查看履歷邊界 →</a></div></div></section>"
         + "<section class='section' id='history'><h2>歷史紀錄</h2><p>每日 HTML、Markdown 與 machine-readable JSON 都保留在 repo 中。</p><a href='archive/index.html'>開啟日期封存 →</a></section>"
         + "<section class='section sources' id='sources'><h2>資料來源、方法與限制</h2>"
         + f"<p class='disclaimer'>{DISCLAIM}</p><p>行情以各市場交易量加權；推薦由 deterministic Buy Score 產生，AI 只能解釋，不能改變數值或 verdict。</p>"
@@ -480,7 +494,7 @@ def _methodology(source_status, quality, publication_status):
     )
 
 
-def build_site(rows, as_of, root, source_status="validated", *, series=None, scores=None, seasonality=None, season_catalog=None, advice=None, traceability=None, quality=None, publication_status=None):
+def build_site(rows, as_of, root, source_status="validated", *, series=None, scores=None, seasonality=None, season_catalog=None, advice=None, traceability=None, traceability_status=None, quality=None, publication_status=None):
     if not rows:
         raise ValueError("requested as-of date has no valid mapped aggregates")
     series = series or []
@@ -497,6 +511,16 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
         for row in seasonality if row["seasonality_status"] == "in_season"
     ]
     traceability = traceability or []
+    traceability_status = traceability_status or {
+        "source_status": "fixture",
+        "source_url": "",
+        "as_of_date": as_of,
+        "retrieved_at": "fixture",
+        "active_record_count": sum(row.get("certification_status") == "active" for row in traceability),
+        "published_record_count": len(traceability),
+        "operator_count": len({row.get("org_id") for row in traceability if row.get("org_id")}),
+        "mapped_item_count": len({row.get("canonical_id") for row in traceability}),
+    }
     quality = quality or {"warnings": []}
     publication_status = validate_market_status(publication_status or {
         "schema_version": "1.0", "requested_date": as_of, "resolved_date": as_of,
@@ -533,14 +557,14 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
     (root / "traceability").mkdir(exist_ok=True)
     complete = bool(series and scores and seasonality)
     if complete:
-        home = _home(items, scores, series, seasonality, advice, traceability, quality, as_of, source_status, publication_status)
+        home = _home(items, scores, series, seasonality, advice, traceability, traceability_status, quality, as_of, source_status, publication_status)
     else:
         home = _hero(as_of, source_status, 0, 0, publication_status) + _market_status_notice(publication_status) + "<nav class='toolbar' aria-label='主要導覽'><div class='inner'><a href='archive/index.html'>歷史</a><a href='methodology.html'>方法</a></div></nav>" + "<main id='main' class='wrap'><section class='section' id='recommendations'><h2>今日推薦採買</h2><p>資料不足，暫不判定。</p></section>" + _market_table(rows, "fruit") + _market_table(rows, "vegetable") + "</main>"
     (root / "index.html").write_text(_document("Taiwan Produce Watch", home, "assets/css/app.css", "assets/js/app.js"), encoding="utf-8")
     daily_body = _toolbar("../../../") + f"<main id='main' class='wrap'><section class='section'><h1>每日行情 {as_of}</h1><p class='disclaimer'>{DISCLAIM}</p></section>"
     if complete:
         item_map = {item["canonical_id"]: item for item in items}
-        trace_ids = {row["canonical_id"] for row in traceability}
+        trace_ids = {row["canonical_id"] for row in traceability if row.get("certification_status") == "active"}
         daily_cards = "".join(_recommendation_card(row, item_map[row["canonical_id"]], "../../../", row["canonical_id"] in trace_ids) for row in [score for score in scores if score["eligible"]][:3])
         daily_body += f"<section class='section' id='recommendations'><h2>Top recommendations</h2><div class='recommendation-grid'>{daily_cards}</div></section>" + _advice_section(advice, items)
     daily_body += _market_table(rows, "fruit") + _market_table(rows, "vegetable") + "</main>"
@@ -562,19 +586,20 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
         grouped = {}
         for row in traceability:
             grouped.setdefault(row["canonical_id"], []).append(row)
-        trace_cards = "".join(f"<article class='card'><div class='label'>相關紀錄 {len(grouped.get(item['canonical_id'], []))}</div><h3>{_escape(item['display_name'])}</h3><a href='{_escape(item['canonical_id'])}.html'>查看最小化欄位 →</a></article>" for item in items if grouped.get(item["canonical_id"])) or "<p>目前沒有相關紀錄。</p>"
-        trace_index = "<header class='page-hero'><div class='wrap'><div class='eyebrow'>TRACEABILITY</div><h1>相關產銷履歷</h1></div></header>" + _toolbar("../") + f"<main id='main' class='wrap'><section class='section'><p class='note warn'>{TRACE_WARNING}</p><div class='grid grid-3'>{trace_cards}</div></section></main>"
+        trace_cards = "".join(f"<article class='card'><div class='label'>有效履歷批次 {len([row for row in grouped.get(item['canonical_id'], []) if row.get('certification_status')=='active'])}</div><h3>{_escape(item['display_name'])}</h3><a href='{_escape(item['canonical_id'])}.html'>查看最小化欄位 →</a></article>" for item in items if grouped.get(item["canonical_id"])) or "<p>目前沒有相關紀錄。</p>"
+        trace_summary = f"<div class='grid grid-3'><div class='card'><div class='label'>有效履歷批次</div><div class='value'>{traceability_status.get('active_record_count',0)}</div></div><div class='card'><div class='label'>驗證經營者</div><div class='value'>{traceability_status.get('operator_count',0)}</div></div><div class='card'><div class='label'>涵蓋觀察品項</div><div class='value'>{traceability_status.get('mapped_item_count',0)}</div></div></div>"
+        trace_index = "<header class='page-hero'><div class='wrap'><div class='eyebrow'>TRACEABILITY</div><h1>相關產銷履歷</h1><p>官方驗證資格與批次，不與每日批發行情混算</p></div></header>" + _toolbar("../") + f"<main id='main' class='wrap'><section class='section'><p class='note warn'>{TRACE_WARNING}</p>{_traceability_source_notice(traceability_status)}{trace_summary}<p class='small'>資料基準日：{_escape(traceability_status.get('as_of_date','—'))} · 來源擷取：{_escape(traceability_status.get('retrieved_at','—'))}</p><div class='grid grid-3'>{trace_cards}</div></section></main>"
         (root / "traceability/index.html").write_text(_document("相關產銷履歷", trace_index, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
         for item in items:
             related = grouped.get(item["canonical_id"], [])
-            table_rows = "".join(f"<tr><th scope='row'>{_escape(row['tracecode'])}</th><td>{_escape(row['producer'] or '—')}</td><td>{_escape(row['place'] or '—')}</td><td>{_escape(row['pack_date'] or '—')}</td><td>{_escape(row['certification_name'] or '—')}</td></tr>" for row in related) or "<tr><td colspan='5'>目前沒有相關紀錄。</td></tr>"
-            trace_body = f"<header class='page-hero'><div class='wrap'><div class='eyebrow'>TRACEABILITY DETAIL</div><h1>{_escape(item['display_name'])}</h1></div></header>" + _toolbar("../") + f"<main id='main' class='wrap'><section class='section'><p class='note warn'>{TRACE_WARNING}</p><div class='table-wrap'><table><thead><tr><th>履歷代碼</th><th>組織</th><th>縣市</th><th>包裝日</th><th>驗證</th></tr></thead><tbody>{table_rows}</tbody></table></div></section></main>"
+            table_rows = "".join(f"<tr><th scope='row'>{_escape(row['tracecode'])}</th><td>{_escape(row['producer'] or '—')}</td><td>{_escape(row['place'] or '—')}</td><td>{_escape(row['pack_date'] or '—')}</td><td>{_escape(row['certification_name'] or '—')}</td><td>{_escape(row['valid_date'] or '—')}</td><td><span class='badge {'pos' if row.get('certification_status')=='active' else 'neg' if row.get('certification_status')=='expired' else 'neu'}'>{_escape({'active':'有效','expired':'已到期','unknown':'未提供有效日'}.get(row.get('certification_status'),'未知'))}</span></td></tr>" for row in related) or "<tr><td colspan='7'>目前沒有相關紀錄。</td></tr>"
+            trace_body = f"<header class='page-hero'><div class='wrap'><div class='eyebrow'>TRACEABILITY DETAIL</div><h1>{_escape(item['display_name'])}</h1></div></header>" + _toolbar("../") + f"<main id='main' class='wrap'><section class='section'><p class='note warn'>{TRACE_WARNING}</p>{_traceability_source_notice(traceability_status)}<div class='table-wrap'><table><thead><tr><th>履歷代碼</th><th>組織</th><th>縣市</th><th>包裝日</th><th>驗證機構</th><th>有效至</th><th>狀態</th></tr></thead><tbody>{table_rows}</tbody></table></div></section></main>"
             (root / "traceability" / f"{item['canonical_id']}.html").write_text(_document(f"{item['display_name']}相關履歷", trace_body, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
     (root / "methodology.html").write_text(_document("方法說明", _methodology(source_status, quality, publication_status), "assets/css/app.css", "assets/js/app.js"), encoding="utf-8")
     links = "".join(f"<li><a href='../daily/{path.parent.parent.name}/{path.parent.name}/{path.stem}.html'>{path.stem}</a></li>" for path in sorted((root / "daily").rglob("*.html"), reverse=True))
     archive_body = "<header class='page-hero'><div class='wrap'><div class='eyebrow'>ARCHIVE</div><h1>歷史日期</h1></div></header>" + _toolbar("../") + f"<main id='main' class='wrap'><section class='section'><ul class='archive-list'>{links}</ul></section></main>"
     (root / "archive/index.html").write_text(_document("歷史封存", archive_body, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
-    (root / "data/current.json").write_text(json.dumps({"as_of_date": as_of, "source_status": source_status, "publication_status": publication_status, "generation_mode": advice["generation_mode"], "prototype_complete": complete, "eligible_recommendations": len([row for row in scores if row.get("eligible")]), "items": rows, "scores": scores, "seasonality": seasonality, "season_catalog": season_catalog, "advice": advice, "traceability": traceability, "quality": quality}, ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+    (root / "data/current.json").write_text(json.dumps({"as_of_date": as_of, "source_status": source_status, "publication_status": publication_status, "generation_mode": advice["generation_mode"], "prototype_complete": complete, "eligible_recommendations": len([row for row in scores if row.get("eligible")]), "items": rows, "scores": scores, "seasonality": seasonality, "season_catalog": season_catalog, "advice": advice, "traceability": traceability, "traceability_status": traceability_status, "quality": quality}, ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
 
 
 def render_report(rows, scores, advice, quality, as_of):
