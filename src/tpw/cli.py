@@ -1,7 +1,7 @@
-import argparse,datetime as dt,hashlib,html,json,os,pathlib,re,shutil,tempfile,urllib.parse
+import argparse,datetime as dt,html,json,os,pathlib,re,shutil,tempfile,urllib.parse
 from html.parser import HTMLParser
-from .model import canonical_map,normalize,upsert
-from .market import UpstreamUnavailable,fetch
+from .model import canonical_map,upsert
+from .market import UpstreamUnavailable
 from .analytics import aggregate
 from .render import build_site,render_report,DISCLAIM
 from .prototype import generate_market_rows
@@ -14,11 +14,11 @@ from .agent_run import validate_agent_run_file
 from .produce_icons import resolve_produce_icon, validate_produce_icon_sprite
 from .publication import apply_market_calendar,classify_market_status,load_resolved_market_status,source_unavailable_status,validate_market_status
 from .market_calendar import evaluate_market_calendar,load_calendar_payload,refresh_market_calendar
+from .source_adapter import AGGREGATE_SOURCE_ROLE,MOA_MARKET_8066_ADAPTER,SourceAdapter,resolve_observations,source_run_document,validate_source_run_document
 ROOT=pathlib.Path.cwd(); SECRET=('AKIA','ghp_','glpat-','github_pat_','sk-','-----BEGIN PRIVATE KEY-----','bearer ','base64,')
 def config(): return json.loads((ROOT/'config/produce.yml').read_text())['items']
 def write_json(p,v): p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(v,ensure_ascii=False,sort_keys=True,separators=(',',':')),encoding='utf-8')
 def path_for(base,date): return base/'market/daily'/date[:4]/date[5:7]/(date+'.json')
-def roc(iso): d=dt.date.fromisoformat(iso);return '%03d.%02d.%02d'%(d.year-1911,d.month,d.day)
 def swap(stage,dest):
  backup=dest.with_name(dest.name+'.backup');shutil.rmtree(backup,ignore_errors=True)
  if dest.exists(): os.replace(dest,backup)
@@ -41,32 +41,56 @@ def swap_all(pairs, replace=os.replace):
   raise
  else:
   for _,backup in backups:shutil.rmtree(backup,ignore_errors=True)
-def ingest(raw,start,end,fetched_at='fixture'):
- if not raw:raise ValueError('no upstream rows')
- configured=config();mapping=canonical_map(configured);lo,hi=dt.date.fromisoformat(start),dt.date.fromisoformat(end)
- observed=[normalize(r,mapping,fetched_at) for r in raw]
- if any(not lo<=dt.date.fromisoformat(r['transaction_date'])<=hi for r in observed):raise ValueError('upstream record outside requested date range')
+def _stable_source_evidence(document):
+ value=json.loads(json.dumps(document,ensure_ascii=False))
+ for run in value.get('runs',[]):run.pop('retrieved_at',None)
+ return value
+def ingest_sources(source_batches,start,end):
+ if not source_batches or not any(batch.records for _,batch in source_batches):raise ValueError('no upstream rows')
+ configured=config();mapping=canonical_map(configured);observations=[]
+ for adapter,batch in source_batches:
+  if not isinstance(adapter,SourceAdapter):raise ValueError('adapter does not implement SourceAdapter')
+  if batch.requested_start!=start or batch.requested_end!=end:raise ValueError('raw batch requested range does not match ingestion')
+  observations.extend(adapter.normalize(batch,mapping))
+ if not observations:raise ValueError('source adapters produced no normalized observations')
+ resolution=resolve_observations(observations);resolved=list(resolution.observations)
+ observed=[dict(item.record) for item in resolved if item.eligible_for_aggregate]
  rows=[r for r in observed if r['canonical_id']]
+ authoritative=[pair for pair in source_batches if pair[0].spec.source_role==AGGREGATE_SOURCE_ROLE]
+ if not authoritative:raise ValueError('ingestion requires an authoritative_final source')
+ highest=max(adapter.spec.precedence for adapter,_ in authoritative)
+ primary_sources={adapter.spec.source_id for adapter,_ in authoritative if adapter.spec.precedence==highest}
+ if len(primary_sources)!=1:raise ValueError('ambiguous primary authoritative source')
+ primary_adapter,primary_batch=next((adapter,batch) for adapter,batch in reversed(authoritative) if adapter.spec.precedence==highest)
+ run_evidence=source_run_document(source_batches,resolution,start,end)
  stage=pathlib.Path(tempfile.mkdtemp(prefix='tpw-ingest-',dir=ROOT));sd=stage/'data'
  try:
   if (ROOT/'data').exists():shutil.copytree(ROOT/'data',sd)
   for date in sorted({r['transaction_date'] for r in rows}):
    p=path_for(sd,date); old=json.loads(p.read_text()) if p.exists() else [];write_json(p,upsert(old+[r for r in rows if r['transaction_date']==date]))
   end_path=path_for(sd,end);stored=json.loads(end_path.read_text()) if end_path.exists() else []
-  source_status='fixture' if fetched_at=='fixture' else 'success'
+  source_status=primary_batch.status
   calendar=evaluate_market_calendar(ROOT,end)
   market_status=classify_market_status(observed,stored,end,{item['canonical_id'] for item in configured},source_status,calendar)
   write_json(sd/'market-status/current.json',market_status)
-  meta_path=sd/'source-meta'/(end+'.json'); meta={'source_id':'moa_market_8066','source_url':'https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx','requested_start':start,'requested_end':end,'fetched_at':fetched_at,'http_status':200,'record_count':len(rows),'raw_record_count':len(raw),'content_hash':'sha256:'+hashlib.sha256(json.dumps(raw,ensure_ascii=False,sort_keys=True).encode()).hexdigest(),'adapter_version':'1.0','status':source_status}
+  meta_path=sd/'source-meta'/(end+'.json'); meta={'schema_version':'1.0','source_id':primary_adapter.spec.source_id,'source_url':primary_adapter.spec.source_url,'source_role':primary_adapter.spec.source_role,'dataset_semantics':primary_adapter.spec.dataset_semantics,'precedence':primary_adapter.spec.precedence,'requested_start':start,'requested_end':end,'retrieved_at':primary_batch.retrieved_at,'fetched_at':primary_batch.retrieved_at,'http_status':primary_batch.http_status,'record_count':len(rows),'raw_record_count':len(primary_batch.records),'content_hash':primary_batch.content_hash,'adapter_version':primary_adapter.spec.adapter_version,'source_schema_version':primary_adapter.spec.source_schema_version,'status':source_status}
   if meta_path.exists():
    previous=json.loads(meta_path.read_text())
-   if all(previous.get(key)==meta[key] for key in ('requested_start','requested_end','content_hash','adapter_version','status')):meta=previous
+   if all(previous.get(key)==meta[key] for key in ('source_id','source_role','requested_start','requested_end','content_hash','adapter_version','source_schema_version','status')):meta=previous
   write_json(meta_path,meta)
+  runs_path=sd/'source-runs'/(end+'.json')
+  if runs_path.exists():
+   previous=json.loads(runs_path.read_text())
+   if _stable_source_evidence(previous)==_stable_source_evidence(run_evidence):run_evidence=previous
+  write_json(runs_path,run_evidence)
   swap(sd,ROOT/'data')
  finally:shutil.rmtree(stage,ignore_errors=True)
  return len(rows)
+def ingest(raw,start,end,fetched_at='fixture'):
+ batch=MOA_MARKET_8066_ADAPTER.batch(raw,start,end,fetched_at)
+ return ingest_sources([(MOA_MARKET_8066_ADAPTER,batch)],start,end)
 def fetch_market(start,end,opener=None):
- raw=fetch(roc(start),roc(end),opener=opener) if opener else fetch(roc(start),roc(end));return ingest(raw,start,end,dt.datetime.now(dt.UTC).isoformat())
+ batch=MOA_MARKET_8066_ADAPTER.fetch(start,end,opener=opener);return ingest_sources([(MOA_MARKET_8066_ADAPTER,batch)],start,end)
 def backfill(days,end,fetcher=fetch_market):
  if days<1:raise ValueError('days must be positive')
  finish=dt.date.fromisoformat(end);cursor=finish-dt.timedelta(days=days-1);out=[]
@@ -277,6 +301,8 @@ def verify_site(root=ROOT/'site',date=None):
    if current.get('generation_mode') not in ('deterministic_fallback','ai'):raise ValueError('advice generation mode missing')
 def validate_data(date):
  load_date(date)
+ source_run_path=ROOT/'data/source-runs'/(date+'.json')
+ if source_run_path.exists():validate_source_run_document(json.loads(source_run_path.read_text()))
  publication=validate_market_status(json.loads((ROOT/'data/market-status/current.json').read_text()));context_month=publication['requested_date'][:7]
  required=(ROOT/'data/aggregates/daily'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/seasonality'/(context_month+'.json'),ROOT/'data/seasonality/catalog'/(context_month+'.json'),ROOT/'data/traceability/current.json',ROOT/'data/advice'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/quality'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/market-status/current.json')
  missing=[str(path.relative_to(ROOT)) for path in required if not path.exists()]
@@ -296,6 +322,7 @@ def main(argv=None):
  ms=s.add_parser('record-market-status');ms.add_argument('--requested-date',required=True);ms.add_argument('--status',choices=('source_unavailable',),required=True)
  mc=s.add_parser('refresh-market-calendar');mc.add_argument('--year',required=True,type=int)
  mvc=s.add_parser('validate-market-calendar');mvc.add_argument('--year',required=True,type=int)
+ sr=s.add_parser('validate-source-run');sr.add_argument('--date',required=True)
  ar=s.add_parser('validate-agent-run');ar.add_argument('paths',nargs='+');a=p.parse_args(argv)
  if a.cmd=='validate-config':
   items=config();canonical_map(items);assert sum(x['category']=='fruit' and x.get('enabled') for x in items)>=10 and sum(x['category']=='vegetable' and x.get('enabled') for x in items)>=10;print('config valid: 20 mapped items')
@@ -318,4 +345,8 @@ def main(argv=None):
   payload=load_calendar_payload(ROOT,a.year)
   if payload is None:raise ValueError('validated calendar fixture is absent')
   print('valid market calendar:',payload['calendar_year'],payload['calendar_version'])
+ elif a.cmd=='validate-source-run':
+  path=ROOT/'data/source-runs'/(dt.date.fromisoformat(a.date).isoformat()+'.json')
+  if not path.exists():raise ValueError('source run evidence is absent')
+  payload=validate_source_run_document(json.loads(path.read_text()));print('valid source run:',payload['requested_start'],payload['requested_end'],len(payload['runs']))
  else:verify_site(date=a.as_of);print('site verified')

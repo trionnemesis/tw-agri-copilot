@@ -33,11 +33,12 @@ def canonical_map(items):
                 result[code]=item
     return result
 
-def normalize(raw, mapping, fetched_at="fixture"):
+def normalize(raw, mapping, *, source_id, fetched_at="fixture"):
     missing = [f for f in REQUIRED if f not in raw]
     if missing: raise ValueError("missing required fields: " + ", ".join(missing))
+    if not isinstance(source_id, str) or not source_id.strip(): raise ValueError("source_id must be a non-empty string")
     item = mapping.get(str(raw["作物代號"]))
-    base = {"schema_version":"1.0", "transaction_date":iso_date(raw["交易日期"]), "category_code":raw.get("種類代碼"), "crop_code":str(raw["作物代號"]), "crop_name_raw":str(raw["作物名稱"]), "canonical_id":item["canonical_id"] if item else None, "display_name":item["display_name"] if item else str(raw["作物名稱"]), "category":item["category"] if item else "unknown", "market_code":str(raw["市場代號"]), "market_name":str(raw["市場名稱"]), "high_price_twd_per_kg":number(raw.get("上價", 0)), "mid_price_twd_per_kg":number(raw.get("中價", 0)), "low_price_twd_per_kg":number(raw.get("下價", 0)), "avg_price_twd_per_kg":number(raw["平均價"]), "volume_kg":number(raw["交易量"]), "source_id":"moa_market_8066"}
+    base = {"schema_version":"1.0", "transaction_date":iso_date(raw["交易日期"]), "category_code":raw.get("種類代碼"), "crop_code":str(raw["作物代號"]), "crop_name_raw":str(raw["作物名稱"]), "canonical_id":item["canonical_id"] if item else None, "display_name":item["display_name"] if item else str(raw["作物名稱"]), "category":item["category"] if item else "unknown", "market_code":str(raw["市場代號"]), "market_name":str(raw["市場名稱"]), "high_price_twd_per_kg":number(raw.get("上價", 0)), "mid_price_twd_per_kg":number(raw.get("中價", 0)), "low_price_twd_per_kg":number(raw.get("下價", 0)), "avg_price_twd_per_kg":number(raw["平均價"]), "volume_kg":number(raw["交易量"]), "source_id":source_id.strip()}
     base["row_hash"] = "sha256:" + hashlib.sha256(json.dumps(base, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     base["fetched_at"] = fetched_at
     return base

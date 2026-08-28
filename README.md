@@ -29,6 +29,7 @@
 | Issue #8 · Live seasonality | 農糧署 HTML adapter、完整分頁、月份 catalog、LKG／fallback、完整當季清單 | 只做明確名稱 mapping；不做 fuzzy matching |
 | Issue #19 · Produce icons | 專案自有 SVG sprite、39 個現有顯示名稱的 exact registry、分類 fallback、列印與 responsive 樣式 | 圖示是裝飾性提示；文字名稱仍是唯一語意來源 |
 | Issue #3 · Official calendar | 臺北農產 115 年休市日曆、臺北一／臺北二 market registry、calendar／feed 分離與 discrepancy 狀態 | 日曆不加入行情 aggregate 或 Buy Score；未知年度不宣稱官方休市 |
+| Issue #3 · Source contract 2A | 通用 `SourceAdapter`／`RawBatch`、四種交易來源角色、run lineage 與 economic-observation dedup | 目前只有 8066 是 production `authoritative_final`；第二 adapter 僅為離線 fixture，2B–2F 尚未啟用 |
 
 首頁核心內容與當季圖示不依賴 JavaScript；JS 只提供當季搜尋／篩選、URL 狀態同步與列印。桌機／平板／手機採 3／2／1 欄 responsive cards。
 
@@ -36,7 +37,10 @@
 
 ```mermaid
 flowchart LR
-  M[Market 8066 or fixture] --> N[Validate + normalize]
+  M[MOA 8066 adapter] --> R[Source role + dedup]
+  V[Second fixture adapter] --> R
+  R -->|one eligible record| N[Validate + normalize]
+  R --> E[Source run evidence]
   M --> P[Feed status]
   C[TAPMC official calendar fixture] --> P
   N --> U[Correction-safe upsert]
@@ -54,6 +58,8 @@ flowchart LR
 ```
 
 Build 只從已保存的 normalized history 重算，不從生成後的 HTML 或 aggregate history 反推資料。`data/`、`site/`、`reports/` 以 staging + rollback promotion 一次更新。
+
+交易 adapter 先產生帶 lineage 的 observation；policy 以 `(transaction_date, market_code, crop_code, dataset_semantics)` 作 economic identity。只有唯一的 `authoritative_final` 可標記 `eligible_for_aggregate=true`，其他 provisional／validation／contextual observation 只保留為 evidence。同優先序的不同正式來源會 fail closed，不會以 `source_id` 擴充 key 後直接相加。
 
 首頁會分開顯示「今日資料檢查」與「最近完整交易日」。`calendar.schedule_status` 與 `feed_status` 分開保存：預期開市但 feed 空白時不會誤標休市，日曆與交易資料衝突時會顯示 `calendar_feed_discrepancy`。網站會保留最近完整交易日，不把舊日期冒充成今日行情；相同證據也會寫入 `site/data/current.json` 的 `publication_status`。
 
@@ -86,9 +92,10 @@ python3 -m http.server 8000 --directory site
 | `validate-config` | 驗證 10 水果 + 10 蔬菜 mapping |
 | `validate-market-calendar --year YEAR` | 驗證 normalized calendar、365／366 日完整性、market registry 與來源 hash |
 | `refresh-market-calendar --year YEAR` | 受控下載及解析已核准的臺北農產年度 PDF；hash／格式漂移時 fail closed |
+| `validate-source-run --date DATE` | 驗證 transaction adapter lineage、來源角色、resolution counts 與每個 economic observation 最多一筆 eligible |
 | `validate-agent-run PATH [PATH ...]` | 驗證 proposed Agent Run JSON 契約；不執行分析或發布 |
 | `seed-prototype --as-of DATE` | 建立 35 日、2 市場、20 品項的 deterministic fixture history |
-| `fetch-market --start DATE --end DATE` | 呼叫 market adapter 並保存 normalized watchlist data |
+| `fetch-market --start DATE --end DATE` | 透過 8066 `SourceAdapter` 抓取 bounded batch，完成來源解析後保存 normalized watchlist data 與 source-run evidence |
 | `fetch-seasonality --month YYYY-MM` | 抓取並驗證農糧署水果／蔬菜完整分頁；暫時性故障使用 LKG／fallback |
 | `refresh-seasonality --month YYYY-MM [--force]` | 依月份 cache policy 重用或更新產季；`--force` 只略過同月 live reuse，不略過來源與 LKG 驗證 |
 | `fetch-traceability --month YYYY-MM` | 保存 watchlist-only minimized fixture records |
@@ -116,6 +123,9 @@ python3 -m http.server 8000 --directory site
 ## 資料信任邊界
 
 - Market prototype fixture 是可重現測試資料，不是 live Dataset 8066 snapshot。
+- 交易來源角色限為 `authoritative_final | provisional | validation | contextual`；目前農業部 8066 的 precedence 為 100 且是唯一 production `authoritative_final`。非 final 角色一律不得進 aggregate／Buy Score。
+- `data/source-runs/` 保存 adapter／source schema version、retrieved time、content hash、precedence、eligible／suppressed count，以及重疊 observation 的 machine-readable 決策。相同 economic identity 最多一筆 eligible；不同正式來源同優先序時 fail closed。
+- 第二種 transaction schema 目前只存在於離線 contract fixture，用來證明 analytics、scoring、render 不依賴來源實作；沒有新增 production scraping，也沒有把 TAPMC 重複行情疊加到 8066。
 - Market calendar 是獨立 `calendar` source：目前只涵蓋臺北一 `109`、臺北二 `104`。115 年 fixture 對應官方 PDF 的 80 個休市日／285 個交易日，保存 document URL、calendar／parser version、retrieved time 與 SHA-256；不以空 feed 或固定週一規則取代 fixture。
 - `expected_open | scheduled_closed | exceptional_open | unknown` 與 `available | empty | delayed | failed | not_checked` 分開判定；只有具 fixture lineage 的結果可標示「官方公告休市」。
 - Seasonality 優先使用農糧署官方月份清單，逐頁驗證分類、月份與欄位；transient failure 才使用 `stale`／`fallback`，schema drift 直接失敗。
@@ -133,10 +143,11 @@ python3 -m http.server 8000 --directory site
 config/                 watchlist、market registry、calendar 文件契約、score、fixture 與 fallback 設定
 src/tpw/                adapters、normalization、analytics、score、advice、render、CLI 與圖示 registry
 src/tpw/assets/         專案自有 SVG sprite 原始資產
-data/                   normalized history、月份產季 catalog、Agent Run 寫入區與可重建的衍生 JSON
+data/                   normalized history、source-run evidence、月份產季 catalog、Agent Run 寫入區與可重建的衍生 JSON
 data/market-status/     最近一次市場日檢查與休市／延遲狀態
 data/market-calendar/   已驗證的官方年度 normalized calendar fixture
-schema/                 Agent Run 與 market calendar JSON Schema
+data/source-runs/       transaction adapter lineage 與 economic-observation resolution evidence
+schema/                 Agent Run、market calendar 與 source-run JSON Schema
 site/                   GitHub Pages 靜態成品
 reports/                每日 Markdown 快照
 tests/                  unit、contract、integration tests
@@ -149,6 +160,7 @@ VERIFICATION.md         本地與遠端 acceptance evidence
 
 - Prototype fixture：可重建、可測試、可部署。
 - Live market adapter：已實作 bounded fetch path；本版未進行 live 120-day release 驗證。
+- Phase 2A source contract：8066 已移除 ingest／normalize 的來源硬編碼；第二 fixture adapter、四種角色、precedence、去重、supersession evidence 與 schema-drift fail-safe 均有離線測試。TAPMC parity、provisional feed、contextual layer、地方市場擴充與 Buy Score vNext 明確留待 2B–2F。
 - Official market calendar：臺北一／臺北二 115 年 fixture 已實作；calendar／feed 分離、特殊週一開市、非週一休市、未知年度與 discrepancy 均有離線測試。
 - External AI provider：未啟用；固定走 deterministic fallback。
 - Seasonality：官方 HTML adapter 已實作並保存月份 catalog；同月份 live snapshot 可重用，Actions 手動執行可要求安全強制更新，失敗狀態明確標示。
