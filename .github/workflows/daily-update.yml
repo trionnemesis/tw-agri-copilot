@@ -1,5 +1,5 @@
 name: Daily market update
-# Scheduled runs publish the latest complete watchlist date when today's feed is not complete yet.
+# Market data is checked twice daily. Daily traceability context uses source-specific refresh cadence.
 on:
   schedule:
     - cron: '0 9,18 * * *'
@@ -113,7 +113,7 @@ jobs:
           if [ "$resolved" != "$REQUESTED_DATE" ]; then
             echo "::notice::Latest complete market date is $resolved; requested $REQUESTED_DATE is not complete yet."
           fi
-      - name: Refresh supplemental context
+      - name: Refresh seasonality and 7556 registry
         if: github.event_name != 'push'
         env:
           AS_OF_MONTH: ${{ steps.resolved.outputs.month }}
@@ -128,6 +128,11 @@ jobs:
           printf '%s\n' "$seasonality_output"
           echo "$seasonality_output" >> "$GITHUB_STEP_SUMMARY"
           PYTHONPATH=src python3 -m tpw fetch-traceability --as-of "$AS_OF_DATE"
+      - name: Refresh H44 traceability market events
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '0 18 * * *')
+        env:
+          AS_OF_DATE: ${{ steps.dates.outputs.requested }}
+        run: |
           PYTHONPATH=src python3 -m tpw fetch-traceability-events --as-of "$AS_OF_DATE"
       - name: Build, normalize, and validate
         env:
