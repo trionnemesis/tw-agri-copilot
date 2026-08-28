@@ -13,7 +13,7 @@
 
 「今天吃什麼」不該只靠一個價格數字。Taiwan Produce Watch 將 20 項台灣常見蔬果的市場資料轉成前一交易日、7／30／90 日趨勢、coverage、產季與 deterministic Buy Score；AI 層只負責解釋，不能改寫分數或 verdict。
 
-本專案目前是 **side-project prototype**。行情與產季各自保存來源狀態；產季可抓取農糧署完整月份清單，暫時性故障才沿用 last-known-good 或 manual fallback。產銷履歷與 advice 仍使用 minimized fixture／deterministic fallback，因此它不是完整的即時官方服務。
+本專案目前是 **side-project prototype**。行情、官方市場日曆與產季各自保存來源狀態；臺北一／臺北二使用已驗證的臺北農產年度休市日曆，產季則可抓取農糧署完整月份清單。暫時性故障才沿用 last-known-good 或 manual fallback。產銷履歷與 advice 仍使用 minimized fixture／deterministic fallback，因此它不是完整的即時官方服務。
 
 > **價格邊界：批發市場平均行情，非實際零售通路售價。**
 
@@ -28,6 +28,7 @@
 | PR 5 · Traceability | watchlist filtering、nullable fields、粗粒度縣市、品項與履歷頁 | 履歷不加入 Buy Score，也不代表本日成交來源 |
 | Issue #8 · Live seasonality | 農糧署 HTML adapter、完整分頁、月份 catalog、LKG／fallback、完整當季清單 | 只做明確名稱 mapping；不做 fuzzy matching |
 | Issue #19 · Produce icons | 專案自有 SVG sprite、39 個現有顯示名稱的 exact registry、分類 fallback、列印與 responsive 樣式 | 圖示是裝飾性提示；文字名稱仍是唯一語意來源 |
+| Issue #3 · Official calendar | 臺北農產 115 年休市日曆、臺北一／臺北二 market registry、calendar／feed 分離與 discrepancy 狀態 | 日曆不加入行情 aggregate 或 Buy Score；未知年度不宣稱官方休市 |
 
 首頁核心內容與當季圖示不依賴 JavaScript；JS 只提供當季搜尋／篩選、URL 狀態同步與列印。桌機／平板／手機採 3／2／1 欄 responsive cards。
 
@@ -36,6 +37,8 @@
 ```mermaid
 flowchart LR
   M[Market 8066 or fixture] --> N[Validate + normalize]
+  M --> P[Feed status]
+  C[TAPMC official calendar fixture] --> P
   N --> U[Correction-safe upsert]
   U --> A[Weighted daily aggregate]
   A --> S[Previous day + 7/30/90D series]
@@ -44,6 +47,7 @@ flowchart LR
   S --> B
   B --> D[Advice provider contract]
   D --> H[Static HTML + JSON + Markdown]
+  P --> H
   T[Traceability records] --> X[Watchlist filter + minimization]
   X --> H
   X -. no score join .-> B
@@ -51,7 +55,7 @@ flowchart LR
 
 Build 只從已保存的 normalized history 重算，不從生成後的 HTML 或 aggregate history 反推資料。`data/`、`site/`、`reports/` 以 staging + rollback promotion 一次更新。
 
-首頁會分開顯示「今日資料檢查」與「最近完整交易日」。官方資料標示休市、行情尚未完整或來源暫時不可用時，網站會保留最近完整交易日並顯示對應狀態，不會把舊日期冒充成今日行情；相同狀態也會寫入 `site/data/current.json` 的 `publication_status`。
+首頁會分開顯示「今日資料檢查」與「最近完整交易日」。`calendar.schedule_status` 與 `feed_status` 分開保存：預期開市但 feed 空白時不會誤標休市，日曆與交易資料衝突時會顯示 `calendar_feed_discrepancy`。網站會保留最近完整交易日，不把舊日期冒充成今日行情；相同證據也會寫入 `site/data/current.json` 的 `publication_status`。
 
 ## 快速開始
 
@@ -62,6 +66,7 @@ git clone https://github.com/trionnemesis/tw-agri-copilot.git
 cd tw-agri-copilot
 
 PYTHONPATH=src python3 -m tpw validate-config
+PYTHONPATH=src python3 -m tpw validate-market-calendar --year 2026
 PYTHONPATH=src python3 -m tpw seed-prototype --as-of 2026-08-25
 PYTHONPATH=src python3 -m tpw build --as-of 2026-08-25
 PYTHONPATH=src python3 -m tpw validate-data --as-of 2026-08-25
@@ -72,11 +77,15 @@ python3 -m http.server 8000 --directory site
 
 開啟 `http://localhost:8000/`。第二次執行相同 seed/build 會產生相同內容 hash。
 
+一般 build 不需要額外套件。只有受控更新官方 PDF fixture 時，才需先執行 `python3 -m pip install -e '.[calendar]'`，再執行 `PYTHONPATH=src python3 -m tpw refresh-market-calendar --year 2026`；文件 hash、格式、日期總數或 parser contract 不符時不會覆寫 last-known-good fixture。
+
 ## CLI
 
 | Command | 用途 |
 |---|---|
 | `validate-config` | 驗證 10 水果 + 10 蔬菜 mapping |
+| `validate-market-calendar --year YEAR` | 驗證 normalized calendar、365／366 日完整性、market registry 與來源 hash |
+| `refresh-market-calendar --year YEAR` | 受控下載及解析已核准的臺北農產年度 PDF；hash／格式漂移時 fail closed |
 | `validate-agent-run PATH [PATH ...]` | 驗證 proposed Agent Run JSON 契約；不執行分析或發布 |
 | `seed-prototype --as-of DATE` | 建立 35 日、2 市場、20 品項的 deterministic fixture history |
 | `fetch-market --start DATE --end DATE` | 呼叫 market adapter 並保存 normalized watchlist data |
@@ -107,6 +116,8 @@ python3 -m http.server 8000 --directory site
 ## 資料信任邊界
 
 - Market prototype fixture 是可重現測試資料，不是 live Dataset 8066 snapshot。
+- Market calendar 是獨立 `calendar` source：目前只涵蓋臺北一 `109`、臺北二 `104`。115 年 fixture 對應官方 PDF 的 80 個休市日／285 個交易日，保存 document URL、calendar／parser version、retrieved time 與 SHA-256；不以空 feed 或固定週一規則取代 fixture。
+- `expected_open | scheduled_closed | exceptional_open | unknown` 與 `available | empty | delayed | failed | not_checked` 分開判定；只有具 fixture lineage 的結果可標示「官方公告休市」。
 - Seasonality 優先使用農糧署官方月份清單，逐頁驗證分類、月份與欄位；transient failure 才使用 `stale`／`fallback`，schema drift 直接失敗。
 - Watchlist 與官方產季名稱只允許 `config/produce.yml` 的明確對照；`unknown` 不等於非當季。
 - 當季圖示只依 `(category, display_name)` exact registry 選取；`representative` 代表同類代表圖，未知名稱只使用水果／蔬菜分類 fallback，不做 fuzzy matching。SVG paths 為本專案新作並隨站點發布，不在 runtime 讀取第三方資產、CDN 或 data URI。
@@ -119,12 +130,13 @@ python3 -m http.server 8000 --directory site
 ## Repository anatomy
 
 ```text
-config/                 watchlist、score、fixture 與 fallback 設定
+config/                 watchlist、market registry、calendar 文件契約、score、fixture 與 fallback 設定
 src/tpw/                adapters、normalization、analytics、score、advice、render、CLI 與圖示 registry
 src/tpw/assets/         專案自有 SVG sprite 原始資產
 data/                   normalized history、月份產季 catalog、Agent Run 寫入區與可重建的衍生 JSON
 data/market-status/     最近一次市場日檢查與休市／延遲狀態
-schema/                 Agent Run JSON Schema
+data/market-calendar/   已驗證的官方年度 normalized calendar fixture
+schema/                 Agent Run 與 market calendar JSON Schema
 site/                   GitHub Pages 靜態成品
 reports/                每日 Markdown 快照
 tests/                  unit、contract、integration tests
@@ -137,6 +149,7 @@ VERIFICATION.md         本地與遠端 acceptance evidence
 
 - Prototype fixture：可重建、可測試、可部署。
 - Live market adapter：已實作 bounded fetch path；本版未進行 live 120-day release 驗證。
+- Official market calendar：臺北一／臺北二 115 年 fixture 已實作；calendar／feed 分離、特殊週一開市、非週一休市、未知年度與 discrepancy 均有離線測試。
 - External AI provider：未啟用；固定走 deterministic fallback。
 - Seasonality：官方 HTML adapter 已實作並保存月份 catalog；同月份 live snapshot 可重用，Actions 手動執行可要求安全強制更新，失敗狀態明確標示。
 - Produce icons：完整當季頁以 exact registry 選取本地 sprite symbol，未知品項安全降級為分類 fallback；不改變公開 JSON、搜尋或資料判定。

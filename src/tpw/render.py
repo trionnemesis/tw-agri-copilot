@@ -88,26 +88,65 @@ def _market_status_notice(status):
     state = status["status"]
     requested = status["requested_date"]
     resolved = status["resolved_date"]
+    calendar = status.get("calendar") or {}
+    schedule_status = calendar.get("schedule_status", "unknown")
+    market_names = "、".join(
+        market.get("market_name", market.get("market_code", ""))
+        for market in calendar.get("markets", [])
+    )
+    evidence_link = ""
+    document_url = calendar.get("document_url")
+    if schedule_status != "unknown" and isinstance(document_url, str) and document_url.startswith("https://www.tapmc.com.tw/"):
+        evidence_link = (
+            f" <a href='{_escape(document_url)}' rel='noopener noreferrer'>"
+            "查看官方休市日程</a>"
+        )
     if state == "complete":
         heading = f"行情已更新至 {resolved}"
         expected = status["expected_watchlist_count"]
         message = f"已檢查 {requested} 的官方行情，{expected} 項觀察清單資料完整。"
+        if schedule_status == "scheduled_closed":
+            message += f" {market_names}同日為官方公告休市（{calendar['reason']}）。"
     elif state == "market_closed":
-        heading = f"{requested} 今日休市"
-        message = f"農業部資料已標示休市；目前沿用最近完整交易日 {resolved}，並非網站漏更新。"
+        if schedule_status == "scheduled_closed":
+            heading = f"{requested} {market_names}官方公告休市"
+            message = (
+                f"{calendar['reason']}；日曆版本 {calendar['calendar_version']}。"
+                f"目前沿用最近完整交易日 {resolved}，並非網站漏更新。"
+            )
+        else:
+            heading = f"{requested} 行情來源回報休市"
+            message = (
+                f"農業部 feed 回報休市，但尚無此年度經驗證的官方日曆 fixture；"
+                f"目前沿用最近完整交易日 {resolved}。"
+            )
+    elif state == "calendar_feed_discrepancy":
+        heading = f"{requested} 日曆與行情來源不一致"
+        message = (
+            f"{market_names}官方日曆為休市，但 feed 出現交易資料；已保留兩方證據，"
+            f"不自動丟棄行情，最近完整交易日為 {resolved}。"
+        )
     elif state == "incomplete":
         heading = f"{requested} 行情尚未完整"
         message = f"今日資料已檢查，但尚未涵蓋完整觀察清單；目前顯示最近完整交易日 {resolved}。"
     elif state == "pending":
         heading = f"{requested} 尚無完整行情"
-        message = f"今日資料已檢查，目前尚無可發布的完整交易行情；先顯示最近完整交易日 {resolved}。"
+        if schedule_status in ("expected_open", "exceptional_open"):
+            open_label = "特殊開市" if schedule_status == "exceptional_open" else "預期開市"
+            message = (
+                f"官方日曆顯示{market_names}{open_label}，但 feed 尚無可發布的完整交易行情；"
+                f"不可標示休市，先顯示最近完整交易日 {resolved}。"
+            )
+        else:
+            message = f"今日資料已檢查，目前尚無可發布的完整交易行情；先顯示最近完整交易日 {resolved}。"
     else:
         heading = f"{requested} 官方資料暫時無法取得"
-        message = f"系統已完成重試並保留 last-known-good；目前顯示最近完整交易日 {resolved}。"
+        message = f"系統已完成重試並保留 last-known-good；目前顯示最近完整交易日 {resolved}，不把來源失敗誤標為休市。"
     return (
         f"<aside class='market-status market-status--{_escape(state)}' "
-        f"data-market-status='{_escape(state)}' role='status' aria-live='polite'>"
-        f"<div class='wrap'><strong>{_escape(heading)}</strong><span>{_escape(message)}</span>"
+        f"data-market-status='{_escape(state)}' data-calendar-status='{_escape(schedule_status)}' "
+        "role='status' aria-live='polite'>"
+        f"<div class='wrap'><strong>{_escape(heading)}</strong><span>{_escape(message)}{evidence_link}</span>"
         "</div></aside>"
     )
 
@@ -418,15 +457,26 @@ def _methodology(source_status, quality, publication_status):
         "incomplete": "行情尚未完整",
         "pending": "尚無完整行情",
         "source_unavailable": "官方資料暫時無法取得",
+        "calendar_feed_discrepancy": "日曆與行情來源不一致",
     }
     status_label = status_labels[publication_status["status"]]
+    calendar = publication_status.get("calendar") or {}
+    if not calendar or calendar.get("schedule_status") == "unknown":
+        calendar_line = "<p>市場日曆：unknown（不宣稱官方休市）</p>"
+    else:
+        market_names = "、".join(market["market_name"] for market in calendar["markets"])
+        calendar_line = (
+            f"<p>市場日曆：{_escape(market_names)} · {_escape(calendar['calendar_date'])} · "
+            f"{_escape(calendar['schedule_status'])} · 版本 {_escape(calendar['calendar_version'])} · "
+            f"<a href='{_escape(calendar['document_url'])}' rel='noopener noreferrer'>官方來源</a></p>"
+        )
     return (
         "<header class='page-hero'><div class='wrap'><div class='eyebrow'>METHODOLOGY</div><h1>資料來源、公式與限制</h1></div></header>"
         + _toolbar()
         + "<main id='main' class='wrap'><section class='section'><h2>價格與 rolling windows</h2>"
         + f"<p>{DISCLAIM}</p><p>單日與區間價格皆使用 <code>sum(price × volume) / sum(volume)</code>；日比較採前一個有有效資料的交易日，7／30／90D 依日曆日回看。</p></section>"
         + "<section class='section'><h2>Buy Score</h2><p>產季、7D／30D 相對價、交易量、資料品質與 7D 波動度皆為 deterministic component。產銷履歷不加分，AI 不改變 score 或 verdict。</p></section>"
-        + f"<section class='section'><h2>資料狀態</h2><p>行情來源：{_escape(source_status)}</p><p>每日檢查：{_escape(publication_status['requested_date'])} · 最近完整交易日：{_escape(publication_status['resolved_date'])} · 狀態：{_escape(status_label)}</p><ul>{warnings}</ul><p class='note warn'>各資料集會分別標示官方更新、最近驗證資料或內建參考資料，不得把 fallback 解讀為即時官方快照。</p></section></main>"
+        + f"<section class='section'><h2>資料狀態</h2><p>行情來源：{_escape(source_status)}</p><p>每日檢查：{_escape(publication_status['requested_date'])} · 最近完整交易日：{_escape(publication_status['resolved_date'])} · 狀態：{_escape(status_label)} · 全體 feed：{_escape(publication_status.get('feed_status', 'not_checked'))} · 日曆市場 feed：{_escape(publication_status.get('calendar_feed_status', 'not_checked'))}</p>{calendar_line}<ul>{warnings}</ul><p class='note warn'>各資料集會分別標示官方更新、最近驗證資料或內建參考資料，不得把 fallback 解讀為即時官方快照。</p></section></main>"
     )
 
 

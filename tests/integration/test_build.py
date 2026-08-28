@@ -36,15 +36,17 @@ class BuildTest(unittest.TestCase):
   with self.assertRaises(ValueError): ingest([], '2026-08-25','2026-08-25')
   self.assertEqual(saved,path.read_bytes()); self.assertNotEqual(before,b'')
  def test_market_closure_is_persisted_without_fake_market_rows(self):
-  closed=json.loads((ROOT/'tests/fixtures/market_closed.json').read_text())
+  closed=[dict(row,交易日期='115.08.28') for row in json.loads((ROOT/'tests/fixtures/market_closed.json').read_text())]
   with tempfile.TemporaryDirectory() as raw:
    isolated=pathlib.Path(raw);(isolated/'config').mkdir();(isolated/'data').mkdir()
    shutil.copy2(ROOT/'config/produce.yml',isolated/'config/produce.yml')
+   shutil.copy2(ROOT/'config/market-calendar.json',isolated/'config/market-calendar.json');shutil.copytree(ROOT/'data/market-calendar',isolated/'data/market-calendar')
    with mock.patch('tpw.cli.ROOT',isolated):
-    self.assertEqual(ingest(closed,'2026-08-27','2026-08-27','live-check'),0)
+    self.assertEqual(ingest(closed,'2026-08-28','2026-08-28','live-check'),0)
    status=json.loads((isolated/'data/market-status/current.json').read_text())
-   self.assertEqual(status['status'],'market_closed');self.assertEqual(status['requested_date'],'2026-08-27')
-   self.assertFalse((isolated/'data/market/daily/2026/08/2026-08-27.json').exists())
+   self.assertEqual(status['status'],'market_closed');self.assertEqual(status['requested_date'],'2026-08-28')
+   self.assertEqual(status['calendar']['schedule_status'],'scheduled_closed')
+   self.assertFalse((isolated/'data/market/daily/2026/08/2026-08-28.json').exists())
  def test_market_closure_banner_matches_public_json(self):
   from tpw.render import build_site
   rows=[{'canonical_id':'banana','display_name':'香蕉','category':'fruit','weighted_avg_price_twd_per_kg':20,'total_volume_kg':10}]
@@ -52,8 +54,20 @@ class BuildTest(unittest.TestCase):
   with tempfile.TemporaryDirectory() as raw:
    root=pathlib.Path(raw);build_site(rows,'2026-08-26',root,publication_status=status)
    html=(root/'index.html').read_text();current=json.loads((root/'data/current.json').read_text())
-   self.assertIn('2026-08-27 今日休市',html);self.assertIn('並非網站漏更新',html)
+   self.assertIn('2026-08-27 行情來源回報休市',html);self.assertNotIn('官方公告休市',html)
    self.assertEqual(current['publication_status'],status)
+ def test_official_calendar_closure_banner_exposes_lineage(self):
+  from tpw.market_calendar import evaluate_market_calendar
+  from tpw.publication import apply_market_calendar
+  from tpw.render import build_site
+  rows=[{'canonical_id':'banana','display_name':'香蕉','category':'fruit','weighted_avg_price_twd_per_kg':20,'total_volume_kg':10}]
+  status={'schema_version':'1.0','requested_date':'2026-08-28','resolved_date':'2026-08-26','status':'market_closed','source_status':'success','feed_status':'empty','expected_watchlist_count':20,'covered_watchlist_count':0,'observed_record_count':25}
+  status=apply_market_calendar(status,evaluate_market_calendar(ROOT,'2026-08-28'));status['resolved_date']='2026-08-26'
+  with tempfile.TemporaryDirectory() as raw:
+   root=pathlib.Path(raw);build_site(rows,'2026-08-26',root,publication_status=status)
+   rendered=(root/'index.html').read_text();current=json.loads((root/'data/current.json').read_text())
+  self.assertIn('2026-08-28 臺北一、臺北二官方公告休市',rendered);self.assertIn('中元節後循例休市',rendered);self.assertIn('查看官方休市日程',rendered)
+  self.assertEqual(current['publication_status']['calendar']['content_hash'],'sha256:97775f09206973fb5c9f77d9c9777736710ce4a93c6e6e911a59388c53552b55')
  def test_season_search_name_is_html_escaped(self):
   from tpw.render import _season_page
   catalog=[{'canonical_id':None,'display_name':"木瓜' <script>",'category':'fruit','county_count':1,'variety_count':0,'counties':['高雄市']}]
