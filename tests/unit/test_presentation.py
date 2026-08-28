@@ -28,6 +28,27 @@ class PresentationTest(unittest.TestCase):
         for internal in ("prototype fixture", "manual fallback", "machine-readable", "deterministic Buy Score", "verdict"):
             self.assertNotIn(internal, rendered)
 
+    def test_rewrites_market_status_copy_without_changing_contract_codes(self):
+        raw = (
+            "<strong>2026-08-28 臺北一、臺北二官方公告休市</strong>"
+            "<span>中元節後循例休市；日曆版本 115-114.07.30-fruit-vegetable。"
+            "目前沿用最近完整交易日 2026-08-26，並非網站漏更新。</span>\n"
+            "2026-08-29 日曆與行情來源不一致：官方日曆為休市，但 feed 出現交易資料；已保留兩方證據，"
+            "最近完整交易日為 2026-08-28。\n"
+            "官方日曆顯示臺北一、臺北二預期開市，但 feed 尚無可發布的完整交易行情；不可標示休市。\n"
+            "農業部 feed 回報休市，但尚無此年度經驗證的官方日曆 fixture；"
+            "系統已完成重試並保留 last-known-good；"
+        )
+        rendered = rewrite_text(raw)
+        self.assertIn("中元節後循例休市。目前沿用最近完整交易日 2026-08-26", rendered)
+        self.assertIn("官方休市日程與行情資料不一致", rendered)
+        self.assertIn("官方休市日程顯示休市，但行情來源仍出現交易資料", rendered)
+        self.assertIn("官方休市日程顯示臺北一、臺北二預期開市，但行情來源尚無可發布的完整交易行情", rendered)
+        self.assertIn("目前沒有該年度已驗證的官方休市日程可供交叉確認", rendered)
+        self.assertIn("保留最近一次通過驗證的資料", rendered)
+        for internal in ("日曆版本", " feed ", "fixture", "last-known-good"):
+            self.assertNotIn(internal, rendered)
+
     def test_rewrite_tree_does_not_touch_json_contracts(self):
         with tempfile.TemporaryDirectory() as raw:
             root = pathlib.Path(raw)
