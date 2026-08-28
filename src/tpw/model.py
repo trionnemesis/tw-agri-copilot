@@ -46,7 +46,7 @@ def normalize(raw, mapping, *, source_id, fetched_at="fixture"):
 def upsert(rows):
     keyed = {}
     for row in rows:
-        key = (row["transaction_date"], row["crop_code"], row["market_code"])
+        key = (row["transaction_date"], row["crop_code"], row["market_code"], row.get("dataset_semantics", ""))
         previous = keyed.get(key)
         if previous is None or previous.get("row_hash") != row.get("row_hash"):
             keyed[key] = row
