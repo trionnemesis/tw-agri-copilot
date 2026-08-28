@@ -128,6 +128,7 @@ jobs:
           printf '%s\n' "$seasonality_output"
           echo "$seasonality_output" >> "$GITHUB_STEP_SUMMARY"
           PYTHONPATH=src python3 -m tpw fetch-traceability --as-of "$AS_OF_DATE"
+          PYTHONPATH=src python3 -m tpw fetch-traceability-events --as-of "$AS_OF_DATE"
       - name: Build, normalize, and validate
         env:
           AS_OF_DATE: ${{ steps.resolved.outputs.date }}

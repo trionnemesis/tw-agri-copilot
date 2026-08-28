@@ -4,7 +4,7 @@ from pathlib import Path
 
 # Presentation-only translations. Machine-readable JSON keeps the original
 # status/mode codes so existing tests and consumers do not change contract.
-PRESENTATION_VERSION = "2026-08-29.1"
+PRESENTATION_VERSION = "2026-08-29.2"
 
 REPLACEMENTS = (
     ("Taiwan Produce Watch 台灣蔬果行情原型", "Taiwan Produce Watch 台灣蔬果行情與當季採買資訊"),
@@ -39,6 +39,8 @@ REPLACEMENTS = (
     ("seasonality uses manual fallback", "產季資訊：內建參考資料"),
     ("seasonality uses stale last-known-good data", "產季資訊：同月份最近驗證資料"),
     ("traceability uses minimized fixture records", "產銷履歷：最小化原型資料"),
+    ("traceability market events use a shape-only fixture", "H44 市場事件：欄位結構示範資料"),
+    ("traceability market events use stale last-known-good H44 data", "H44 市場事件：最近驗證資料"),
     ("advice uses deterministic fallback", "採買建議：規則分析模式"),
     ("market data is deterministic prototype fixture", "行情資料：原型測試資料"),
     ("主要產地（fallback）：", "主要產地（參考）："),
