@@ -85,7 +85,7 @@ def fallback_advice(scores, as_of_date, fallback_reason="未使用生成式 AI")
             f"本期依產季、批發價格、交易量與資料覆蓋率，由可重現的規則引擎自動產生採買判定；"
             f"共有 {len(priority)} 項列入優先或可考慮清單。"
             f"目前採用規則分析模式（{fallback_reason}），不由生成式 AI 修改 Buy Score 或 verdict；"
-            f"此區塊會隨每日 02:00 與 05:00（Asia/Taipei）資料更新同步重算。"
+            f"此區塊會隨每日 09:00 與 18:00（Asia/Taipei）資料更新同步重算。"
         ),
         "priority_items": [
             {"canonical_id": row["canonical_id"], "text": _reason_text(row)}
