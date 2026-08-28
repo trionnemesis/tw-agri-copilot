@@ -1,9 +1,10 @@
+import re
 from pathlib import Path
 
 
 # Presentation-only translations. Machine-readable JSON keeps the original
 # status/mode codes so existing tests and consumers do not change contract.
-PRESENTATION_VERSION = "2026-08-26.1"
+PRESENTATION_VERSION = "2026-08-29.1"
 
 REPLACEMENTS = (
     ("Taiwan Produce Watch 台灣蔬果行情原型", "Taiwan Produce Watch 台灣蔬果行情與當季採買資訊"),
@@ -64,12 +65,33 @@ REPLACEMENTS = (
     ("Sources and boundaries", "資料來源與邊界"),
     ("產季來源狀態與履歷資料邊界保存於公開 JSON", "產季清單會標示官方更新、最近驗證資料或內建參考資料；產銷履歷目前仍為原型參考資料"),
     ("Taiwan Produce Watch · side-project prototype", "Taiwan Produce Watch · 台灣蔬果公開資料觀察"),
+    ("日曆與行情來源不一致", "官方休市日程與行情資料不一致"),
+    ("官方日曆顯示", "官方休市日程顯示"),
+    (
+        "農業部 feed 回報休市，但尚無此年度經驗證的官方日曆 fixture；",
+        "農業部行情來源顯示休市，但目前沒有該年度已驗證的官方休市日程可供交叉確認；",
+    ),
+    (
+        "官方日曆為休市，但 feed 出現交易資料；已保留兩方證據，",
+        "官方休市日程顯示休市，但行情來源仍出現交易資料；系統已保留兩方資訊供查核，",
+    ),
+    ("但 feed 尚無可發布的完整交易行情；", "但行情來源尚無可發布的完整交易行情；"),
+    (
+        "系統已完成重試並保留 last-known-good；",
+        "系統已完成重試並保留最近一次通過驗證的資料；",
+    ),
+)
+
+REGEX_REPLACEMENTS = (
+    (re.compile(r"；日曆版本 [^。<>]+。"), "。"),
 )
 
 
 def rewrite_text(text):
     for old, new in REPLACEMENTS:
         text = text.replace(old, new)
+    for pattern, replacement in REGEX_REPLACEMENTS:
+        text = pattern.sub(replacement, text)
     return text
 
 
