@@ -1,4 +1,39 @@
-# PR 1–5 prototype verification + issue #8 extension
+# Prototype verification evidence
+
+## Issue #3 Phase 2A source contract — 2026-08-28
+
+- `moa_market_8066` now enters ingestion through the same `SourceAdapter`／`RawBatch` contract used by a second, differently shaped offline fixture adapter.
+- Source runs record role, adapter／source schema version, retrieved time, content hash and precedence. Resolution uses `(transaction_date, market_code, crop_code, dataset_semantics)` and permits at most one `eligible_for_aggregate=true` record.
+- Contract tests cover validation／provisional／contextual exclusion, lower-precedence suppression, equal-precedence final-source ambiguity, same-source correction, provisional supersession evidence, schema drift and atomic last-known-good preservation.
+- No TAPMC transaction scraping, parity claim, contextual production feed or Buy Score change is included in 2A.
+
+~~~text
+PYTHONPATH=src python3 -m compileall -q src tests
+PYTHONPATH=src python3 -m unittest discover -s tests -t . -v
+Ran 90 tests
+OK
+
+PYTHONPATH=src python3 -m tpw validate-source-run --date 2026-08-25
+valid source run: 2026-07-22 2026-08-25 1
+
+PYTHONPATH=src python3 -m tpw validate-data --as-of 2026-08-25
+data valid
+PYTHONPATH=src python3 -m tpw verify-site --as-of 2026-08-25
+site verified
+~~~
+
+The same 2026-08-25 fixture was seeded and built once from `main` and once from the Phase 2A branch. These behavior-bearing artifacts had identical SHA-256 values:
+
+| Artifact | Both builds |
+|---|---|
+| normalized market rows | `9005a3f943ad96b491e769d19800e73ce1398a922c65778fdb4be4b5a48ec07b` |
+| daily aggregate | `e64a341717f3583f8c163abdd12b1ffc7c7c9618af6fe22355e5c973f8e7b795` |
+| `site/index.html` | `d37a000625bfe5b5b500b6a4351f407bf35e6e64facd4989444dc582211829ec` |
+| `site/data/current.json` | `9c9f957da6107fc8b260e8a806b9909db27841df582fd4887e18cf933ba791f6` |
+| `site/methodology.html` | `92594cd7d620676d948a812d11346bc61b896aa40573d0bf8ca7767da1423890` |
+| daily Markdown report | `1fdf5f2313494d6b16ae85751461b9fafff1e4d66389382eb95449feff1e21ac` |
+
+The Phase 2A branch was then seeded and built again. Source-run evidence (`8c1bbe…`) and all listed artifacts retained their hashes, covering deterministic double-build behavior. Remote PR checks are recorded on the PR; this section does not claim a merge or production activation.
 
 ## Issue #8 live seasonality evidence — 2026-08-27
 

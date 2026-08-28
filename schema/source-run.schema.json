@@ -1,0 +1,161 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trionnemesis.github.io/tw-agri-copilot/schema/source-run.schema.json",
+  "title": "Transaction source run and economic-observation resolution",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "policy_version",
+    "requested_start",
+    "requested_end",
+    "runs",
+    "resolution_summary",
+    "decisions"
+  ],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "policy_version": {"const": "economic-observation-v1"},
+    "requested_start": {"type": "string", "format": "date"},
+    "requested_end": {"type": "string", "format": "date"},
+    "runs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/sourceRun"}
+    },
+    "resolution_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observation_count",
+        "eligible_for_aggregate_count",
+        "suppressed_observation_count",
+        "decision_count"
+      ],
+      "properties": {
+        "observation_count": {"type": "integer", "minimum": 0},
+        "eligible_for_aggregate_count": {"type": "integer", "minimum": 0},
+        "suppressed_observation_count": {"type": "integer", "minimum": 0},
+        "decision_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/resolutionDecision"}
+    }
+  },
+  "$defs": {
+    "sourceRole": {
+      "enum": [
+        "authoritative_final",
+        "provisional",
+        "validation",
+        "contextual"
+      ]
+    },
+    "sourceRun": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "source_id",
+        "source_url",
+        "source_role",
+        "dataset_semantics",
+        "precedence",
+        "adapter_version",
+        "source_schema_version",
+        "retrieved_at",
+        "content_hash",
+        "status",
+        "http_status",
+        "raw_record_count",
+        "normalized_record_count",
+        "eligible_for_aggregate_count",
+        "suppressed_observation_count"
+      ],
+      "properties": {
+        "run_id": {"$ref": "#/$defs/hash"},
+        "source_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+        "source_url": {"type": "string", "minLength": 1},
+        "source_role": {"$ref": "#/$defs/sourceRole"},
+        "dataset_semantics": {"type": "string", "minLength": 1},
+        "precedence": {"type": "integer", "minimum": 0},
+        "adapter_version": {"type": "string", "minLength": 1},
+        "source_schema_version": {"type": "string", "minLength": 1},
+        "retrieved_at": {"type": "string", "minLength": 1},
+        "content_hash": {"$ref": "#/$defs/hash"},
+        "status": {"type": "string", "minLength": 1},
+        "http_status": {"type": "integer", "minimum": 100, "maximum": 599},
+        "raw_record_count": {"type": "integer", "minimum": 0},
+        "normalized_record_count": {"type": "integer", "minimum": 0},
+        "eligible_for_aggregate_count": {"type": "integer", "minimum": 0},
+        "suppressed_observation_count": {"type": "integer", "minimum": 0}
+      }
+    },
+    "resolutionDecision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observation_identity",
+        "selected_observation_id",
+        "candidates"
+      ],
+      "properties": {
+        "observation_identity": {"$ref": "#/$defs/observationIdentity"},
+        "selected_observation_id": {
+          "oneOf": [{"$ref": "#/$defs/hash"}, {"type": "null"}]
+        },
+        "candidates": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/candidate"}
+        }
+      }
+    },
+    "observationIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "transaction_date",
+        "market_code",
+        "crop_code",
+        "dataset_semantics"
+      ],
+      "properties": {
+        "transaction_date": {"type": "string", "format": "date"},
+        "market_code": {"type": "string", "minLength": 1},
+        "crop_code": {"type": "string", "minLength": 1},
+        "dataset_semantics": {"type": "string", "minLength": 1}
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "observation_id",
+        "source_record_id",
+        "source_id",
+        "source_role",
+        "precedence",
+        "eligible_for_aggregate",
+        "supersedes_source_record_id"
+      ],
+      "properties": {
+        "observation_id": {"$ref": "#/$defs/hash"},
+        "source_record_id": {"$ref": "#/$defs/hash"},
+        "source_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+        "source_role": {"$ref": "#/$defs/sourceRole"},
+        "precedence": {"type": "integer", "minimum": 0},
+        "eligible_for_aggregate": {"type": "boolean"},
+        "supersedes_source_record_id": {
+          "oneOf": [{"$ref": "#/$defs/hash"}, {"type": "null"}]
+        }
+      }
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}
