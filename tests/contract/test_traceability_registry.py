@@ -51,6 +51,19 @@ class TraceabilityRegistryContractTest(unittest.TestCase):
         self.assertIn("%24top=2", urls[0])
         self.assertTrue(content_hash.startswith("sha256:"))
 
+    def test_max_page_exhaustion_is_typed_unavailable(self):
+        pages = {
+            0: json.dumps([official_row("A")], ensure_ascii=False).encode(),
+            1: json.dumps([official_row("B")], ensure_ascii=False).encode(),
+        }
+
+        def opener(url, **_kwargs):
+            page = 1 if "%24skip=1" in url else 0
+            return Response(pages[page])
+
+        with self.assertRaisesRegex(UpstreamUnavailable, "maximum traceability pages reached"):
+            fetch_registry(top=1, max_pages=2, opener=opener)
+
     def test_empty_html_and_non_json_are_typed_unavailable(self):
         cases = [(b"", "application/json"), (b"<html>x</html>", "text/html"), (b"[]", "text/plain")]
         for body, content_type in cases:
