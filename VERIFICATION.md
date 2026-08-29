@@ -1,5 +1,32 @@
 # Prototype verification evidence
 
+## Scheduler missing/delayed recovery — 2026-08-29
+
+- 19:30 Asia/Taipei 的公開 Actions evidence 顯示：18:17 primary scheduled run 未建立；最近 scheduled run 仍為 `33211062672`（2026-08-29 05:05 Asia/Taipei）。Workflow 位於 default branch、GitHub API 狀態為 active，09:17／18:17 timezone-aware cron 與 H44 evening condition 均存在。公開 evidence 無法再判定 GitHub 內部未 enqueue 的確切原因。
+- 新增獨立 09:47／18:47 `Daily update scheduler guard`。它查詢同一 primary 時段的 `schedule` runs；queued、in progress、success、failure 都代表 primary 已嘗試，guard 不 dispatch。只有 run 完全不存在才建立 `morning-recovery`／`evening-recovery` `workflow_dispatch`。
+- Recovery 沿用 scheduled fallback semantics：09:47 recovery 會更新 7556 requested-date evidence、跳過 H44；18:47 recovery 會更新 7556 並執行 H44。手動 dispatch 的既有預設仍執行 H44。
+- Guard 只取得 `contents: read`／`actions: write`，API 或時區判定異常時 fail closed；超過 primary 四小時不補跑舊日期。外部 ChatGPT verifier 維持唯讀。
+- 使用 2026-08-29 19:30 Asia/Taipei 與公開 workflow run 清單重播 decision，結果為 `dispatch`，payload 僅含 `ref=main`、`as_of_date=2026-08-29`、`schedule_slot=evening-recovery`；本地驗證未實際觸發遠端 workflow。
+
+~~~text
+PYTHONPATH=src python3 -m compileall -q src tests
+PYTHONPATH=src python3 -m unittest discover -s tests -t . -v
+Ran 127 tests
+OK
+
+PYTHONPATH=src python3 -m tpw validate-traceability
+valid traceability registry: fixture 5
+PYTHONPATH=src python3 -m tpw validate-traceability-events
+valid traceability market events: fixture 5
+
+PYTHONPATH=src python3 -m tpw validate-data --as-of 2026-08-27
+data valid
+PYTHONPATH=src python3 -m tpw verify-site --as-of 2026-08-27
+site verified
+~~~
+
+此 evidence 只驗證 recovery decision、workflow contract 與既有資料邊界；在 PR 合併且下一個 guard slot 實際執行前，不宣稱 remote recovery runtime 已成功。
+
 ## Issue #3 Traceability PR B — 2026-08-28
 
 - 農業部 H44 adapter 使用單日 `StartDate`／`EndDate` 與 bounded `$top`／`$skip` pagination，檢查 HTTP、Content-Type、JSON collection、8 個官方欄位、日期、非負有限數值、重複頁、最大頁數與 content hash。

@@ -1,0 +1,41 @@
+name: Daily update scheduler guard
+
+on:
+  schedule:
+    - cron: '47 9 * * *'
+      timezone: 'Asia/Taipei'
+    - cron: '47 18 * * *'
+      timezone: 'Asia/Taipei'
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: Primary schedule slot to inspect
+        required: true
+        type: choice
+        options:
+          - morning
+          - evening
+
+concurrency:
+  group: taiwan-produce-daily-update-scheduler-guard
+  cancel-in-progress: false
+
+jobs:
+  recover-missing-run:
+    permissions:
+      actions: write
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with: {ref: main}
+      - uses: actions/setup-python@v6
+        with: {python-version: '3.11'}
+      - name: Inspect the primary slot and dispatch only when absent
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RECOVERY_TRIGGER: ${{ github.event_name == 'workflow_dispatch' && inputs.slot || github.event.schedule }}
+        run: >-
+          PYTHONPATH=src python3 -m tpw.scheduler_guard
+          --repository "$GITHUB_REPOSITORY"
+          --slot "$RECOVERY_TRIGGER"
