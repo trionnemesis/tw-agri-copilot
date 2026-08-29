@@ -345,7 +345,7 @@ def fetch_registry(
         if len(rows) < top:
             break
     else:
-        raise ValueError("maximum traceability pages reached")
+        raise UpstreamUnavailable("maximum traceability pages reached")
     return all_rows, _content_hash(all_rows)
 
 
