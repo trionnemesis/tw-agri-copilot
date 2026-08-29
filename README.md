@@ -81,10 +81,15 @@ GitHub Actions 是資料更新與 GitHub Pages 發布的唯一自動化執行層
 |---|---|---|---|---|---|
 | 每日 09:17 Asia/Taipei | bounded refresh；資料未完整時解析最近可發布交易日 | 同月份 live snapshot 可直接重用 | 更新 / 驗證；即使只有 fixture context 也保存當日 exact-date evidence | 不主動抓取；當日無 live exact-date snapshot 時安全使用當日 fixture context | build、validate、Pages deploy |
 | 每日 18:17 Asia/Taipei | bounded refresh | 同月份 cache policy | 更新 / 驗證；保存當日 exact-date evidence | 更新當日 exact-date event snapshot | build、validate、Pages deploy |
+| 09:47／18:47 internal recovery guard | 不直接抓資料；只檢查對應 primary scheduled run 是否存在 | 同左 | primary run 完全不存在時，以同 requested date dispatch recovery | morning recovery 跳過；evening recovery 執行 | 沿用同一 build、validate、Pages workflow |
 | `workflow_dispatch` | 可指定日期與 backfill | 可強制安全 refresh | 更新指定日期 context | 更新指定日期 exact-date event snapshot | build、validate、Pages deploy |
 | `main` 的 source/config/workflow push | 不對外抓取 | 不對外抓取 | 不對外抓取 | 不對外抓取 | 只以 committed evidence 重建並驗證 |
 
 排程刻意不在 09:17 抓 H44：H44 是單日事件證據且不影響 Buy Score，晚間再擷取可降低把早盤／未完整事件集合誤當成當日證據的風險。09:17／18:17 刻意避開整點，以降低 GitHub Actions scheduled workflow 在高負載整點延遲或未入列的風險。若 H44 跨日期抓取失敗，系統回報 unavailable／fixture context，不把前一日事件搬成今日 stale。
+
+GitHub scheduled event 是 best-effort，官方契約允許延遲或在高負載時被丟棄；因此 recovery guard 於 primary slot 後 30 分鐘查詢 `Daily market update` 歷史。只要同一時段已有 `schedule` run（不論 queued、in progress、success 或 failure），guard 就不重複觸發；只有 run 完全不存在時，才以 repository `GITHUB_TOKEN` 建立可稽核的 `morning-recovery`／`evening-recovery` `workflow_dispatch`。API 查詢或日期判定失敗時 guard fail closed，不猜測、不 dispatch。這層降低單一 cron event 遺失的風險，但不把 GitHub Actions 描述成具 SLA 的排程器。
+
+外部 evening verifier 維持唯讀。對 18:17 slot，primary `schedule` run 成功仍是首選 green evidence；若 primary 不存在，則可接受同 requested date、標示 `evening-recovery` 且成功完成的 recovery run，並仍須從 job steps 確認 H44 refresh 實際執行、7556 `daily/` 與 `profiles/` exact-date evidence 已建立。只有 guard run、沒有成功 recovery run，不能標記 green；既有 primary run failure 也不能被 guard 掩蓋。
 
 ## 快速開始
 
@@ -190,7 +195,7 @@ schema/                 Agent Run、market calendar、source-run 與 traceabilit
 site/                   GitHub Pages 靜態成品
 reports/                每日 Markdown 快照
 tests/                  unit、contract、integration tests
-.github/workflows/      fixture CI、daily update、Pages deploy
+.github/workflows/      fixture CI、daily update、scheduler recovery guard、Pages deploy
 SPEC.md                 完整產品／資料契約
 VERIFICATION.md         本地與遠端 acceptance evidence
 ```
@@ -206,6 +211,6 @@ VERIFICATION.md         本地與遠端 acceptance evidence
 - Produce icons：完整當季頁以 exact registry 選取本地 sprite symbol，未知品項安全降級為分類 fallback；不改變公開 JSON、搜尋或資料判定。
 - Traceability PR A：7556 live registry adapter、bounded pagination、strict schema、exact mapping、privacy minimization、active／expired、date-scoped profile／LKG 與 Pages UI 已合併 `main`。Repository 仍提交小型 fixture 作 deterministic CI；排程成功後才會把狀態標成 `live`，不把 fixture 冒充官方即時快照。
 - Traceability PR B：H44 單日 bounded adapter、strict contract、exact mapping、event identity、exact-date cache、獨立 schema／JSON／Pages 證據已合併 `main`。H44 不併入 8066 aggregate 或 Buy Score，也不冒充 7556 履歷碼。
-- Automation：GitHub Actions 09:17／18:17（Asia/Taipei）負責市場與 Pages 發布；7556 兩次檢查，H44 僅 18:17／手動更新。外部 ChatGPT 排程只驗證發布結果與資料邊界。
+- Automation：GitHub Actions 09:17／18:17（Asia/Taipei）負責市場與 Pages 發布；7556 兩次檢查，H44 僅 18:17／手動／evening recovery 更新。09:47／18:47 internal guard 只在對應 primary run 完全不存在時 dispatch bounded recovery；外部 ChatGPT 排程仍只驗證發布結果與資料邊界。
 
 視覺語言來自使用者提供的分析型 HTML（navy gradient、paper cards、status badges、responsive grids）；README 資訊架構參考 [AgentSec README.zh-TW](https://github.com/trionnemesis/AgentSec/blob/main/README.zh-TW.md)，但內容與資料邊界皆針對本專案重寫。

@@ -1,4 +1,5 @@
 name: Daily market update
+run-name: ${{ inputs.schedule_slot && format('Daily market update · {0}', inputs.schedule_slot) || github.event.head_commit.message || 'Daily market update' }}
 # Market data is checked twice daily. Daily traceability context uses source-specific refresh cadence.
 on:
   schedule:
@@ -21,6 +22,15 @@ on:
         required: false
         type: boolean
         default: false
+      schedule_slot:
+        description: Preserve morning/evening semantics for an internal scheduler recovery
+        required: false
+        type: choice
+        options:
+          - manual
+          - morning-recovery
+          - evening-recovery
+        default: manual
 concurrency: {group: taiwan-produce-daily-update, cancel-in-progress: false}
 jobs:
   update:
@@ -38,6 +48,7 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
           REQUESTED_DATE: ${{ inputs.as_of_date }}
+          SCHEDULE_SLOT: ${{ inputs.schedule_slot }}
         run: |
           allow_fallback=false
           if [ "$EVENT_NAME" = 'push' ]; then
@@ -48,7 +59,7 @@ jobs:
               requested="$(TZ=Asia/Taipei date +%F)"
               allow_fallback=true
             fi
-            if [ "$EVENT_NAME" = 'schedule' ]; then
+            if [ "$EVENT_NAME" = 'schedule' ] || [ "$SCHEDULE_SLOT" = 'morning-recovery' ] || [ "$SCHEDULE_SLOT" = 'evening-recovery' ]; then
               allow_fallback=true
             fi
           fi
@@ -58,6 +69,9 @@ jobs:
           fi
           echo "requested=$requested" >> "$GITHUB_OUTPUT"
           echo "allow_fallback=$allow_fallback" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = 'workflow_dispatch' ]; then
+            echo "Invocation slot: ${SCHEDULE_SLOT:-manual}" >> "$GITHUB_STEP_SUMMARY"
+          fi
       - id: market_refresh
         name: Fetch bounded rolling windows
         if: github.event_name != 'push'
@@ -132,7 +146,7 @@ jobs:
           PYTHONPATH=src python3 -m tpw fetch-traceability --as-of "$AS_OF_DATE"
           PYTHONPATH=src python3 -m tpw.traceability_snapshot --as-of "$AS_OF_DATE"
       - name: Refresh H44 traceability market events
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '17 18 * * *')
+        if: (github.event_name == 'workflow_dispatch' && inputs.schedule_slot != 'morning-recovery') || (github.event_name == 'schedule' && github.event.schedule == '17 18 * * *')
         env:
           AS_OF_DATE: ${{ steps.dates.outputs.requested }}
         run: |
