@@ -2,7 +2,9 @@ name: Daily market update
 # Market data is checked twice daily. Daily traceability context uses source-specific refresh cadence.
 on:
   schedule:
-    - cron: '0 9,18 * * *'
+    - cron: '17 9 * * *'
+      timezone: 'Asia/Taipei'
+    - cron: '17 18 * * *'
       timezone: 'Asia/Taipei'
   push:
     branches: [main]
@@ -128,8 +130,9 @@ jobs:
           printf '%s\n' "$seasonality_output"
           echo "$seasonality_output" >> "$GITHUB_STEP_SUMMARY"
           PYTHONPATH=src python3 -m tpw fetch-traceability --as-of "$AS_OF_DATE"
+          PYTHONPATH=src python3 -m tpw.traceability_snapshot --as-of "$AS_OF_DATE"
       - name: Refresh H44 traceability market events
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '0 18 * * *')
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '17 18 * * *')
         env:
           AS_OF_DATE: ${{ steps.dates.outputs.requested }}
         run: |
