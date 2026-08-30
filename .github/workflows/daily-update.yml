@@ -164,6 +164,7 @@ jobs:
           AS_OF_MONTH: ${{ steps.resolved.outputs.month }}
           AS_OF_DATE: ${{ steps.dates.outputs.requested }}
           FORCE_SEASONALITY_REFRESH: ${{ inputs.force_seasonality_refresh || false }}
+          TRACEABILITY_TIMEOUT_SECONDS: '300'
         run: |
           seasonality_args=(--month "$AS_OF_MONTH")
           if [ "$FORCE_SEASONALITY_REFRESH" = 'true' ]; then
@@ -172,7 +173,17 @@ jobs:
           seasonality_output="$(PYTHONPATH=src python3 -m tpw refresh-seasonality "${seasonality_args[@]}")"
           printf '%s\n' "$seasonality_output"
           echo "$seasonality_output" >> "$GITHUB_STEP_SUMMARY"
-          PYTHONPATH=src python3 -m tpw fetch-traceability --as-of "$AS_OF_DATE"
+          set +e
+          traceability_output="$(timeout "${TRACEABILITY_TIMEOUT_SECONDS}s" env PYTHONPATH=src python3 -m tpw fetch-traceability --as-of "$AS_OF_DATE" 2>&1)"
+          traceability_status=$?
+          set -e
+          printf '%s\n' "$traceability_output"
+          if [ "$traceability_status" -eq 124 ]; then
+            echo "::warning::7556 refresh exceeded ${TRACEABILITY_TIMEOUT_SECONDS}s; preserving verified context and creating requested-date evidence."
+            echo "7556 refresh: runtime budget exceeded; using requested-date fixture/LKG context." >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$traceability_status" -ne 0 ]; then
+            exit "$traceability_status"
+          fi
           PYTHONPATH=src python3 -m tpw.traceability_snapshot --as-of "$AS_OF_DATE"
       - name: Refresh H44 traceability market events
         if: (github.event_name == 'workflow_dispatch' && inputs.schedule_slot != 'morning-recovery') || (github.event_name == 'schedule' && github.event.schedule == '17 18 * * *') || (github.event_name == 'push' && steps.dates.outputs.external_recovery == 'true' && steps.dates.outputs.effective_slot == 'evening-recovery')
@@ -198,6 +209,13 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git commit -m 'data: daily market update'
+          base_before_update="$(git rev-parse HEAD^)"
+          git fetch origin main
+          if git diff --name-only "$base_before_update" origin/main | grep -Eq '^(data|reports|site)/'; then
+            echo '::error::main received a newer publication while this update was running; refusing to overwrite it.'
+            exit 3
+          fi
+          git rebase origin/main
           git push origin HEAD:main
 
   deploy:
