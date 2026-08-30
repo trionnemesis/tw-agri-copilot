@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "registry_scope": "verified_entries_only",
+  "markets": [
+    {
+      "market_code": "104",
+      "feed_market_name": "臺北二",
+      "official_name": "第二果菜批發市場",
+      "county_slug": "taipei-city",
+      "market_kind": "fruit_vegetable_wholesale",
+      "official_url": "https://www.tapmc.com.tw/",
+      "evidence_url": "https://www.tapmc.com.tw/Pages/ContactUs",
+      "evidence_checked_on": "2026-08-30",
+      "feed_source_id": "moa_market_8066",
+      "feed_coverage_status": "observed"
+    },
+    {
+      "market_code": "109",
+      "feed_market_name": "臺北一",
+      "official_name": "第一果菜批發市場",
+      "county_slug": "taipei-city",
+      "market_kind": "fruit_vegetable_wholesale",
+      "official_url": "https://www.tapmc.com.tw/",
+      "evidence_url": "https://www.tapmc.com.tw/Pages/ContactUs",
+      "evidence_checked_on": "2026-08-30",
+      "feed_source_id": "moa_market_8066",
+      "feed_coverage_status": "observed"
+    }
+  ]
+}
