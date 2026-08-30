@@ -68,7 +68,7 @@ class TraceabilityEventZeroMatchRecoveryIntegrationTest(unittest.TestCase):
             self.assertEqual(daily_profile["source_status"], "stale")
             self.assertEqual(profile["last_attempt_reason"], "no_explicitly_mapped_records")
 
-    def test_different_date_does_not_relabel_prior_live_snapshot(self):
+    def test_different_date_does_not_relabel_prior_live_snapshot_without_archive(self):
         temporary, root = self.isolated_root()
         with temporary, mock.patch("tpw.cli.ROOT", root):
             refresh_traceability_events(
@@ -94,6 +94,43 @@ class TraceabilityEventZeroMatchRecoveryIntegrationTest(unittest.TestCase):
                     (base / "source-profile.json").read_bytes(),
                 ),
             )
+
+    def test_historical_exact_date_archive_is_downgraded_even_when_current_is_newer(self):
+        temporary, root = self.isolated_root()
+        with temporary, mock.patch("tpw.cli.ROOT", root):
+            refresh_traceability_events(
+                "2026-08-30",
+                fetcher=lambda _date: (mapped_rows("20260830"), "sha256:" + "3" * 64),
+                retrieved_at="2026-08-30T10:00:00Z",
+            )
+            refresh_traceability_events(
+                "2026-08-31",
+                fetcher=lambda _date: (mapped_rows("20260831"), "sha256:" + "4" * 64),
+                retrieved_at="2026-08-31T10:00:00Z",
+            )
+            base = root / "data/traceability/market-events"
+            newer_profile_path = base / "profiles/2026/08/2026-08-31.json"
+            self.assertEqual(
+                json.loads((base / "source-profile.json").read_text())["requested_date"],
+                "2026-08-31",
+            )
+
+            result = preserve_same_date_h44_as_stale(
+                "2026-08-30", attempted_at="2026-09-01T01:00:00Z"
+            )
+            archived_profile = json.loads(
+                (base / "profiles/2026/08/2026-08-30.json").read_text()
+            )
+            newer_profile = json.loads(newer_profile_path.read_text())
+            self.assertEqual(result["source_status"], "stale")
+            self.assertEqual(result["requested_date"], "2026-08-30")
+            self.assertEqual(archived_profile["source_status"], "stale")
+            self.assertEqual(
+                archived_profile["last_attempt_reason"],
+                "no_explicitly_mapped_records",
+            )
+            self.assertEqual(newer_profile["source_status"], "live")
+            self.assertEqual(newer_profile["requested_date"], "2026-08-31")
 
 
 if __name__ == "__main__":
