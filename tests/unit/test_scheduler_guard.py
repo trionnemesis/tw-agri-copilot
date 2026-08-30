@@ -10,6 +10,7 @@ from tpw.scheduler_guard import (
     dispatch_payload,
     expected_primary_time,
     matching_scheduled_runs,
+    next_primary_time,
     recovery_slot,
 )
 
@@ -45,7 +46,7 @@ class SchedulerGuardTest(unittest.TestCase):
         with self.assertRaisesRegex(SchedulerGuardError, "unsupported recovery slot"):
             recovery_slot("noon")
 
-    def test_expected_time_uses_taipei_date_and_bounded_delay(self):
+    def test_expected_time_uses_taipei_date_and_minimum_delay(self):
         now = datetime(2026, 8, 29, 18, 47, tzinfo=TAIPEI)
         self.assertEqual(
             expected_primary_time(EVENING, now),
@@ -54,10 +55,14 @@ class SchedulerGuardTest(unittest.TestCase):
         with self.assertRaisesRegex(SchedulerGuardError, "too early"):
             expected_primary_time(EVENING, datetime(2026, 8, 29, 18, 20, tzinfo=TAIPEI))
 
-    def test_late_after_midnight_fails_closed_instead_of_backfilling(self):
+    def test_late_after_midnight_resolves_previous_evening_slot(self):
         now = datetime(2026, 8, 30, 0, 15, tzinfo=TAIPEI)
-        with self.assertRaisesRegex(SchedulerGuardError, "too late"):
-            expected_primary_time(EVENING, now)
+        expected = expected_primary_time(EVENING, now)
+        self.assertEqual(expected, datetime(2026, 8, 29, 18, 17, tzinfo=TAIPEI))
+        self.assertEqual(
+            next_primary_time(EVENING, expected),
+            datetime(2026, 8, 30, 9, 17, tzinfo=TAIPEI),
+        )
 
     def test_matching_run_counts_every_state_but_only_schedule_on_main(self):
         now = datetime(2026, 8, 29, 18, 47, tzinfo=TAIPEI)
@@ -82,6 +87,47 @@ class SchedulerGuardTest(unittest.TestCase):
         self.assertEqual(decision.action, "skip")
         self.assertEqual(decision.matching_run["id"], 77)
 
+    def test_delayed_guard_still_detects_a_delayed_primary_run(self):
+        now = datetime(2026, 8, 30, 15, 25, tzinfo=TAIPEI)
+        runs = [scheduled_run(88, "2026-08-30T06:37:20Z")]
+        decision = decide_recovery("morning", runs, now)
+        self.assertEqual(decision.action, "skip")
+        self.assertEqual(decision.requested_date, "2026-08-30")
+        self.assertEqual(decision.matching_run["id"], 88)
+
+    def test_delayed_guard_can_dispatch_when_primary_is_really_missing(self):
+        now = datetime(2026, 8, 30, 15, 25, tzinfo=TAIPEI)
+        decision = decide_recovery("morning", [], now)
+        self.assertEqual(decision.action, "dispatch")
+        self.assertEqual(decision.requested_date, "2026-08-30")
+        self.assertEqual(decision.slot.dispatch_slot, "morning-recovery")
+
+    def test_superseded_morning_guard_does_not_match_evening_primary(self):
+        now = datetime(2026, 8, 30, 19, 0, tzinfo=TAIPEI)
+        evening_run = scheduled_run(99, "2026-08-30T10:17:05Z")
+        expected = datetime(2026, 8, 30, 9, 17, tzinfo=TAIPEI)
+        next_expected = datetime(2026, 8, 30, 18, 17, tzinfo=TAIPEI)
+        self.assertEqual(
+            matching_scheduled_runs(
+                [evening_run],
+                expected,
+                now,
+                next_expected_at=next_expected,
+            ),
+            [],
+        )
+        decision = decide_recovery("morning", [evening_run], now)
+        self.assertEqual(decision.action, "skip")
+        self.assertIsNone(decision.matching_run)
+
+    def test_superseded_evening_guard_does_not_match_next_morning_primary(self):
+        now = datetime(2026, 8, 30, 10, 0, tzinfo=TAIPEI)
+        morning_run = scheduled_run(100, "2026-08-30T01:17:05Z")
+        decision = decide_recovery("evening", [morning_run], now)
+        self.assertEqual(decision.requested_date, "2026-08-29")
+        self.assertEqual(decision.action, "skip")
+        self.assertIsNone(decision.matching_run)
+
     def test_missing_morning_run_dispatches_without_evening_semantics(self):
         now = datetime(2026, 8, 29, 9, 47, tzinfo=TAIPEI)
         decision = decide_recovery("47 9 * * *", [], now)
@@ -104,13 +150,15 @@ class SchedulerGuardTest(unittest.TestCase):
         self.assertEqual(decision.slot.dispatch_slot, "evening-recovery")
         self.assertEqual(decision.requested_date, "2026-08-29")
 
-    def test_naive_time_and_excessively_late_guard_fail_closed(self):
+    def test_naive_time_fails_but_late_guard_is_allowed(self):
         with self.assertRaisesRegex(SchedulerGuardError, "timezone-aware"):
             expected_primary_time(MORNING, datetime(2026, 8, 29, 9, 47))
-        with self.assertRaisesRegex(SchedulerGuardError, "too late"):
+        self.assertEqual(
             expected_primary_time(
                 MORNING, datetime(2026, 8, 29, 14, 0, tzinfo=TAIPEI)
-            )
+            ),
+            datetime(2026, 8, 29, 9, 17, tzinfo=TAIPEI),
+        )
 
 
 if __name__ == "__main__":

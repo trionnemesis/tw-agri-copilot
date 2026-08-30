@@ -15,6 +15,11 @@ on:
         options:
           - morning
           - evening
+      dry_run:
+        description: Inspect using this ref without dispatching a recovery
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: taiwan-produce-daily-update-scheduler-guard
@@ -28,14 +33,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-        with: {ref: main}
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || 'main' }}
       - uses: actions/setup-python@v6
         with: {python-version: '3.11'}
       - name: Inspect the primary slot and dispatch only when absent
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RECOVERY_TRIGGER: ${{ github.event_name == 'workflow_dispatch' && inputs.slot || github.event.schedule }}
-        run: >-
-          PYTHONPATH=src python3 -m tpw.scheduler_guard
-          --repository "$GITHUB_REPOSITORY"
-          --slot "$RECOVERY_TRIGGER"
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || false }}
+        run: |
+          args=(--repository "$GITHUB_REPOSITORY" --slot "$RECOVERY_TRIGGER")
+          if [ "$DRY_RUN" = 'true' ]; then
+            args+=(--dry-run)
+          fi
+          PYTHONPATH=src python3 -m tpw.scheduler_guard "${args[@]}"

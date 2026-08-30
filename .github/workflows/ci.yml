@@ -28,6 +28,7 @@ jobs:
         run: |
           PYTHONPATH=src python3 -m tpw seed-prototype --as-of 2026-08-25
           PYTHONPATH=src python3 -m tpw build --as-of 2026-08-25
+          PYTHONPATH=src python3 -m tpw.presentation
           PYTHONPATH=src python3 -m tpw validate-traceability
           PYTHONPATH=src python3 -m tpw validate-traceability-events
           PYTHONPATH=src python3 -m tpw validate-data --as-of 2026-08-25

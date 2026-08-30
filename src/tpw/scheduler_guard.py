@@ -18,7 +18,6 @@ TAIPEI = ZoneInfo("Asia/Taipei")
 WORKFLOW_FILE = "daily-update.yml"
 API_VERSION = "2022-11-28"
 MIN_RECOVERY_DELAY = timedelta(minutes=20)
-MAX_RECOVERY_DELAY = timedelta(hours=4)
 REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 
@@ -99,11 +98,27 @@ def expected_primary_time(slot: RecoverySlot, now: datetime) -> datetime:
         raise SchedulerGuardError(
             f"recovery guard is too early for {slot.primary_cron}: delay={delay}"
         )
-    if delay > MAX_RECOVERY_DELAY:
-        raise SchedulerGuardError(
-            f"recovery guard is too late for {slot.primary_cron}: delay={delay}"
-        )
     return expected
+
+
+def next_primary_time(slot: RecoverySlot, expected_at: datetime) -> datetime:
+    if expected_at.tzinfo is None or expected_at.utcoffset() is None:
+        raise SchedulerGuardError("expected primary time must be timezone-aware")
+    local_expected = expected_at.astimezone(TAIPEI)
+    if slot == MORNING:
+        return local_expected.replace(
+            hour=EVENING.primary_hour,
+            minute=EVENING.primary_minute,
+            second=0,
+            microsecond=0,
+        )
+    next_day = local_expected + timedelta(days=1)
+    return next_day.replace(
+        hour=MORNING.primary_hour,
+        minute=MORNING.primary_minute,
+        second=0,
+        microsecond=0,
+    )
 
 
 def _parse_github_time(value: Any) -> datetime | None:
@@ -119,10 +134,17 @@ def _parse_github_time(value: Any) -> datetime | None:
 
 
 def matching_scheduled_runs(
-    runs: Iterable[dict[str, Any]], expected_at: datetime, observed_at: datetime
+    runs: Iterable[dict[str, Any]],
+    expected_at: datetime,
+    observed_at: datetime,
+    *,
+    next_expected_at: datetime | None = None,
 ) -> list[dict[str, Any]]:
     window_start = expected_at.astimezone(timezone.utc) - timedelta(minutes=2)
     window_end = observed_at.astimezone(timezone.utc) + timedelta(minutes=2)
+    if next_expected_at is not None:
+        next_slot_start = next_expected_at.astimezone(timezone.utc)
+        window_end = min(window_end, next_slot_start - timedelta(seconds=1))
     matches: list[dict[str, Any]] = []
     for run in runs:
         created_at = _parse_github_time(run.get("created_at"))
@@ -146,12 +168,32 @@ def decide_recovery(
 ) -> GuardDecision:
     slot = recovery_slot(trigger)
     expected_at = expected_primary_time(slot, now)
-    matches = matching_scheduled_runs(runs, expected_at, now)
+    next_expected_at = next_primary_time(slot, expected_at)
+    matches = matching_scheduled_runs(
+        runs,
+        expected_at,
+        now,
+        next_expected_at=next_expected_at,
+    )
+    if matches:
+        return GuardDecision(
+            action="skip",
+            slot=slot,
+            expected_at=expected_at,
+            matching_run=matches[0],
+        )
+    if now.astimezone(TAIPEI) >= next_expected_at:
+        return GuardDecision(
+            action="skip",
+            slot=slot,
+            expected_at=expected_at,
+            matching_run=None,
+        )
     return GuardDecision(
-        action="skip" if matches else "dispatch",
+        action="dispatch",
         slot=slot,
         expected_at=expected_at,
-        matching_run=matches[0] if matches else None,
+        matching_run=None,
     )
 
 
@@ -262,8 +304,10 @@ def _write_runner_metadata(decision: GuardDecision) -> None:
                     f"`{run.get('conclusion') or 'none'}`",
                 ]
             )
-        else:
+        elif decision.action == "dispatch":
             lines.append(f"- Recovery slot: `{decision.slot.dispatch_slot}`")
+        else:
+            lines.append("- Recovery skipped: this primary slot has been superseded by the next slot.")
         with Path(summary_path).open("a", encoding="utf-8") as summary:
             summary.write("\n".join(lines) + "\n")
 
