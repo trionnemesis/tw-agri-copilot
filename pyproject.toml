@@ -11,7 +11,7 @@ requires-python = ">=3.11"
 calendar = ["pypdf==6.10.0"]
 
 [project.scripts]
-tpw = "tpw.cli:main"
+tpw = "tpw.entrypoint:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
