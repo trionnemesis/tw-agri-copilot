@@ -95,7 +95,7 @@ class TraceabilityEventZeroMatchRecoveryIntegrationTest(unittest.TestCase):
                 ),
             )
 
-    def test_historical_exact_date_archive_is_downgraded_even_when_current_is_newer(self):
+    def test_historical_exact_date_archive_is_downgraded_without_rolling_current_back(self):
         temporary, root = self.isolated_root()
         with temporary, mock.patch("tpw.cli.ROOT", root):
             refresh_traceability_events(
@@ -110,6 +110,10 @@ class TraceabilityEventZeroMatchRecoveryIntegrationTest(unittest.TestCase):
             )
             base = root / "data/traceability/market-events"
             newer_profile_path = base / "profiles/2026/08/2026-08-31.json"
+            current_before = (
+                (base / "current.json").read_bytes(),
+                (base / "source-profile.json").read_bytes(),
+            )
             self.assertEqual(
                 json.loads((base / "source-profile.json").read_text())["requested_date"],
                 "2026-08-31",
@@ -131,6 +135,13 @@ class TraceabilityEventZeroMatchRecoveryIntegrationTest(unittest.TestCase):
             )
             self.assertEqual(newer_profile["source_status"], "live")
             self.assertEqual(newer_profile["requested_date"], "2026-08-31")
+            self.assertEqual(
+                current_before,
+                (
+                    (base / "current.json").read_bytes(),
+                    (base / "source-profile.json").read_bytes(),
+                ),
+            )
 
 
 if __name__ == "__main__":
