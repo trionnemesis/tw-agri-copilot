@@ -190,7 +190,21 @@ jobs:
         env:
           AS_OF_DATE: ${{ steps.dates.outputs.requested }}
         run: |
-          PYTHONPATH=src python3 -m tpw fetch-traceability-events --as-of "$AS_OF_DATE"
+          set +e
+          traceability_event_output="$(PYTHONPATH=src python3 -m tpw fetch-traceability-events --as-of "$AS_OF_DATE" 2>&1)"
+          traceability_event_status=$?
+          set -e
+          printf '%s\n' "$traceability_event_output"
+          if [ "$traceability_event_status" -eq 0 ]; then
+            echo "H44 refresh: success." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if grep -q 'traceability market events have no explicitly mapped records' <<<"$traceability_event_output"; then
+            echo "::warning::H44 returned valid rows but none map to the configured watchlist; preserving exact-date fixture/LKG context."
+            echo "H44 refresh: no explicitly mapped watchlist records; preserving exact-date fixture/LKG context." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          exit "$traceability_event_status"
       - name: Build, normalize, and validate
         env:
           AS_OF_DATE: ${{ steps.resolved.outputs.date }}
