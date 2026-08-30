@@ -6,7 +6,8 @@
 .county-select-label select:focus-visible{outline:3px solid #7aa9ff;outline-offset:3px}
 .taiwan-map{display:grid;place-items:center;min-height:380px;padding:12px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(180deg,#f8fbff,#eef6fb)}
 .taiwan-map svg{display:block;width:100%;height:auto;max-height:650px;overflow:visible}
-.taiwan-map [data-county-path]{fill:#eaf1ff;stroke:#2d6cdf;stroke-width:1.5;vector-effect:non-scaling-stroke;transition:fill .16s ease,stroke-width .16s ease,filter .16s ease}
+.taiwan-map [data-county-link]{touch-action:manipulation}
+.taiwan-map [data-county-path]{pointer-events:bounding-box;fill:#eaf1ff;stroke:#2d6cdf;stroke-width:1.5;vector-effect:non-scaling-stroke;transition:fill .16s ease,stroke-width .16s ease,filter .16s ease}
 .taiwan-map [data-county-link]:hover [data-county-path],.taiwan-map [data-county-link]:focus [data-county-path]{fill:#d7e5ff;stroke-width:2.5}
 .taiwan-map [data-county-link]:focus-visible{outline:none}
 .taiwan-map [data-county-link]:focus-visible [data-county-path]{filter:drop-shadow(0 0 2px #10243d);stroke:#10243d;stroke-width:3}
