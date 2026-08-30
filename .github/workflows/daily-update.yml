@@ -1,6 +1,8 @@
 name: Daily market update
 run-name: ${{ inputs.schedule_slot && format('Daily market update · {0}', inputs.schedule_slot) || github.event.head_commit.message || 'Daily market update' }}
 # Market data is checked twice daily. Daily traceability context uses source-specific refresh cadence.
+# A stale push-run rerun may act as an out-of-band recovery after both cron layers miss;
+# GitHub Actions still owns every source fetch, build, validation, commit, and Pages deployment.
 on:
   schedule:
     - cron: '17 9 * * *'
@@ -49,10 +51,30 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           REQUESTED_DATE: ${{ inputs.as_of_date }}
           SCHEDULE_SLOT: ${{ inputs.schedule_slot }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
         run: |
           allow_fallback=false
+          external_recovery=false
+          effective_slot="${SCHEDULE_SLOT:-manual}"
           if [ "$EVENT_NAME" = 'push' ]; then
-            requested="$(python3 -c 'import json, pathlib; print(json.loads(pathlib.Path("site/data/current.json").read_text(encoding="utf-8"))["as_of_date"])')"
+            requested="$(python3 -c 'import json, pathlib; d=json.loads(pathlib.Path("site/data/current.json").read_text(encoding="utf-8")); print(d["as_of_date"])')"
+            committed_requested="$(python3 -c 'import json, pathlib; d=json.loads(pathlib.Path("site/data/current.json").read_text(encoding="utf-8")); print((d.get("publication_status") or {}).get("requested_date") or d["as_of_date"])')"
+            if [ "${RUN_ATTEMPT:-1}" -gt 1 ]; then
+              today="$(TZ=Asia/Taipei date +%F)"
+              local_hour="$(TZ=Asia/Taipei date +%H)"
+              if [[ "$committed_requested" < "$today" ]]; then
+                if [ "$local_hour" -ge 10 ] && [ "$local_hour" -lt 14 ]; then
+                  effective_slot='morning-recovery'
+                elif [ "$local_hour" -ge 19 ] && [ "$local_hour" -lt 23 ]; then
+                  effective_slot='evening-recovery'
+                fi
+                if [ "$effective_slot" = 'morning-recovery' ] || [ "$effective_slot" = 'evening-recovery' ]; then
+                  requested="$today"
+                  allow_fallback=true
+                  external_recovery=true
+                fi
+              fi
+            fi
           else
             requested="$REQUESTED_DATE"
             if [ -z "$requested" ]; then
@@ -69,12 +91,19 @@ jobs:
           fi
           echo "requested=$requested" >> "$GITHUB_OUTPUT"
           echo "allow_fallback=$allow_fallback" >> "$GITHUB_OUTPUT"
+          echo "external_recovery=$external_recovery" >> "$GITHUB_OUTPUT"
+          echo "effective_slot=$effective_slot" >> "$GITHUB_OUTPUT"
           if [ "$EVENT_NAME" = 'workflow_dispatch' ]; then
             echo "Invocation slot: ${SCHEDULE_SLOT:-manual}" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "$external_recovery" = 'true' ]; then
+            echo "Invocation slot: $effective_slot (out-of-band rerun recovery, attempt ${RUN_ATTEMPT})" >> "$GITHUB_STEP_SUMMARY"
+            echo "::notice::A stale push-run rerun is executing GitHub-owned recovery for $requested."
+          elif [ "$EVENT_NAME" = 'push' ] && [ "${RUN_ATTEMPT:-1}" -gt 1 ]; then
+            echo "Push rerun recovery skipped: publication is current or this attempt is outside the bounded verifier window." >> "$GITHUB_STEP_SUMMARY"
           fi
       - id: market_refresh
         name: Fetch bounded rolling windows
-        if: github.event_name != 'push'
+        if: github.event_name != 'push' || steps.dates.outputs.external_recovery == 'true'
         env:
           AS_OF_DATE: ${{ steps.dates.outputs.requested }}
           ALLOW_FALLBACK: ${{ steps.dates.outputs.allow_fallback }}
@@ -130,7 +159,7 @@ jobs:
             echo "::notice::Latest complete market date is $resolved; requested $REQUESTED_DATE is not complete yet."
           fi
       - name: Refresh seasonality and 7556 registry
-        if: github.event_name != 'push'
+        if: github.event_name != 'push' || steps.dates.outputs.external_recovery == 'true'
         env:
           AS_OF_MONTH: ${{ steps.resolved.outputs.month }}
           AS_OF_DATE: ${{ steps.dates.outputs.requested }}
@@ -146,7 +175,7 @@ jobs:
           PYTHONPATH=src python3 -m tpw fetch-traceability --as-of "$AS_OF_DATE"
           PYTHONPATH=src python3 -m tpw.traceability_snapshot --as-of "$AS_OF_DATE"
       - name: Refresh H44 traceability market events
-        if: (github.event_name == 'workflow_dispatch' && inputs.schedule_slot != 'morning-recovery') || (github.event_name == 'schedule' && github.event.schedule == '17 18 * * *')
+        if: (github.event_name == 'workflow_dispatch' && inputs.schedule_slot != 'morning-recovery') || (github.event_name == 'schedule' && github.event.schedule == '17 18 * * *') || (github.event_name == 'push' && steps.dates.outputs.external_recovery == 'true' && steps.dates.outputs.effective_slot == 'evening-recovery')
         env:
           AS_OF_DATE: ${{ steps.dates.outputs.requested }}
         run: |
