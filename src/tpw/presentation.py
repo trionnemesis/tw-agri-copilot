@@ -1,10 +1,14 @@
+import html
+import json
 import re
 from pathlib import Path
 
 
 # Presentation-only translations. Machine-readable JSON keeps the original
 # status/mode codes so existing tests and consumers do not change contract.
-PRESENTATION_VERSION = "2026-08-29.2"
+PRESENTATION_VERSION = "2026-08-30.1"
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+ARCHIVE_LIST_RE = re.compile(r"<ul class='archive-list'>.*?</ul>", re.DOTALL)
 
 REPLACEMENTS = (
     ("Taiwan Produce Watch 台灣蔬果行情原型", "Taiwan Produce Watch 台灣蔬果行情與當季採買資訊"),
@@ -88,6 +92,15 @@ REGEX_REPLACEMENTS = (
     (re.compile(r"；日曆版本 [^。<>]+。"), "。"),
 )
 
+SNAPSHOT_STATUS_LABELS = {
+    "complete": "行情完整",
+    "market_closed": "休市／無新完整行情",
+    "calendar_feed_discrepancy": "日曆與行情來源不一致",
+    "incomplete": "行情尚未完整",
+    "pending": "等待完整行情",
+    "source_unavailable": "官方資料暫時無法取得",
+}
+
 
 def rewrite_text(text):
     for old, new in REPLACEMENTS:
@@ -113,8 +126,150 @@ def rewrite_tree(root):
     return changed
 
 
+def _snapshot_context(site_root):
+    current_path = Path(site_root) / "data/current.json"
+    if not current_path.exists():
+        return None
+    current = json.loads(current_path.read_text(encoding="utf-8"))
+    publication_status = current.get("publication_status")
+    if not isinstance(publication_status, dict):
+        return None
+    snapshot_date = publication_status.get("requested_date")
+    resolved_date = publication_status.get("resolved_date")
+    market_as_of_date = current.get("as_of_date")
+    if not all(
+        isinstance(value, str) and DATE_RE.fullmatch(value)
+        for value in (snapshot_date, resolved_date, market_as_of_date)
+    ):
+        return None
+    if resolved_date != market_as_of_date:
+        raise ValueError(
+            "publication resolved_date must match site/data/current.json as_of_date"
+        )
+    return current, publication_status, snapshot_date, market_as_of_date
+
+
+def materialize_daily_snapshot(site_root):
+    site_root = Path(site_root)
+    context = _snapshot_context(site_root)
+    if context is None:
+        return 0
+    _, publication_status, snapshot_date, market_as_of_date = context
+    changed = 0
+
+    snapshot_payload = {
+        "schema_version": "1.0",
+        "snapshot_date": snapshot_date,
+        "market_as_of_date": market_as_of_date,
+        "publication_status": publication_status,
+    }
+    snapshot_json = (
+        site_root
+        / "data/snapshots"
+        / snapshot_date[:4]
+        / snapshot_date[5:7]
+        / f"{snapshot_date}.json"
+    )
+    snapshot_json.parent.mkdir(parents=True, exist_ok=True)
+    payload_text = json.dumps(
+        snapshot_payload,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    if not snapshot_json.exists() or snapshot_json.read_text(encoding="utf-8") != payload_text:
+        snapshot_json.write_text(payload_text, encoding="utf-8")
+        changed += 1
+
+    if snapshot_date == market_as_of_date:
+        return changed
+
+    source = (
+        site_root
+        / "daily"
+        / market_as_of_date[:4]
+        / market_as_of_date[5:7]
+        / f"{market_as_of_date}.html"
+    )
+    if not source.exists():
+        raise ValueError(
+            f"cannot materialize {snapshot_date} snapshot: market page {market_as_of_date} is missing"
+        )
+    target = (
+        site_root
+        / "daily"
+        / snapshot_date[:4]
+        / snapshot_date[5:7]
+        / f"{snapshot_date}.html"
+    )
+    target.parent.mkdir(parents=True, exist_ok=True)
+
+    rendered = source.read_text(encoding="utf-8")
+    rendered = rendered.replace(
+        f"<title>每日行情 {market_as_of_date}</title>",
+        f"<title>每日快照 {snapshot_date}</title>",
+        1,
+    )
+    rendered = rendered.replace(
+        f"<h1>每日行情 {market_as_of_date}</h1>",
+        f"<h1>每日快照 {snapshot_date}</h1>",
+        1,
+    )
+    state = str(publication_status.get("status", "unknown"))
+    status_label = SNAPSHOT_STATUS_LABELS.get(state, state)
+    note_class = "note" if state == "complete" else "note warn"
+    notice = (
+        "<section class='section snapshot-status' data-snapshot-date='"
+        + html.escape(snapshot_date, quote=True)
+        + "' data-market-as-of-date='"
+        + html.escape(market_as_of_date, quote=True)
+        + "' data-publication-status='"
+        + html.escape(state, quote=True)
+        + "'><h2>每日檢查快照</h2><p class='"
+        + note_class
+        + "'>本次資料檢查："
+        + html.escape(snapshot_date)
+        + " · 最近完整交易日："
+        + html.escape(market_as_of_date)
+        + " · 發布狀態："
+        + html.escape(status_label)
+        + "。此頁保留當日檢查狀態；價格、趨勢與 Buy Score 仍以最近完整交易日的行情為準，不會把舊資料冒充成當日行情。</p></section>"
+    )
+    if "</section>" not in rendered:
+        raise ValueError("daily market page has no section boundary for snapshot notice")
+    rendered = rendered.replace("</section>", "</section>" + notice, 1)
+    if not target.exists() or target.read_text(encoding="utf-8") != rendered:
+        target.write_text(rendered, encoding="utf-8")
+        changed += 1
+    return changed
+
+
+def refresh_archive(site_root):
+    site_root = Path(site_root)
+    archive_path = site_root / "archive/index.html"
+    daily_root = site_root / "daily"
+    if not archive_path.exists() or not daily_root.exists():
+        return 0
+    paths = sorted(daily_root.rglob("*.html"), reverse=True)
+    links = "".join(
+        f"<li><a href='../daily/{path.parent.parent.name}/{path.parent.name}/{path.stem}.html'>{path.stem}</a></li>"
+        for path in paths
+    )
+    before = archive_path.read_text(encoding="utf-8")
+    replacement = f"<ul class='archive-list'>{links}</ul>"
+    after, count = ARCHIVE_LIST_RE.subn(replacement, before, count=1)
+    if count != 1:
+        raise ValueError("archive page is missing its archive-list contract")
+    if after == before:
+        return 0
+    archive_path.write_text(after, encoding="utf-8")
+    return 1
+
+
 def main():
-    changed = rewrite_tree("site") + rewrite_tree("reports")
+    changed = materialize_daily_snapshot("site")
+    changed += refresh_archive("site")
+    changed += rewrite_tree("site") + rewrite_tree("reports")
     print(f"presentation {PRESENTATION_VERSION} normalized: {changed} files")
 
 
