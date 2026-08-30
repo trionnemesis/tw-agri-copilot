@@ -27,7 +27,7 @@
 | PR 4 · Advice | provider-neutral input、strict zh-Hant schema、guardrails、deterministic fallback | AI 只能解釋既有 evidence，不能改數字或 verdict |
 | Issue #3 · Traceability PR A | 農業部 7556 bounded adapter、schema／pagination 驗證、exact mapping、active／expired、date-scoped LKG、粗粒度縣市與來源 profile | 生產者姓名、精確地址、地段地號、通路與作業明細不發布；履歷不加入 Buy Score |
 | Issue #3 · Traceability PR B | 農業部 H44 單日 bounded adapter、strict schema／日期／數值／分頁驗證、exact crop mapping、exact-date event evidence 與獨立 Pages 頁面 | 溯源代號不等於 7556 履歷碼；金額／交易量不併入 8066 aggregate，也不改 Buy Score |
-| Issue #8 · Live seasonality | 農糧署 HTML adapter、完整分頁、月份 catalog、LKG／fallback、完整當季清單 | 只做明確名稱 mapping；不做 fuzzy matching |
+| Issue #8 · Live seasonality | 農糧署 HTML adapter、完整分頁、月份 catalog、LKG／fallback、完整當季清單 | 只做明確名稱 mapping；不做 fuzzy mapping |
 | Issue #19 · Produce icons | 專案自有 SVG sprite、39 個現有顯示名稱的 exact registry、分類 fallback、列印與 responsive 樣式 | 圖示是裝飾性提示；文字名稱仍是唯一語意來源 |
 | Issue #3 · Official calendar | 臺北農產 115 年休市日曆、臺北一／臺北二 market registry、calendar／feed 分離與 discrepancy 狀態 | 日曆不加入行情 aggregate 或 Buy Score；未知年度不宣稱官方休市 |
 | Issue #3 · Source contract 2A | 通用 `SourceAdapter`／`RawBatch`、四種交易來源角色、run lineage 與 economic-observation dedup | 目前只有 8066 是 production `authoritative_final`；第二 adapter 僅為離線 fixture，TAPMC parity 等後續市場來源切片尚未啟用 |
@@ -75,21 +75,23 @@ H44 refresh 以單一 `StartDate`／`EndDate` 加 `$top`／`$skip` 擷取，保�
 
 ## 自動更新排程
 
-GitHub Actions 是資料更新與 GitHub Pages 發布的唯一自動化執行層；外部 ChatGPT 排程只做事後驗證，不作為資料來源，也不能改寫 Buy Score。
+GitHub Actions 是資料抓取、建置、驗證、commit 與 GitHub Pages 發布的唯一自動化執行層。外部 ChatGPT 排程預設只做事後驗證；只有在 primary 與 internal guard 都沒有產生 run、目前沒有 queued／in-progress Daily run、publication 已落後今日，而且能確認 recovery-capable push run 時，才可作為 bounded recovery actuator，**唯一允許的動作是 re-run 既有 GitHub Actions `update` job**。ChatGPT 不自行抓取或寫入行情／7556／H44，不推測休市，也不能改寫 Buy Score。完整契約見 [`docs/EXTERNAL_RECOVERY.md`](docs/EXTERNAL_RECOVERY.md)。
 
 | 時間 / 觸發 | 行情 8066 | 產季 | 7556 registry | H44 單日事件 | 發布 |
 |---|---|---|---|---|---|
 | 每日 09:17 Asia/Taipei | bounded refresh；資料未完整時解析最近可發布交易日 | 同月份 live snapshot 可直接重用 | 更新 / 驗證；即使只有 fixture context 也保存當日 exact-date evidence | 不主動抓取；當日無 live exact-date snapshot 時安全使用當日 fixture context | build、validate、Pages deploy |
 | 每日 18:17 Asia/Taipei | bounded refresh | 同月份 cache policy | 更新 / 驗證；保存當日 exact-date evidence | 更新當日 exact-date event snapshot | build、validate、Pages deploy |
 | 09:47／18:47 internal recovery guard | 不直接抓資料；只檢查對應 primary scheduled run 是否存在 | 同左 | primary run 完全不存在時，以同 requested date dispatch recovery | morning recovery 跳過；evening recovery 執行 | 沿用同一 build、validate、Pages workflow |
+| 10:30／19:30 external verifier / bounded actuator | 平時唯讀；primary 與 guard 都缺失且 publication stale 時，只 re-run recovery-capable push `update` job | 由 rerun 後的 GitHub Actions 依正常 policy 處理 | 由 GitHub Actions 產生 requested-date exact-date evidence | 10:30 recovery 必須跳過；19:30 recovery 才執行 | GitHub Actions 完成 build、validate、commit、Pages deploy；ChatGPT 不直接寫資料 |
 | `workflow_dispatch` | 可指定日期與 backfill | 可強制安全 refresh | 更新指定日期 context | 更新指定日期 exact-date event snapshot | build、validate、Pages deploy |
-| `main` 的 source/config/workflow push | 不對外抓取 | 不對外抓取 | 不對外抓取 | 不對外抓取 | 只以 committed evidence 重建並驗證 |
+| `main` 的 source/config/workflow push attempt 1 | 不對外抓取 | 不對外抓取 | 不對外抓取 | 不對外抓取 | 只以 committed evidence 重建並驗證 |
+| recovery-capable push rerun attempt > 1 | 僅在 publication stale 且 10:00–13:59／19:00–22:59 Asia/Taipei 才轉為 recovery | 沿用 scheduled policy | 更新今日 exact-date evidence | morning 跳過；evening 執行 | 沿用正常 build、validate、commit、Pages deploy；其他時段仍維持 committed-evidence-only |
 
 排程刻意不在 09:17 抓 H44：H44 是單日事件證據且不影響 Buy Score，晚間再擷取可降低把早盤／未完整事件集合誤當成當日證據的風險。09:17／18:17 刻意避開整點，以降低 GitHub Actions scheduled workflow 在高負載整點延遲或未入列的風險。若 H44 跨日期抓取失敗，系統回報 unavailable／fixture context，不把前一日事件搬成今日 stale。
 
-GitHub scheduled event 是 best-effort，官方契約允許延遲或在高負載時被丟棄；因此 recovery guard 於 primary slot 後 30 分鐘查詢 `Daily market update` 歷史。只要同一時段已有 `schedule` run（不論 queued、in progress、success 或 failure），guard 就不重複觸發；只有 run 完全不存在時，才以 repository `GITHUB_TOKEN` 建立可稽核的 `morning-recovery`／`evening-recovery` `workflow_dispatch`。API 查詢或日期判定失敗時 guard fail closed，不猜測、不 dispatch。這層降低單一 cron event 遺失的風險，但不把 GitHub Actions 描述成具 SLA 的排程器。
+GitHub scheduled event 是 best-effort；因此 recovery guard 於 primary slot 後 30 分鐘查詢 `Daily market update` 歷史。只要同一時段已有 `schedule` run（不論 queued、in progress、success 或 failure），guard 就不重複觸發；只有 run 完全不存在時，才以 repository `GITHUB_TOKEN` 建立可稽核的 `morning-recovery`／`evening-recovery` `workflow_dispatch`。API 查詢或日期判定失敗時 guard fail closed，不猜測、不 dispatch。這層降低單一 cron event 遺失的風險，但 internal guard 本身仍與 primary 共用 GitHub scheduler failure domain。
 
-外部 evening verifier 維持唯讀。對 18:17 slot，primary `schedule` run 成功仍是首選 green evidence；若 primary 不存在，則可接受同 requested date、標示 `evening-recovery` 且成功完成的 recovery run，並仍須從 job steps 確認 H44 refresh 實際執行、7556 `daily/` 與 `profiles/` exact-date evidence 已建立。只有 guard run、沒有成功 recovery run，不能標記 green；既有 primary run failure 也不能被 guard 掩蓋。
+外部 verifier／actuator 提供第三層、不同排程 failure domain 的 recovery。若 primary 已存在（包括 failure）或 internal guard 已建立 recovery，外部 verifier 不得再觸發第二次；只有兩層 run 都完全缺失、沒有 Daily run 正在 queued／in progress、publication requested date 早於今天，並確認 current main 已包含 out-of-band rerun contract 時，才可 re-run 一個使用該 workflow 版本且已成功完成的 push `update` job。rerun 必須由 GitHub runner 自己重新計算 Asia/Taipei 今日日期、抓官方來源、產生 7556 exact-date evidence、build／validate／commit／deploy；10:30 morning recovery 跳過 H44，19:30 evening recovery 才執行 H44。只有新 attempt、main publication、Pages deployment 與 artifact/repo 一致性全部驗證通過後才能標記 recovered green。
 
 ## 快速開始
 
@@ -122,7 +124,6 @@ python3 -m http.server 8000 --directory site
 | `validate-config` | 驗證 10 水果 + 10 蔬菜 mapping |
 | `validate-market-calendar --year YEAR` | 驗證 normalized calendar、365／366 日完整性、market registry 與來源 hash |
 | `refresh-market-calendar --year YEAR` | 受控下載及解析已核准的臺北農產年度 PDF；hash／格式漂移時 fail closed |
-| `validate-source-run --date DATE` | 驗證 transaction adapter lineage、來源角色、resolution counts 與每個 economic observation 最多一筆 eligible |
 | `validate-agent-run PATH [PATH ...]` | 驗證 proposed Agent Run JSON 契約；不執行分析或發布 |
 | `seed-prototype --as-of DATE` | 建立 35 日、2 市場、20 品項的 deterministic fixture history |
 | `fetch-market --start DATE --end DATE` | 透過 8066 `SourceAdapter` 抓取 bounded batch，完成來源解析後保存 normalized watchlist data 與 source-run evidence |
@@ -211,6 +212,6 @@ VERIFICATION.md         本地與遠端 acceptance evidence
 - Produce icons：完整當季頁以 exact registry 選取本地 sprite symbol，未知品項安全降級為分類 fallback；不改變公開 JSON、搜尋或資料判定。
 - Traceability PR A：7556 live registry adapter、bounded pagination、strict schema、exact mapping、privacy minimization、active／expired、date-scoped profile／LKG 與 Pages UI 已合併 `main`。Repository 仍提交小型 fixture 作 deterministic CI；排程成功後才會把狀態標成 `live`，不把 fixture 冒充官方即時快照。
 - Traceability PR B：H44 單日 bounded adapter、strict contract、exact mapping、event identity、exact-date cache、獨立 schema／JSON／Pages 證據已合併 `main`。H44 不併入 8066 aggregate 或 Buy Score，也不冒充 7556 履歷碼。
-- Automation：GitHub Actions 09:17／18:17（Asia/Taipei）負責市場與 Pages 發布；7556 兩次檢查，H44 僅 18:17／手動／evening recovery 更新。09:47／18:47 internal guard 只在對應 primary run 完全不存在時 dispatch bounded recovery；外部 ChatGPT 排程仍只驗證發布結果與資料邊界。
+- Automation：GitHub Actions 09:17／18:17（Asia/Taipei）負責市場與 Pages 發布；7556 兩次檢查，H44 僅 18:17／手動／evening recovery 更新。09:47／18:47 internal guard 只在對應 primary run 完全不存在時 dispatch bounded recovery；外部 ChatGPT 10:30／19:30 預設 verifier，僅在 primary 與 guard recovery 都缺失、沒有 Daily run 執行中、publication stale 且能確認 recovery-capable push run 時，才可 re-run 該 GitHub Actions `update` job。資料抓取、Buy Score、commit 與 Pages 發布仍全部由 GitHub Actions 負責。
 
 視覺語言來自使用者提供的分析型 HTML（navy gradient、paper cards、status badges、responsive grids）；README 資訊架構參考 [AgentSec README.zh-TW](https://github.com/trionnemesis/AgentSec/blob/main/README.zh-TW.md)，但內容與資料邊界皆針對本專案重寫。
