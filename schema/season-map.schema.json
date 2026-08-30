@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trionnemesis.github.io/tw-agri-copilot/schema/season-map.schema.json",
+  "title": "Taiwan Produce Watch current county season map",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "as_of_month", "resolved_market_date", "inputs", "unmapped_source_counties", "counties"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "as_of_month": {"type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$"},
+    "resolved_market_date": {"type": "string", "format": "date"},
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seasonality_source_status", "seasonality_snapshot_hash", "county_registry_hash", "market_registry_hash", "geometry_hash"],
+      "properties": {
+        "seasonality_source_status": {"enum": ["live", "stale", "fallback"]},
+        "seasonality_snapshot_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "county_registry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "market_registry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "geometry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+      }
+    },
+    "unmapped_source_counties": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "counties": {
+      "type": "array",
+      "minItems": 22,
+      "maxItems": 22,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["county_code", "slug", "display_name", "seasonal_catalog_count", "local_seasonal_produce", "official_markets"],
+        "properties": {
+          "county_code": {"type": "string", "pattern": "^[0-9]{5}$"},
+          "slug": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+          "display_name": {"type": "string", "minLength": 1},
+          "seasonal_catalog_count": {"type": "integer", "minimum": 0},
+          "local_seasonal_produce": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["category", "display_name", "canonical_id", "source_status"],
+              "properties": {
+                "category": {"enum": ["fruit", "vegetable"]},
+                "display_name": {"type": "string", "minLength": 1},
+                "canonical_id": {"type": ["string", "null"], "minLength": 1},
+                "source_status": {"enum": ["live", "stale", "fallback"]}
+              }
+            }
+          },
+          "official_markets": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["market_code", "feed_market_name", "official_name", "official_url", "evidence_url", "feed_coverage_status"],
+              "properties": {
+                "market_code": {"type": "string", "pattern": "^[0-9]{3}$"},
+                "feed_market_name": {"type": "string", "minLength": 1},
+                "official_name": {"type": "string", "minLength": 1},
+                "official_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+                "evidence_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+                "feed_coverage_status": {"enum": ["observed", "not_observed", "unknown"]}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

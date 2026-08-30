@@ -1,8 +1,8 @@
 ---
 plan_id: TPW-PLAN-001
-version: 0.2.0
-status: Public prototype released and verified
-scope: PR 1-5 - Public side-project prototype
+version: 0.3.0
+status: Public prototype with county season map released and verified
+scope: PR 1-5 + Issue 30 - Public side-project prototype
 source_spec: SPEC.md
 prepared_at: 2026-08-26
 ---
@@ -35,6 +35,7 @@ Deliver a reviewable PR 1–5 prototype that:
 10. renders 20 produce pages, four trend views, seasonality, recommendations, movers, and archives;
 11. keeps advice provider-neutral with strict validation and deterministic fallback;
 12. filters/minimizes traceability context without joining it into Buy Score.
+13. publishes a deterministic 22-county season map that keeps official production-season facts separate from verified wholesale-market metadata.
 
 Primary PR 1 traceability: `FR-001`, `FR-002`, `FR-009`, `FR-011`, `FR-013`; supporting constraints: `NFR-001`–`NFR-004`, `NFR-007`–`NFR-010`, `AC-002`, `AC-003`, `AC-009`–`AC-011`, `AC-013`, `AC-014` where applicable to this slice.
 

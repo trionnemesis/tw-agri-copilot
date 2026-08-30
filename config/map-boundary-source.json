@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "source_id": "nlsc_county_boundary_7442",
+  "dataset_title": "直轄市、縣市界線(TWD97經緯度)",
+  "provider": "內政部國土測繪中心",
+  "dataset_url": "https://data.gov.tw/dataset/7442",
+  "resource_url": "https://www.tgos.tw/tgos/VirtualDir/Product/85bc9c19-a076-4d83-8955-eeecf2ebdae8/COUNTY_MOI_1140318_.zip",
+  "license_name": "政府資料開放授權條款-第1版",
+  "license_url": "https://data.gov.tw/license",
+  "source_archive_name": "COUNTY_MOI_1140318_.zip",
+  "source_format": "GML",
+  "source_crs": "EPSG:3824",
+  "geometry_version": "COUNTY_MOI_1140318",
+  "source_time_position_roc": "114-03-21",
+  "source_time_indeterminate_position": "after",
+  "downloaded_on": "2026-08-30",
+  "source_hash": "sha256:f4589a7c65bbb905e40b1eaee332df71f4000a366f2a6f2221a64f64ef314d61",
+  "converter_version": "tpw-county-svg-v1",
+  "converted_on": "2026-08-30",
+  "conversion": {
+    "view_box": "0 0 720 900",
+    "simplification_method": "Ramer-Douglas-Peucker",
+    "simplification_tolerance_pixels": 0.75,
+    "minimum_ring_area_pixels": 0.6,
+    "maximum_rings_per_county": 80,
+    "mainland_filter_bbox": [119.7,21.6,122.25,25.75],
+    "offshore_inset_county_codes": ["10016","09020","09007"]
+  },
+  "asset_path": "src/tpw/assets/taiwan-counties.svg",
+  "geometry_hash": "sha256:08e2560b4e989ec6c8730ba365776778e5261a2c36990fe94e576323775e4fbd",
+  "county_codes": ["63000","65000","10017","68000","10018","10004","10005","66000","10007","10008","10009","10020","10010","67000","64000","10013","10002","10015","10014","10016","09020","09007"],
+  "attribution": "資料來源：內政部國土測繪中心 2025「直轄市、縣市界線（TWD97經緯度；COUNTY_MOI_1140318）」；依政府資料開放授權條款第1版使用。本 SVG 為簡化及 inset 排版衍生物。"
+}

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trionnemesis.github.io/tw-agri-copilot/schema/official-produce-markets.schema.json",
+  "title": "Taiwan Produce Watch verified official produce markets",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "registry_scope", "markets"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "registry_scope": {"const": "verified_entries_only"},
+    "markets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["market_code", "feed_market_name", "official_name", "county_slug", "market_kind", "official_url", "evidence_url", "evidence_checked_on", "feed_source_id", "feed_coverage_status"],
+        "properties": {
+          "market_code": {"type": "string", "pattern": "^[0-9]{3}$"},
+          "feed_market_name": {"type": "string", "minLength": 1},
+          "official_name": {"type": "string", "minLength": 1},
+          "county_slug": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+          "market_kind": {"const": "fruit_vegetable_wholesale"},
+          "official_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+          "evidence_url": {"type": "string", "format": "uri", "pattern": "^https://"},
+          "evidence_checked_on": {"type": "string", "format": "date"},
+          "feed_source_id": {"const": "moa_market_8066"},
+          "feed_coverage_status": {"enum": ["observed", "not_observed", "unknown"]}
+        }
+      }
+    }
+  }
+}

@@ -229,6 +229,21 @@ class BuildTest(unittest.TestCase):
   self.assertIs(current['traceability_event_status']['eligible_for_market_aggregate'],False);self.assertIs(current['traceability_event_status']['affects_buy_score'],False)
   event_page=(ROOT/'site/traceability/market-events.html').read_text();self.assertIn("data-traceability-event-source='fixture'",event_page);self.assertIn('不納入行情彙總或 Buy Score',event_page);self.assertIn('H44',event_page);self.assertIn('溯源代號',event_page)
   self.assertNotIn('PR 1 不產生推薦',(ROOT/'reports/daily/2026/08/2026-08-25.md').read_text())
+ def test_season_map_payload_is_published_and_deterministic(self):
+  self.command('seed-prototype','--as-of','2026-08-25');self.command('validate-config');self.command('build','--as-of','2026-08-25')
+  payload_path=ROOT/'site/data/season-map/current.json';page_path=ROOT/'site/season/map.html'
+  self.assertTrue(payload_path.exists());self.assertTrue(page_path.exists())
+  first=payload_path.read_bytes();payload=json.loads(first);current=json.loads((ROOT/'site/data/current.json').read_text())
+  self.assertEqual(payload['schema_version'],'1.0');self.assertEqual(payload['as_of_month'],current['publication_status']['requested_date'][:7]);self.assertEqual(payload['resolved_market_date'],'2026-08-25')
+  self.assertEqual(len(payload['counties']),22);self.assertNotIn('season_map',current)
+  taipei=next(county for county in payload['counties'] if county['slug']=='taipei-city')
+  self.assertEqual([(market['market_code'],market['feed_market_name']) for market in taipei['official_markets']],[('104','臺北二'),('109','臺北一')])
+  tampered=json.loads(first);county=next(row for row in tampered['counties'] if row['local_seasonal_produce']);county['local_seasonal_produce'][0]['canonical_id']='tampered-canonical-id';payload_path.write_text(json.dumps(tampered,ensure_ascii=False,separators=(',',':')))
+  with self.assertRaises(subprocess.CalledProcessError) as raised:self.command('verify-site','--as-of','2026-08-25')
+  self.assertIn('does not match the public seasonality catalog',raised.exception.stderr)
+  payload_path.write_bytes(first)
+  self.command('validate-data','--as-of','2026-08-25');self.command('verify-site','--as-of','2026-08-25');self.command('build','--as-of','2026-08-25')
+  self.assertEqual(first,payload_path.read_bytes())
  def test_site_guard_rejects_secret_and_oversize(self):
   from tpw.render import build_site
   rows=[{'canonical_id':'banana','display_name':'香蕉','category':'fruit','weighted_avg_price_twd_per_kg':None,'total_volume_kg':0}]

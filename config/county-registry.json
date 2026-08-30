@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0",
+  "geometry_source": {
+    "dataset_url": "https://data.gov.tw/dataset/7442",
+    "source_hash": "sha256:f4589a7c65bbb905e40b1eaee332df71f4000a366f2a6f2221a64f64ef314d61",
+    "geometry_version": "COUNTY_MOI_1140318",
+    "converter_version": "tpw-county-svg-v1"
+  },
+  "counties": [
+    {"county_code":"63000","slug":"taipei-city","display_name":"臺北市","source_names":["台北市","臺北市"],"svg_path_id":"county-shape-taipei-city"},
+    {"county_code":"65000","slug":"new-taipei-city","display_name":"新北市","source_names":["新北市"],"svg_path_id":"county-shape-new-taipei-city"},
+    {"county_code":"10017","slug":"keelung-city","display_name":"基隆市","source_names":["基隆市"],"svg_path_id":"county-shape-keelung-city"},
+    {"county_code":"68000","slug":"taoyuan-city","display_name":"桃園市","source_names":["桃園市"],"svg_path_id":"county-shape-taoyuan-city"},
+    {"county_code":"10018","slug":"hsinchu-city","display_name":"新竹市","source_names":["新竹市"],"svg_path_id":"county-shape-hsinchu-city"},
+    {"county_code":"10004","slug":"hsinchu-county","display_name":"新竹縣","source_names":["新竹縣"],"svg_path_id":"county-shape-hsinchu-county"},
+    {"county_code":"10005","slug":"miaoli-county","display_name":"苗栗縣","source_names":["苗栗縣"],"svg_path_id":"county-shape-miaoli-county"},
+    {"county_code":"66000","slug":"taichung-city","display_name":"臺中市","source_names":["台中市","臺中市"],"svg_path_id":"county-shape-taichung-city"},
+    {"county_code":"10007","slug":"changhua-county","display_name":"彰化縣","source_names":["彰化縣"],"svg_path_id":"county-shape-changhua-county"},
+    {"county_code":"10008","slug":"nantou-county","display_name":"南投縣","source_names":["南投縣"],"svg_path_id":"county-shape-nantou-county"},
+    {"county_code":"10009","slug":"yunlin-county","display_name":"雲林縣","source_names":["雲林縣"],"svg_path_id":"county-shape-yunlin-county"},
+    {"county_code":"10020","slug":"chiayi-city","display_name":"嘉義市","source_names":["嘉義市"],"svg_path_id":"county-shape-chiayi-city"},
+    {"county_code":"10010","slug":"chiayi-county","display_name":"嘉義縣","source_names":["嘉義縣"],"svg_path_id":"county-shape-chiayi-county"},
+    {"county_code":"67000","slug":"tainan-city","display_name":"臺南市","source_names":["台南市","臺南市"],"svg_path_id":"county-shape-tainan-city"},
+    {"county_code":"64000","slug":"kaohsiung-city","display_name":"高雄市","source_names":["高雄市"],"svg_path_id":"county-shape-kaohsiung-city"},
+    {"county_code":"10013","slug":"pingtung-county","display_name":"屏東縣","source_names":["屏東縣"],"svg_path_id":"county-shape-pingtung-county"},
+    {"county_code":"10002","slug":"yilan-county","display_name":"宜蘭縣","source_names":["宜蘭縣"],"svg_path_id":"county-shape-yilan-county"},
+    {"county_code":"10015","slug":"hualien-county","display_name":"花蓮縣","source_names":["花蓮縣"],"svg_path_id":"county-shape-hualien-county"},
+    {"county_code":"10014","slug":"taitung-county","display_name":"臺東縣","source_names":["台東縣","臺東縣"],"svg_path_id":"county-shape-taitung-county"},
+    {"county_code":"10016","slug":"penghu-county","display_name":"澎湖縣","source_names":["澎湖縣"],"svg_path_id":"county-shape-penghu-county"},
+    {"county_code":"09020","slug":"kinmen-county","display_name":"金門縣","source_names":["金門縣"],"svg_path_id":"county-shape-kinmen-county"},
+    {"county_code":"09007","slug":"lienchiang-county","display_name":"連江縣","source_names":["連江縣"],"svg_path_id":"county-shape-lienchiang-county"}
+  ]
+}

@@ -52,10 +52,14 @@ def _document(title, body, css="assets/css/app.css", js=None, description=None):
     )
 
 
-def _toolbar(prefix=""):
-    links = (
+def _toolbar(prefix="", include_season_map=False):
+    links = [
         ("首頁", f"{prefix}index.html"),
         ("當季", f"{prefix}season/current.html"),
+    ]
+    if include_season_map:
+        links.append(("產季地圖", f"{prefix}season/map.html"))
+    links.extend((
         ("日趨勢", f"{prefix}trends/daily.html"),
         ("週趨勢", f"{prefix}trends/weekly.html"),
         ("月趨勢", f"{prefix}trends/monthly.html"),
@@ -63,7 +67,7 @@ def _toolbar(prefix=""):
         ("產銷履歷", f"{prefix}traceability/index.html"),
         ("歷史", f"{prefix}archive/index.html"),
         ("方法", f"{prefix}methodology.html"),
-    )
+    ))
     return "<nav class='toolbar' aria-label='主要導覽'><div class='inner'>" + "".join(
         f"<a href='{href}'>{label}</a>" for label, href in links
     ) + "<button type='button' data-print>列印 / 存 PDF</button></div></nav>"
@@ -212,7 +216,7 @@ def _traceability_event_table(rows, colspan=7):
     )
 
 
-def _season_page(catalog, series, traceability):
+def _season_page(catalog, series, traceability, include_season_map=False):
     market_ids = {row["canonical_id"] for row in series}
     trace_ids = {row["canonical_id"] for row in traceability}
     cards = []
@@ -244,18 +248,147 @@ def _season_page(catalog, series, traceability):
     return (
         "<header class='page-hero'><div class='wrap'><div class='eyebrow'>SEASONALITY</div>"
         "<h1>本月當季蔬果</h1><p>農糧署盛產資料 × 行情與履歷狀態</p></div></header>"
-        + _toolbar("../")
+        + _toolbar("../", include_season_map)
         + "<main id='main' class='wrap'><section class='section'><div class='section-heading'><div>"
         + f"<h2>完整清單</h2><p class='lead'>共 {len(catalog)} 項：水果 {fruit_count} 項、蔬菜 {vegetable_count} 項。</p></div>"
         + "<div class='filter-group' aria-label='當季品項篩選'><button type='button' data-filter='all' aria-pressed='true'>全部</button>"
         + "<button type='button' data-filter='fruit' aria-pressed='false'>水果</button><button type='button' data-filter='vegetable' aria-pressed='false'>蔬菜</button></div></div>"
         + _season_source_notice(catalog)
+        + ("<p><a class='card-link' href='map.html'>用產季地圖依縣市查看 →</a></p>" if include_season_map else "")
         + "<div class='season-controls'><label class='season-search' for='season-search'><span>搜尋蔬果名稱</span>"
         + "<input id='season-search' type='search' data-season-search aria-controls='season-grid' "
         + "aria-describedby='season-result-count' autocomplete='off' placeholder='輸入蔬果名稱，例如：甘藍、木瓜'></label>"
         + f"<p class='season-result-count' id='season-result-count' data-season-result-count role='status' aria-live='polite' aria-atomic='true'>顯示 {len(catalog)} 項</p></div>"
         + f"<div class='grid grid-3' id='season-grid' data-season-grid>{''.join(cards)}</div>"
         + "<p class='note warn season-empty' data-season-empty hidden>找不到符合目前搜尋與分類條件的當季蔬果。</p></section></main>"
+    )
+
+
+def _season_map_produce_card(row):
+    icon = resolve_produce_icon(row["category"], row["display_name"])
+    return (
+        f"<article class='card season-map-produce-card' data-category='{_escape(row['category'])}'>"
+        f"<div class='label'>{'水果' if row['category']=='fruit' else '蔬菜'}</div>"
+        f"<div class='season-card-title'><svg class='produce-icon produce-icon--{_escape(row['category'])}' "
+        f"aria-hidden='true' focusable='false' data-icon-fidelity='{_escape(icon.fidelity)}'>"
+        f"<use href='../assets/icons/produce.svg#{_escape(icon.symbol_id)}'></use></svg>"
+        f"<h4>{_escape(row['display_name'])}</h4></div></article>"
+    )
+
+
+def _season_map_market_card(row):
+    coverage_labels = {
+        "observed": "8066 feed 可對應",
+        "not_observed": "8066 feed 尚未觀察",
+        "unknown": "8066 feed 對應狀態未知",
+    }
+    coverage = coverage_labels.get(row.get("feed_coverage_status"), "8066 feed 對應狀態未知")
+    return (
+        "<article class='card official-market-card'>"
+        f"<div class='label'>市場代號 {_escape(row['market_code'])}</div>"
+        f"<h4>{_escape(row['feed_market_name'])}</h4>"
+        f"<p>{_escape(row['official_name'])}</p>"
+        f"<span class='badge neu'>{_escape(coverage)}</span>"
+        f"<p><a class='card-link' href='{_escape(row['evidence_url'])}' rel='noopener noreferrer'>查看市場官方證據 →</a></p>"
+        "</article>"
+    )
+
+
+def _season_map_county_section(county, payload):
+    produce = county["local_seasonal_produce"]
+    markets = county["official_markets"]
+    fruit = [row for row in produce if row["category"] == "fruit"]
+    vegetables = [row for row in produce if row["category"] == "vegetable"]
+    market_cards = "".join(_season_map_market_card(row) for row in markets)
+    if not market_cards:
+        market_cards = (
+            "<p class='note warn county-empty' data-market-empty>"
+            "目前專案 registry 尚未收錄此縣市已完成官方證據驗證的果菜批發市場。</p>"
+        )
+    produce_groups = []
+    if fruit:
+        produce_groups.append(
+            "<div class='county-produce-group'><h4>水果</h4><div class='grid grid-3'>"
+            + "".join(_season_map_produce_card(row) for row in fruit)
+            + "</div></div>"
+        )
+    if vegetables:
+        produce_groups.append(
+            "<div class='county-produce-group'><h4>蔬菜</h4><div class='grid grid-3'>"
+            + "".join(_season_map_produce_card(row) for row in vegetables)
+            + "</div></div>"
+        )
+    produce_body = "".join(produce_groups)
+    if not produce_body:
+        produce_body = (
+            f"<p class='note warn county-empty' data-produce-empty>農糧署本月產期資料未列出"
+            f"{_escape(county['display_name'])}的水果／蔬菜。</p>"
+        )
+    source_status = payload["inputs"]["seasonality_source_status"]
+    return (
+        f"<section class='section county-detail' id='county-{_escape(county['slug'])}' "
+        f"data-county-section='{_escape(county['slug'])}' data-county-name='{_escape(county['display_name'])}' "
+        f"data-market-count='{len(markets)}' data-produce-count='{len(produce)}' "
+        f"aria-labelledby='county-{_escape(county['slug'])}-heading'>"
+        "<div class='section-heading'><div>"
+        f"<div class='eyebrow ink'>COUNTY SEASONALITY</div><h2 id='county-{_escape(county['slug'])}-heading' "
+        f"data-county-heading tabindex='-1'>{_escape(county['display_name'])}</h2>"
+        f"<p class='lead'>{_escape(payload['as_of_month'])} 官方產期資料</p></div>"
+        f"<span class='badge info'>本月列出 {len(produce)} 項</span></div>"
+        f"<p class='small county-source-status' data-season-source='{_escape(source_status)}'>"
+        f"產期來源狀態：{_escape(source_status)} · 行情最近完整交易日：{_escape(payload['resolved_market_date'])}</p>"
+        "<p class='note warn semantic-warning'>「產地產期」與「批發市場成交」是不同資料語意。"
+        "市場位於該縣市，不代表成交品項產自該縣市。</p>"
+        "<section class='county-detail-block' aria-labelledby='county-"
+        f"{_escape(county['slug'])}-markets'><h3 id='county-{_escape(county['slug'])}-markets'>官方果菜批發市場</h3>"
+        "<p class='small'>只列逐筆保存官方證據的市場 metadata；不代表 registry 已涵蓋該縣市所有市場，也不代表當日有成交資料。</p>"
+        f"<div class='grid grid-2 county-market-grid'>{market_cards}</div></section>"
+        "<section class='county-detail-block' aria-labelledby='county-"
+        f"{_escape(county['slug'])}-produce'><h3 id='county-{_escape(county['slug'])}-produce'>本月當地盛產</h3>"
+        "<p class='small'>只依農糧署月份 catalog 的縣市 exact match 列出；項目數不是產量、面積或市場供應量。</p>"
+        f"{produce_body}</section></section>"
+    )
+
+
+def _season_map_page(payload, county_svg, catalog):
+    counties = payload["counties"]
+    options = "".join(
+        f"<option value='{_escape(county['slug'])}'>{_escape(county['display_name'])}</option>"
+        for county in counties
+    )
+    sections = "".join(_season_map_county_section(county, payload) for county in counties)
+    degraded = ""
+    if payload.get("unmapped_source_counties"):
+        degraded = (
+            "<p class='note warn' data-map-degraded>產期來源含有尚未建立 exact registry mapping 的縣市："
+            + _escape("、".join(payload["unmapped_source_counties"]))
+            + "。地圖不補猜；完整月份清單仍保留在當季頁。</p>"
+        )
+    return (
+        "<header class='page-hero'><div class='wrap'><div class='eyebrow'>COUNTY SEASON MAP</div>"
+        "<h1>臺灣產季地圖</h1><p>官方縣市產期 × 已驗證果菜批發市場</p></div></header>"
+        + _toolbar("../", True)
+        + "<main id='main' class='wrap'><section class='section season-map-intro'><div class='section-heading'><div>"
+        + f"<h2>{_escape(payload['as_of_month'])} 縣市導覽</h2>"
+        + "<p class='lead'>點選地圖、使用鍵盤或從下拉選單選擇縣市。滑鼠 hover 只提供提示，不會提交選取。</p></div>"
+        + f"<span class='badge info'>22 縣市</span></div>{_season_source_notice(catalog)}"
+        + "<p class='note warn semantic-warning'>「產地產期」與「批發市場成交」是不同資料語意。"
+        + "市場位於該縣市，不代表成交品項產自該縣市。</p>"
+        + "<p class='small map-attribution'>資料來源：內政部國土測繪中心 2025「"
+        + "<a href='https://data.gov.tw/dataset/7442' rel='noopener noreferrer'>直轄市、縣市界線（TWD97經緯度；COUNTY_MOI_1140318）</a>」；"
+        + "依<a href='https://data.gov.tw/license' rel='noopener noreferrer'>政府資料開放授權條款第1版</a>使用。"
+        + "本 SVG 為簡化及 inset 排版衍生物。</p>"
+        + degraded
+        + "</section><div class='season-map-layout' data-season-map-root>"
+        + "<section class='section season-map-map-panel' aria-labelledby='map-picker-heading'><h2 id='map-picker-heading'>選擇縣市</h2>"
+        + "<label class='county-select-label' for='county-select'><span>縣市</span>"
+        + f"<select id='county-select' data-county-select><option value=''>尚未選取</option>{options}</select></label>"
+        + "<div class='taiwan-map' data-county-map>" + county_svg + "</div>"
+        + "<noscript><p class='note'>JavaScript 未啟用時，仍可用地圖連結跳到下方 22 個縣市資料。</p></noscript></section>"
+        + "<div class='season-map-results'><p class='note county-unselected' data-county-unselected hidden>"
+        + "尚未選取縣市。請使用地圖或縣市選單查看資料。</p>"
+        + "<p class='sr-only' data-county-live role='status' aria-live='polite' aria-atomic='true'>尚未選取縣市</p>"
+        + f"<div data-county-details>{sections}</div></div></div></main>"
     )
 
 
@@ -368,7 +501,7 @@ def _sparkline(points):
     )
 
 
-def _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status):
+def _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map=False):
     item_map = {item["canonical_id"]: item for item in items}
     series_map = {row["canonical_id"]: row for row in series}
     trace_ids = {row["canonical_id"] for row in traceability if row.get("certification_status") == "active"}
@@ -406,7 +539,7 @@ def _home(items, scores, series, seasonality, advice, traceability, traceability
     return (
         _hero(as_of, source_status, len(in_season), len(recommendations), publication_status)
         + _market_status_notice(publication_status)
-        + _toolbar()
+        + _toolbar(include_season_map=include_season_map)
         + "<main id='main' class='wrap'>"
         + "<section class='section recommendations' id='recommendations'><div class='section-heading'><div>"
         + "<div class='eyebrow ink'>BUY SCORE · EVIDENCE FIRST</div><h2>今日推薦採買</h2></div>"
@@ -435,7 +568,7 @@ def _home(items, scores, series, seasonality, advice, traceability, traceability
     )
 
 
-def _produce_page(item, series, score, season, trace_rows, traceability_events):
+def _produce_page(item, series, score, season, trace_rows, traceability_events, include_season_map=False):
     windows = series["windows"]
     season_source = {"live": "官方資料", "stale": "最近驗證資料", "fallback": "內建參考"}.get(
         season.get("source_status"), "參考資料"
@@ -451,7 +584,7 @@ def _produce_page(item, series, score, season, trace_rows, traceability_events):
     return (
         "<header class='page-hero'><div class='wrap'><div class='eyebrow'>PRODUCE DETAIL</div>"
         f"<h1>{_escape(item['display_name'])}</h1><p>{'水果' if item['category']=='fruit' else '蔬菜'} · {_escape(score['verdict_label'])}</p></div></header>"
-        + _toolbar("../")
+        + _toolbar("../", include_season_map)
         + "<main id='main' class='wrap'>"
         + f"<section class='section'><div class='grid grid-4'><div class='card'><div class='label'>今日</div><div class='value'>{_price(series['today']['price_twd_per_kg'])}</div></div>"
         + f"<div class='card'><div class='label'>7D</div><div class='value'>{_price(windows['7d']['price_twd_per_kg'])}</div><div class='sub'>{windows['7d']['coverage_days']} 日</div></div>"
@@ -467,7 +600,7 @@ def _produce_page(item, series, score, season, trace_rows, traceability_events):
     )
 
 
-def _trend_page(label, window_name, items, series):
+def _trend_page(label, window_name, items, series, include_season_map=False):
     item_map = {item["canonical_id"]: item for item in items}
     def render_row(row):
         if window_name == "previous":
@@ -491,14 +624,14 @@ def _trend_page(label, window_name, items, series):
     rows = "".join(render_row(row) for row in series)
     return (
         f"<header class='page-hero'><div class='wrap'><div class='eyebrow'>TREND TABLE</div><h1>{_escape(label)}</h1><p>依日曆 window 計算的交易量加權平均。</p></div></header>"
-        + _toolbar("../")
+        + _toolbar("../", include_season_map)
         + f"<main id='main' class='wrap'><section class='section'><h2>{_escape(label)}總表</h2><p class='disclaimer'>{DISCLAIM}</p>"
         + "<div class='table-wrap'><table><thead><tr><th>品項</th><th class='num'>今日</th><th class='num'>區間</th><th class='num'>變化</th><th class='num'>有效日</th><th>狀態</th></tr></thead>"
         + f"<tbody>{rows}</tbody></table></div></section></main>"
     )
 
 
-def _methodology(source_status, quality, publication_status):
+def _methodology(source_status, quality, publication_status, include_season_map=False):
     warnings = "".join(f"<li>{_escape(value)}</li>" for value in quality["warnings"]) or "<li>無</li>"
     status_labels = {
         "complete": "行情完整",
@@ -519,17 +652,30 @@ def _methodology(source_status, quality, publication_status):
             f"{_escape(calendar['schedule_status'])} · 版本 {_escape(calendar['calendar_version'])} · "
             f"<a href='{_escape(calendar['document_url'])}' rel='noopener noreferrer'>官方來源</a></p>"
         )
+    map_section = (
+        "<section class='section'><h2>產季地圖來源與語意</h2>"
+        "<p>資料來源：內政部國土測繪中心 2025「"
+        "<a href='https://data.gov.tw/dataset/7442' rel='noopener noreferrer'>直轄市、縣市界線（TWD97經緯度；COUNTY_MOI_1140318）</a>」；"
+        "依<a href='https://data.gov.tw/license' rel='noopener noreferrer'>政府資料開放授權條款第1版</a>使用。"
+        "本 SVG 為 build-time 簡化及 inset 排版衍生物，並隨站點發布；瀏覽器不載入外部地圖服務。</p>"
+        "<p>縣市盛產品項只依農糧署月份 catalog 的縣市 exact match；官方果菜批發市場只來自逐筆保存第一方證據的 verified-entries-only registry。"
+        " <a href='https://www.afa.gov.tw/cht/index.php?code=list&amp;ids=1103' rel='noopener noreferrer'>查看官方產期來源</a> · "
+        "<a href='https://www.tapmc.com.tw/Pages/ContactUs' rel='noopener noreferrer'>查看臺北市場官方證據</a></p>"
+        "<p class='note warn'>「產地產期」與「批發市場成交」是不同資料語意。市場位於該縣市，不代表成交品項產自該縣市；地圖上的品項數也不是產量、面積或供應量。</p></section>"
+        if include_season_map else ""
+    )
     return (
         "<header class='page-hero'><div class='wrap'><div class='eyebrow'>METHODOLOGY</div><h1>資料來源、公式與限制</h1></div></header>"
-        + _toolbar()
+        + _toolbar(include_season_map=include_season_map)
         + "<main id='main' class='wrap'><section class='section'><h2>價格與 rolling windows</h2>"
         + f"<p>{DISCLAIM}</p><p>單日與區間價格皆使用 <code>sum(price × volume) / sum(volume)</code>；日比較採前一個有有效資料的交易日，7／30／90D 依日曆日回看。</p></section>"
         + "<section class='section'><h2>Buy Score</h2><p>產季、7D／30D 相對價、交易量、資料品質與 7D 波動度皆為 deterministic component。7556 產銷履歷與 H44 市場事件都不加分，AI 不改變 score 或 verdict。</p><p>H44 的交易金額與交易量只保留在獨立事件層，不與 8066 行情合併，也不由溯源代號推論 7556 履歷批次。</p></section>"
-        + f"<section class='section'><h2>資料狀態</h2><p>行情來源：{_escape(source_status)}</p><p>每日檢查：{_escape(publication_status['requested_date'])} · 最近完整交易日：{_escape(publication_status['resolved_date'])} · 狀態：{_escape(status_label)} · 全體 feed：{_escape(publication_status.get('feed_status', 'not_checked'))} · 日曆市場 feed：{_escape(publication_status.get('calendar_feed_status', 'not_checked'))}</p>{calendar_line}<ul>{warnings}</ul><p class='note warn'>各資料集會分別標示官方更新、最近驗證資料或內建參考資料，不得把 fallback 解讀為即時官方快照。</p></section></main>"
+        + f"<section class='section'><h2>資料狀態</h2><p>行情來源：{_escape(source_status)}</p><p>每日檢查：{_escape(publication_status['requested_date'])} · 最近完整交易日：{_escape(publication_status['resolved_date'])} · 狀態：{_escape(status_label)} · 全體 feed：{_escape(publication_status.get('feed_status', 'not_checked'))} · 日曆市場 feed：{_escape(publication_status.get('calendar_feed_status', 'not_checked'))}</p>{calendar_line}<ul>{warnings}</ul><p class='note warn'>各資料集會分別標示官方更新、最近驗證資料或內建參考資料，不得把 fallback 解讀為即時官方快照。</p></section>"
+        + map_section + "</main>"
     )
 
 
-def build_site(rows, as_of, root, source_status="validated", *, series=None, scores=None, seasonality=None, season_catalog=None, advice=None, traceability=None, traceability_status=None, traceability_events=None, traceability_event_status=None, quality=None, publication_status=None):
+def build_site(rows, as_of, root, source_status="validated", *, series=None, scores=None, seasonality=None, season_catalog=None, advice=None, traceability=None, traceability_status=None, traceability_events=None, traceability_event_status=None, quality=None, publication_status=None, season_map_payload=None, county_svg=None):
     if not rows:
         raise ValueError("requested as-of date has no valid mapped aggregates")
     series = series or []
@@ -596,6 +742,8 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
     (root / "assets/icons").mkdir(parents=True, exist_ok=True)
     (root / "assets/icons/produce.svg").write_bytes(read_produce_icon_sprite())
     (root / "data").mkdir(exist_ok=True)
+    if (season_map_payload is None) != (county_svg is None):
+        raise ValueError("season map payload and county SVG must be provided together")
     (root / "daily" / as_of[:4] / as_of[5:7]).mkdir(parents=True, exist_ok=True)
     (root / "archive").mkdir(exist_ok=True)
     (root / "produce").mkdir(exist_ok=True)
@@ -603,12 +751,13 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
     (root / "season").mkdir(exist_ok=True)
     (root / "traceability").mkdir(exist_ok=True)
     complete = bool(series and scores and seasonality)
+    include_season_map = season_map_payload is not None
     if complete:
-        home = _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status)
+        home = _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map)
     else:
         home = _hero(as_of, source_status, 0, 0, publication_status) + _market_status_notice(publication_status) + "<nav class='toolbar' aria-label='主要導覽'><div class='inner'><a href='archive/index.html'>歷史</a><a href='methodology.html'>方法</a></div></nav>" + "<main id='main' class='wrap'><section class='section' id='recommendations'><h2>今日推薦採買</h2><p>資料不足，暫不判定。</p></section>" + _market_table(rows, "fruit") + _market_table(rows, "vegetable") + "</main>"
     (root / "index.html").write_text(_document("Taiwan Produce Watch", home, "assets/css/app.css", "assets/js/app.js"), encoding="utf-8")
-    daily_body = _toolbar("../../../") + f"<main id='main' class='wrap'><section class='section'><h1>每日行情 {as_of}</h1><p class='disclaimer'>{DISCLAIM}</p></section>"
+    daily_body = _toolbar("../../../", include_season_map) + f"<main id='main' class='wrap'><section class='section'><h1>每日行情 {as_of}</h1><p class='disclaimer'>{DISCLAIM}</p></section>"
     if complete:
         item_map = {item["canonical_id"]: item for item in items}
         trace_ids = {row["canonical_id"] for row in traceability if row.get("certification_status") == "active"}
@@ -623,14 +772,23 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
         for item in items:
             related = [row for row in traceability if row["canonical_id"] == item["canonical_id"]]
             related_events = [row for row in traceability_events if row["canonical_id"] == item["canonical_id"]]
-            body = _produce_page(item, series_map[item["canonical_id"]], score_map[item["canonical_id"]], season_map[item["canonical_id"]], related, related_events)
+            body = _produce_page(item, series_map[item["canonical_id"]], score_map[item["canonical_id"]], season_map[item["canonical_id"]], related, related_events, include_season_map)
             (root / "produce" / f"{item['canonical_id']}.html").write_text(_document(f"{item['display_name']}行情", body, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
         trend_specs = (("daily", "每日與前一交易日", "previous"), ("weekly", "近 7 日趨勢", "7d"), ("monthly", "近 30 日趨勢", "30d"), ("quarterly", "近 90 日趨勢", "90d"))
         for filename, label, window in trend_specs:
-            body = _trend_page(label, window, items, series)
+            body = _trend_page(label, window, items, series, include_season_map)
             (root / "trends" / f"{filename}.html").write_text(_document(label, body, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
-        season_body = _season_page(season_catalog, series, traceability)
+        season_body = _season_page(season_catalog, series, traceability, include_season_map)
         (root / "season/current.html").write_text(_document("本月當季蔬果", season_body, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
+        if season_map_payload is not None:
+            svg_text = county_svg.decode("utf-8") if isinstance(county_svg, bytes) else str(county_svg)
+            map_body = _season_map_page(season_map_payload, svg_text, season_catalog)
+            (root / "season/map.html").write_text(_document("臺灣產季地圖", map_body, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
+            (root / "data/season-map").mkdir(parents=True, exist_ok=True)
+            (root / "data/season-map/current.json").write_text(
+                json.dumps(season_map_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")),
+                encoding="utf-8",
+            )
         grouped = {}
         for row in traceability:
             grouped.setdefault(row["canonical_id"], []).append(row)
@@ -639,7 +797,7 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
             event_grouped.setdefault(row["canonical_id"], []).append(row)
         trace_cards = "".join(f"<article class='card'><div class='label'>有效履歷批次 {len([row for row in grouped.get(item['canonical_id'], []) if row.get('certification_status')=='active'])}</div><h3>{_escape(item['display_name'])}</h3><a href='{_escape(item['canonical_id'])}.html'>查看最小化欄位 →</a></article>" for item in items if grouped.get(item["canonical_id"])) or "<p>目前沒有相關紀錄。</p>"
         trace_summary = f"<div class='grid grid-3'><div class='card'><div class='label'>有效履歷批次</div><div class='value'>{traceability_status.get('active_record_count',0)}</div></div><div class='card'><div class='label'>驗證經營者</div><div class='value'>{traceability_status.get('operator_count',0)}</div></div><div class='card'><div class='label'>涵蓋觀察品項</div><div class='value'>{traceability_status.get('mapped_item_count',0)}</div></div></div>"
-        trace_index = "<header class='page-hero'><div class='wrap'><div class='eyebrow'>TRACEABILITY</div><h1>相關產銷履歷</h1><p>官方驗證資格與批次，不與每日批發行情混算</p></div></header>" + _toolbar("../") + f"<main id='main' class='wrap'><section class='section'><p class='note warn'>{TRACE_WARNING}</p>{_traceability_source_notice(traceability_status)}{trace_summary}<p class='small'>資料基準日：{_escape(traceability_status.get('as_of_date','—'))} · 來源擷取：{_escape(traceability_status.get('retrieved_at','—'))}</p><p><a href='market-events.html'>另看 H44 獨立市場事件 →</a></p><div class='grid grid-3'>{trace_cards}</div></section></main>"
+        trace_index = "<header class='page-hero'><div class='wrap'><div class='eyebrow'>TRACEABILITY</div><h1>相關產銷履歷</h1><p>官方驗證資格與批次，不與每日批發行情混算</p></div></header>" + _toolbar("../", include_season_map) + f"<main id='main' class='wrap'><section class='section'><p class='note warn'>{TRACE_WARNING}</p>{_traceability_source_notice(traceability_status)}{trace_summary}<p class='small'>資料基準日：{_escape(traceability_status.get('as_of_date','—'))} · 來源擷取：{_escape(traceability_status.get('retrieved_at','—'))}</p><p><a href='market-events.html'>另看 H44 獨立市場事件 →</a></p><div class='grid grid-3'>{trace_cards}</div></section></main>"
         (root / "traceability/index.html").write_text(_document("相關產銷履歷", trace_index, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
         event_cards = "".join(
             f"<article class='card'><div class='label'>H44 市場事件 {len(event_grouped.get(item['canonical_id'], []))}</div>"
@@ -647,17 +805,17 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
             for item in items if event_grouped.get(item["canonical_id"])
         ) or "<p>目前沒有相符的 H44 市場事件。</p>"
         event_summary = f"<div class='grid grid-3'><div class='card'><div class='label'>市場事件</div><div class='value'>{traceability_event_status.get('published_record_count',len(traceability_events))}</div></div><div class='card'><div class='label'>市場數</div><div class='value'>{traceability_event_status.get('market_count',0)}</div></div><div class='card'><div class='label'>涵蓋觀察品項</div><div class='value'>{traceability_event_status.get('mapped_item_count',0)}</div></div></div>"
-        event_body = "<header class='page-hero'><div class='wrap'><div class='eyebrow'>H44 MARKET EVENTS</div><h1>可溯源市場交易事件</h1><p>日期／市場事件證據，與 registry lot 及 8066 行情分層</p></div></header>" + _toolbar("../") + f"<main id='main' class='wrap'><section class='section'><p class='note warn'>{EVENT_WARNING}</p><p class='disclaimer'>{DISCLAIM}</p>{_traceability_event_source_notice(traceability_event_status)}{event_summary}<p class='small'>事件日期：{_escape(traceability_event_status.get('requested_date','—'))} · 來源擷取：{_escape(traceability_event_status.get('retrieved_at','—'))}</p>{_traceability_event_table(traceability_events)}<h2>依觀察品項</h2><div class='grid grid-3'>{event_cards}</div></section></main>"
+        event_body = "<header class='page-hero'><div class='wrap'><div class='eyebrow'>H44 MARKET EVENTS</div><h1>可溯源市場交易事件</h1><p>日期／市場事件證據，與 registry lot 及 8066 行情分層</p></div></header>" + _toolbar("../", include_season_map) + f"<main id='main' class='wrap'><section class='section'><p class='note warn'>{EVENT_WARNING}</p><p class='disclaimer'>{DISCLAIM}</p>{_traceability_event_source_notice(traceability_event_status)}{event_summary}<p class='small'>事件日期：{_escape(traceability_event_status.get('requested_date','—'))} · 來源擷取：{_escape(traceability_event_status.get('retrieved_at','—'))}</p>{_traceability_event_table(traceability_events)}<h2>依觀察品項</h2><div class='grid grid-3'>{event_cards}</div></section></main>"
         (root / "traceability/market-events.html").write_text(_document("H44 可溯源市場交易事件", event_body, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
         for item in items:
             related = grouped.get(item["canonical_id"], [])
             table_rows = "".join(f"<tr><th scope='row'>{_escape(row['tracecode'])}</th><td>{_escape(row['producer'] or '—')}</td><td>{_escape(row['place'] or '—')}</td><td>{_escape(row['pack_date'] or '—')}</td><td>{_escape(row['certification_name'] or '—')}</td><td>{_escape(row['valid_date'] or '—')}</td><td><span class='badge {'pos' if row.get('certification_status')=='active' else 'neg' if row.get('certification_status')=='expired' else 'neu'}'>{_escape({'active':'有效','expired':'已到期','unknown':'未提供有效日'}.get(row.get('certification_status'),'未知'))}</span></td></tr>" for row in related) or "<tr><td colspan='7'>目前沒有相關紀錄。</td></tr>"
             related_events = event_grouped.get(item["canonical_id"], [])
-            trace_body = f"<header class='page-hero'><div class='wrap'><div class='eyebrow'>TRACEABILITY DETAIL</div><h1>{_escape(item['display_name'])}</h1></div></header>" + _toolbar("../") + f"<main id='main' class='wrap'><section class='section'><h2>7556 履歷批次</h2><p class='note warn'>{TRACE_WARNING}</p>{_traceability_source_notice(traceability_status)}<div class='table-wrap'><table><thead><tr><th>履歷代碼</th><th>組織</th><th>縣市</th><th>包裝日</th><th>驗證機構</th><th>有效至</th><th>狀態</th></tr></thead><tbody>{table_rows}</tbody></table></div></section><section class='section'><h2>H44 市場事件</h2><p class='note warn'>{EVENT_WARNING}</p><p class='disclaimer'>{DISCLAIM}</p>{_traceability_event_source_notice(traceability_event_status)}{_traceability_event_table(related_events)}</section></main>"
+            trace_body = f"<header class='page-hero'><div class='wrap'><div class='eyebrow'>TRACEABILITY DETAIL</div><h1>{_escape(item['display_name'])}</h1></div></header>" + _toolbar("../", include_season_map) + f"<main id='main' class='wrap'><section class='section'><h2>7556 履歷批次</h2><p class='note warn'>{TRACE_WARNING}</p>{_traceability_source_notice(traceability_status)}<div class='table-wrap'><table><thead><tr><th>履歷代碼</th><th>組織</th><th>縣市</th><th>包裝日</th><th>驗證機構</th><th>有效至</th><th>狀態</th></tr></thead><tbody>{table_rows}</tbody></table></div></section><section class='section'><h2>H44 市場事件</h2><p class='note warn'>{EVENT_WARNING}</p><p class='disclaimer'>{DISCLAIM}</p>{_traceability_event_source_notice(traceability_event_status)}{_traceability_event_table(related_events)}</section></main>"
             (root / "traceability" / f"{item['canonical_id']}.html").write_text(_document(f"{item['display_name']}相關履歷", trace_body, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
-    (root / "methodology.html").write_text(_document("方法說明", _methodology(source_status, quality, publication_status), "assets/css/app.css", "assets/js/app.js"), encoding="utf-8")
+    (root / "methodology.html").write_text(_document("方法說明", _methodology(source_status, quality, publication_status, include_season_map), "assets/css/app.css", "assets/js/app.js"), encoding="utf-8")
     links = "".join(f"<li><a href='../daily/{path.parent.parent.name}/{path.parent.name}/{path.stem}.html'>{path.stem}</a></li>" for path in sorted((root / "daily").rglob("*.html"), reverse=True))
-    archive_body = "<header class='page-hero'><div class='wrap'><div class='eyebrow'>ARCHIVE</div><h1>歷史日期</h1></div></header>" + _toolbar("../") + f"<main id='main' class='wrap'><section class='section'><ul class='archive-list'>{links}</ul></section></main>"
+    archive_body = "<header class='page-hero'><div class='wrap'><div class='eyebrow'>ARCHIVE</div><h1>歷史日期</h1></div></header>" + _toolbar("../", include_season_map) + f"<main id='main' class='wrap'><section class='section'><ul class='archive-list'>{links}</ul></section></main>"
     (root / "archive/index.html").write_text(_document("歷史封存", archive_body, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
     (root / "data/current.json").write_text(json.dumps({"as_of_date": as_of, "source_status": source_status, "publication_status": publication_status, "generation_mode": advice["generation_mode"], "prototype_complete": complete, "eligible_recommendations": len([row for row in scores if row.get("eligible")]), "items": rows, "scores": scores, "seasonality": seasonality, "season_catalog": season_catalog, "advice": advice, "traceability": traceability, "traceability_status": traceability_status, "traceability_events": traceability_events, "traceability_event_status": traceability_event_status, "quality": quality}, ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
 
