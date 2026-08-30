@@ -1,2 +1,3 @@
-from .cli import main
+from .entrypoint import main
+
 main()
