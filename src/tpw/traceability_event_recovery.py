@@ -2,11 +2,33 @@ import argparse
 import datetime as dt
 import json
 
-from .cli import _load_current_traceability_events, _persist_traceability_event_snapshot
+from .cli import (
+    _load_current_traceability_events,
+    _persist_traceability_event_snapshot,
+    _traceability_event_snapshot_paths,
+)
 from .traceability_events import validate_market_event_snapshot
 
 
 ZERO_MAPPED_REASON = "no_explicitly_mapped_records"
+
+
+def _load_requested_h44_snapshot(requested_date):
+    rows_path, profile_path = _traceability_event_snapshot_paths(requested_date)
+    if rows_path.exists() and profile_path.exists():
+        rows = json.loads(rows_path.read_text())
+        profile = json.loads(profile_path.read_text())
+        validate_market_event_snapshot(rows, profile)
+        if profile.get("requested_date") != requested_date:
+            raise ValueError(
+                "date-scoped traceability market event profile does not match requested date"
+            )
+        return rows, profile
+
+    current = _load_current_traceability_events()
+    if current is not None and current[1].get("requested_date") == requested_date:
+        return current
+    return None
 
 
 def preserve_same_date_h44_as_stale(requested_date, attempted_at=None):
@@ -17,8 +39,9 @@ def preserve_same_date_h44_as_stale(requested_date, attempted_at=None):
         .isoformat()
         .replace("+00:00", "Z")
     )
-    current = _load_current_traceability_events()
-    if current is None or current[1].get("requested_date") != requested_date:
+    snapshot = _load_requested_h44_snapshot(requested_date)
+    if snapshot is None:
+        current = _load_current_traceability_events()
         preserved_status = current[1].get("source_status", "none") if current else "none"
         return {
             "source_status": "unavailable",
@@ -28,7 +51,7 @@ def preserve_same_date_h44_as_stale(requested_date, attempted_at=None):
             "last_attempt_reason": ZERO_MAPPED_REASON,
         }
 
-    rows, profile = current
+    rows, profile = snapshot
     if profile.get("source_status") not in ("live", "stale"):
         return {
             "source_status": "unavailable",
