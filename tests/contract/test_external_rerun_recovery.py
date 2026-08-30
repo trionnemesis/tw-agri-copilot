@@ -35,11 +35,26 @@ class ExternalRerunRecoveryContractTest(unittest.TestCase):
         self.assertIn("PYTHONPATH=src python3 -m tpw fetch-traceability --as-of \"$AS_OF_DATE\"", self.workflow)
         self.assertIn("PYTHONPATH=src python3 -m tpw.traceability_snapshot --as-of \"$AS_OF_DATE\"", self.workflow)
 
+    def test_7556_refresh_has_a_publication_runtime_budget(self):
+        self.assertIn("TRACEABILITY_TIMEOUT_SECONDS: '300'", self.workflow)
+        self.assertIn('timeout "${TRACEABILITY_TIMEOUT_SECONDS}s" env PYTHONPATH=src python3 -m tpw fetch-traceability', self.workflow)
+        self.assertIn('if [ "$traceability_status" -eq 124 ]; then', self.workflow)
+        self.assertIn('using requested-date fixture/LKG context', self.workflow)
+        self.assertIn("PYTHONPATH=src python3 -m tpw.traceability_snapshot --as-of \"$AS_OF_DATE\"", self.workflow)
+
     def test_h44_remains_evening_only_for_rerun_recovery(self):
         self.assertIn(
             "github.event_name == 'push' && steps.dates.outputs.external_recovery == 'true' && steps.dates.outputs.effective_slot == 'evening-recovery'",
             self.workflow,
         )
+
+    def test_publication_rebases_only_when_newer_main_has_no_publication_changes(self):
+        self.assertIn('base_before_update="$(git rev-parse HEAD^)"', self.workflow)
+        self.assertIn("git fetch origin main", self.workflow)
+        self.assertIn("git diff --name-only \"$base_before_update\" origin/main | grep -Eq '^(data|reports|site)/'", self.workflow)
+        self.assertIn("refusing to overwrite it", self.workflow)
+        self.assertIn("git rebase origin/main", self.workflow)
+        self.assertIn("git push origin HEAD:main", self.workflow)
 
 
 if __name__ == "__main__":
