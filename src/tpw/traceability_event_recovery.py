@@ -1,11 +1,16 @@
 import argparse
 import datetime as dt
 import json
+import pathlib
+import shutil
+import tempfile
 
 from .cli import (
     _load_current_traceability_events,
     _persist_traceability_event_snapshot,
     _traceability_event_snapshot_paths,
+    swap,
+    write_json,
 )
 from .traceability_events import validate_market_event_snapshot
 
@@ -29,6 +34,26 @@ def _load_requested_h44_snapshot(requested_date):
     if current is not None and current[1].get("requested_date") == requested_date:
         return current
     return None
+
+
+def _persist_requested_h44_archive(rows, profile):
+    requested_date = profile["requested_date"]
+    rows_path, profile_path = _traceability_event_snapshot_paths(requested_date)
+    data_root = rows_path.parents[5]
+    stage = pathlib.Path(
+        tempfile.mkdtemp(prefix="tpw-traceability-events-archive-", dir=data_root.parent)
+    )
+    staged_data = stage / "data"
+    try:
+        if data_root.exists():
+            shutil.copytree(data_root, staged_data)
+        else:
+            staged_data.mkdir()
+        write_json(staged_data / rows_path.relative_to(data_root), rows)
+        write_json(staged_data / profile_path.relative_to(data_root), profile)
+        swap(staged_data, data_root)
+    finally:
+        shutil.rmtree(stage, ignore_errors=True)
 
 
 def preserve_same_date_h44_as_stale(requested_date, attempted_at=None):
@@ -69,7 +94,12 @@ def preserve_same_date_h44_as_stale(requested_date, attempted_at=None):
         last_attempt_reason=ZERO_MAPPED_REASON,
     )
     validate_market_event_snapshot(stale_rows, stale_profile)
-    _persist_traceability_event_snapshot(stale_rows, stale_profile)
+
+    current = _load_current_traceability_events()
+    if current is not None and current[1].get("requested_date") == requested_date:
+        _persist_traceability_event_snapshot(stale_rows, stale_profile)
+    else:
+        _persist_requested_h44_archive(stale_rows, stale_profile)
     return stale_profile
 
 
