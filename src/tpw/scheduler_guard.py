@@ -18,7 +18,6 @@ TAIPEI = ZoneInfo("Asia/Taipei")
 WORKFLOW_FILE = "daily-update.yml"
 API_VERSION = "2022-11-28"
 MIN_RECOVERY_DELAY = timedelta(minutes=20)
-MAX_RECOVERY_DELAY = timedelta(hours=4)
 REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 
@@ -98,10 +97,6 @@ def expected_primary_time(slot: RecoverySlot, now: datetime) -> datetime:
     if delay < MIN_RECOVERY_DELAY:
         raise SchedulerGuardError(
             f"recovery guard is too early for {slot.primary_cron}: delay={delay}"
-        )
-    if delay > MAX_RECOVERY_DELAY:
-        raise SchedulerGuardError(
-            f"recovery guard is too late for {slot.primary_cron}: delay={delay}"
         )
     return expected
 
