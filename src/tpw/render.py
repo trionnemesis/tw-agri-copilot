@@ -134,6 +134,8 @@ def _market_status_notice(status):
     elif state == "incomplete":
         heading = f"{requested} 行情尚未完整"
         message = f"今日資料已檢查，但尚未涵蓋完整觀察清單；目前顯示最近完整交易日 {resolved}。"
+        if schedule_status == "scheduled_closed":
+            message += f" {market_names}同日為官方公告休市（{calendar['reason']}）。"
     elif state == "pending":
         heading = f"{requested} 尚無完整行情"
         if schedule_status in ("expected_open", "exceptional_open"):
