@@ -98,6 +98,47 @@ def _window(rows, as_of, days, minimum_days):
     }
 
 
+def _range_stats(rows, as_of, days, minimum_days):
+    start = as_of - dt.timedelta(days=days - 1)
+    selected = [
+        row
+        for row in rows
+        if start <= dt.date.fromisoformat(row["transaction_date"]) <= as_of
+        and row["weighted_avg_price_twd_per_kg"] is not None
+        and row["total_volume_kg"] > 0
+    ]
+    observed_days = len({row["transaction_date"] for row in selected})
+    if not selected:
+        return {
+            "observed_days": 0,
+            "minimum_days": minimum_days,
+            "min_price_twd_per_kg": None,
+            "min_date": None,
+            "max_price_twd_per_kg": None,
+            "max_date": None,
+            "status": "insufficient",
+        }
+    min_price = min(row["weighted_avg_price_twd_per_kg"] for row in selected)
+    max_price = max(row["weighted_avg_price_twd_per_kg"] for row in selected)
+    return {
+        "observed_days": observed_days,
+        "minimum_days": minimum_days,
+        "min_price_twd_per_kg": _round(min_price),
+        "min_date": min(
+            row["transaction_date"]
+            for row in selected
+            if row["weighted_avg_price_twd_per_kg"] == min_price
+        ),
+        "max_price_twd_per_kg": _round(max_price),
+        "max_date": min(
+            row["transaction_date"]
+            for row in selected
+            if row["weighted_avg_price_twd_per_kg"] == max_price
+        ),
+        "status": "valid" if observed_days >= minimum_days else "insufficient",
+    }
+
+
 def build_series(daily_aggregates, as_of_date):
     as_of = dt.date.fromisoformat(as_of_date)
     groups = {}
@@ -132,6 +173,10 @@ def build_series(daily_aggregates, as_of_date):
         )
         windows = {
             name: _window(rows, as_of, days, minimum)
+            for name, (days, minimum) in WINDOWS.items()
+        }
+        range_stats = {
+            name: _range_stats(rows, as_of, days, minimum)
             for name, (days, minimum) in WINDOWS.items()
         }
         today_price = today["weighted_avg_price_twd_per_kg"]
@@ -183,6 +228,7 @@ def build_series(daily_aggregates, as_of_date):
                     "status": "valid" if previous else "insufficient",
                 },
                 "windows": windows,
+                "range_stats": range_stats,
                 "volatility_7d_cv": _round(volatility),
                 "volatility_7d_status": (
                     "valid" if len(seven_prices) >= 3 else "insufficient"
