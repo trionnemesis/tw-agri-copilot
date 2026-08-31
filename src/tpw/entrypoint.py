@@ -4,6 +4,7 @@ import sys
 
 from . import cli
 from .traceability_event_recovery import preserve_same_date_h44_as_stale
+from .trend_quant import enhance_price_trends
 
 
 ZERO_MAPPED_ERROR = "traceability market events have no explicitly mapped records"
@@ -29,7 +30,10 @@ def main(argv=None):
     source_argv = sys.argv[1:] if argv is None else argv
     normalized_argv, requested_h44_date = _normalize_h44_argv(source_argv)
     try:
-        return cli.main(normalized_argv)
+        result = cli.main(normalized_argv)
+        if normalized_argv and normalized_argv[0] == "build":
+            enhance_price_trends()
+        return result
     except ValueError as exc:
         if requested_h44_date is not None and str(exc) == ZERO_MAPPED_ERROR:
             preserve_same_date_h44_as_stale(requested_h44_date)
