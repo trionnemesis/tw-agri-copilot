@@ -3,7 +3,7 @@ import pathlib
 import tempfile
 import unittest
 
-from tpw.trend_quant import CSS_MARKER, enhance_price_trends
+from tpw.trend_quant import STYLE_ATTR, enhance_price_trends
 
 
 class TrendQuantTest(unittest.TestCase):
@@ -93,7 +93,7 @@ class TrendQuantTest(unittest.TestCase):
 
     def page(self):
         return (
-            "<!doctype html><html><body><main>"
+            "<!doctype html><html><head><link rel='stylesheet' href='../assets/css/app.css'></head><body><main>"
             "<section class='section'><div class='grid grid-4'></div></section>"
             "<section class='section'><h2>Buy Score 與產季</h2><p>score</p></section>"
             "<section class='section'><h2>近 120 日價格趨勢</h2>"
@@ -127,6 +127,7 @@ class TrendQuantTest(unittest.TestCase):
             self.assertIn("30D 有效日", result)
             self.assertIn("最多 120 日價格趨勢 · 實際 4 個有效交易日", result)
             self.assertIn("data-trend-chart='v1'", result)
+            self.assertIn(STYLE_ATTR, result)
             self.assertIn("NT$ 28.00/kg", result)
             self.assertIn("30D 高點 NT$ 29.00/kg", result)
             self.assertIn("30D 低點 NT$ 26.00/kg", result)
@@ -135,7 +136,7 @@ class TrendQuantTest(unittest.TestCase):
             self.assertIn("keep-me", result)
             self.assertNotIn("近期香港價格趨勢折線圖", result)
 
-    def test_css_and_html_are_idempotent(self):
+    def test_styles_and_html_are_idempotent_without_mutating_global_css(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             self.prepare(root)
@@ -145,7 +146,8 @@ class TrendQuantTest(unittest.TestCase):
             css = (root / "site/assets/css/app.css").read_text(encoding="utf-8")
             self.assertEqual(page.count("data-trend-quant='v1'"), 2)
             self.assertEqual(page.count("價格量化摘要"), 1)
-            self.assertEqual(css.count(CSS_MARKER), 1)
+            self.assertEqual(page.count(STYLE_ATTR), 1)
+            self.assertEqual(css, "body{}\n")
 
     def test_invalid_daily_observation_is_not_counted_or_zero_filled(self):
         with tempfile.TemporaryDirectory() as tmp:
