@@ -6,7 +6,7 @@ import pathlib
 import re
 
 
-CSS_MARKER = "/* quantitative-price-trends-v1 */"
+STYLE_ATTR = "data-trend-quant-style='v1'"
 PRICE_TREND_CSS = """
 /* quantitative-price-trends-v1 */
 .trend-quant-summary .grid{margin-top:12px}.trend-quant-summary .card{padding:13px}.trend-quant-summary .value{font-size:1.08rem}.trend-quant-summary .sub{margin-top:4px}.quantitative-chart{height:auto;min-height:300px;overflow-x:auto;padding:10px}.quantitative-chart svg{display:block;width:100%;min-width:640px;height:auto;aspect-ratio:760/280}.chart-grid{stroke:#e1e8f0;stroke-width:1}.chart-axis{stroke:#9ba9ba;stroke-width:1.2}.chart-line{fill:none;stroke:var(--blue);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.chart-ref{stroke-width:1.5;stroke-dasharray:6 5}.chart-ref-7d{stroke:var(--green)}.chart-ref-30d{stroke:var(--amber)}.chart-point{stroke:#fff;stroke-width:2}.chart-point-latest{fill:var(--blue)}.chart-point-high{fill:var(--red)}.chart-point-low{fill:var(--green)}.chart-tick,.chart-label,.chart-ref-label{fill:#53647a;font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif;font-size:11px}.chart-label{font-weight:800;fill:#26364b}.chart-ref-label{font-weight:750}.trend-chart-note{margin:.55rem 0 0;color:var(--muted);font-size:.82rem}.trend-stat-insufficient{color:var(--amber);font-weight:800}@media(max-width:620px){.quantitative-chart{margin-inline:-4px}.trend-quant-summary .grid-4{grid-template-columns:1fr 1fr}}@media print{.quantitative-chart{overflow:visible}.quantitative-chart svg{min-width:0}.trend-quant-summary .card{break-inside:avoid}}
@@ -264,6 +264,7 @@ def _chart_html(series):
         f"30D 高低點統計狀態：{status_note}。"
     )
     aria = html.escape(accessible, quote=True)
+    insufficient_class = "trend-stat-insufficient" if range_30d.get("status") != "valid" else ""
     return (
         f"<div class='chart quantitative-chart' data-trend-chart='v1' role='img' aria-label='{aria}'>"
         f"<svg viewBox='0 0 {int(width)} {int(height)}' aria-hidden='true' focusable='false'>"
@@ -274,11 +275,24 @@ def _chart_html(series):
         + "".join(markers)
         + "</svg>"
         + f"<p class='sr-only'>{html.escape(accessible)}</p></div>"
-        + f"<p class='trend-chart-note'>價格軸依實際觀測範圍產生刻度，不強制從 0 起算；休市與缺資料不補 0。30D 高低點：<span class='{'trend-stat-insufficient' if range_30d.get('status') != 'valid' else ''}'>{status_note}</span>。</p>"
+        + f"<p class='trend-chart-note'>價格軸依實際觀測範圍產生刻度，不強制從 0 起算；休市與缺資料不補 0。30D 高低點：<span class='{insufficient_class}'>{status_note}</span>。</p>"
     )
 
 
 def _replace_product_html(source, series):
+    source = re.sub(
+        r"<style data-trend-quant-style='v1'>.*?</style>",
+        "",
+        source,
+        flags=re.S,
+    )
+    if "</head>" not in source:
+        raise ValueError("produce page head marker is missing")
+    source = source.replace(
+        "</head>",
+        f"<style {STYLE_ATTR}>{PRICE_TREND_CSS.strip()}</style></head>",
+        1,
+    )
     source = re.sub(
         r"<section class='section trend-quant-summary' data-trend-quant='v1'>.*?</section>",
         "",
@@ -316,21 +330,10 @@ def _replace_product_html(source, series):
     return source
 
 
-def _append_css(site_root):
-    css_path = site_root / "assets/css/app.css"
-    if not css_path.exists():
-        raise ValueError("site CSS is missing after build")
-    css = css_path.read_text(encoding="utf-8")
-    if CSS_MARKER not in css:
-        css = css.rstrip() + "\n" + PRICE_TREND_CSS.strip() + "\n"
-        css_path.write_text(css, encoding="utf-8")
-
-
 def enhance_price_trends(root=None):
     root = pathlib.Path.cwd() if root is None else pathlib.Path(root)
-    site_root = root / "site"
     series_root = root / "data/series"
-    produce_root = site_root / "produce"
+    produce_root = root / "site/produce"
     if not series_root.exists() or not produce_root.exists():
         raise ValueError("price trend enhancement requires built series and produce pages")
 
@@ -347,5 +350,4 @@ def enhance_price_trends(root=None):
         enhanced += 1
     if enhanced == 0:
         raise ValueError("no produce pages matched price series")
-    _append_css(site_root)
     return enhanced
