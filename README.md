@@ -11,7 +11,7 @@
 
 ## Why
 
-「今天吃什麼」不該只靠一個價格數字。Taiwan Produce Watch 將 20 項台灣常見蔬果的市場資料轉成前一交易日、7／30／90 日趨勢、coverage、產季與 deterministic Buy Score；AI 層只負責解釋，不能改寫分數或 verdict。
+「今天吃什麼」不該只靠一個價格數字。Taiwan Produce Watch 將 20 項台灣常見蔬果的市場資料轉成前一交易日、7／30／90 日趨勢、coverage、deterministic range statistics、產季與 deterministic Buy Score；品項頁再把同一份時間序列轉成有價格／日期刻度、最新值、參考均價與區間高低點的量化 SVG。AI 層只負責解釋，不能改寫數字、分數或 verdict。
 
 本專案目前是 **side-project prototype**。行情、官方市場日曆、產季與產銷履歷各自保存來源狀態；臺北一／臺北二使用已驗證的臺北農產年度休市日曆，產季可抓取農糧署完整月份清單，並以 22 縣市產季地圖分開呈現「官方產期明列的當地品項」與「已保存官方證據的果菜批發市場」。產銷履歷則分成農業部 7556 隱私最小化 registry snapshot 與 H44 市場事件證據。7556 與 H44 都保存日期限定 snapshot，historical build 不會直接重用未來的 `current`。暫時性故障才沿用符合相同資料語意的 last-known-good 或明確標示的 fixture／manual fallback。Advice 仍使用 deterministic fallback，因此它不是完整的即時官方服務。
 
@@ -30,10 +30,11 @@
 | Issue #8 · Live seasonality | 農糧署 HTML adapter、完整分頁、月份 catalog、LKG／fallback、完整當季清單 | 只做明確名稱 mapping；不做 fuzzy mapping |
 | Issue #19 · Produce icons | 專案自有 SVG sprite、39 個現有顯示名稱的 exact registry、分類 fallback、列印與 responsive 樣式 | 圖示是裝飾性提示；文字名稱仍是唯一語意來源 |
 | Issue #30 · County season map | 內政部國土測繪中心 22 縣市界線衍生 SVG、exact county aggregation、verified official-market registry、靜態 no-JS sections、URL／鍵盤／touch 操作 | 產期與市場 metadata 分區呈現；品項數不是產量，市場所在地不證明成交品產地 |
+| Issue #40 · Quantitative price trends | 7／30／90D range stats、價格／日期刻度、最新價、7D／30D 參考均價、30D high／low、coverage／CV 摘要與 desktop/mobile browser verification | 純描述統計；不插值、不把休市／缺資料補 0、不做價格預測、不改 Buy Score |
 | Issue #3 · Official calendar | 臺北農產 115 年休市日曆、臺北一／臺北二 market registry、calendar／feed 分離與 discrepancy 狀態 | 日曆不加入行情 aggregate 或 Buy Score；未知年度不宣稱官方休市 |
 | Issue #3 · Source contract 2A | 通用 `SourceAdapter`／`RawBatch`、四種交易來源角色、run lineage 與 economic-observation dedup | 目前只有 8066 是 production `authoritative_final`；第二 adapter 僅為離線 fixture，TAPMC parity 等後續市場來源切片尚未啟用 |
 
-首頁核心內容、當季圖示與 22 縣市地圖 detail sections 不依賴 JavaScript；JS 只提供當季搜尋／篩選、地圖選取、URL 狀態同步、焦點移動與列印。地圖另提供 visible `<select>`，桌機、手機 touch 與鍵盤操作共用同一 county slug；停用 JS 時仍可用 SVG anchor 閱讀全部縣市。桌機／平板／手機採 responsive cards。
+首頁核心內容、當季圖示與 22 縣市地圖 detail sections 不依賴 JavaScript；JS 只提供當季搜尋／篩選、地圖選取、URL 狀態同步、焦點移動與列印。地圖另提供 visible `<select>`，桌機、手機 touch 與鍵盤操作共用同一 county slug；停用 JS 時仍可用 SVG anchor 閱讀全部縣市。品項價格圖同樣在 build-time 產生靜態 HTML／SVG，不需要 browser-side fetch 或 chart CDN。桌機／平板／手機採 responsive cards。
 
 ## 資料流程
 
@@ -48,9 +49,11 @@ flowchart LR
   N --> U[Correction-safe upsert]
   U --> A[Weighted daily aggregate]
   A --> S[Previous day + 7/30/90D series]
+  S --> G[Range stats + quantitative SVG]
   F[Official seasonality or LKG/fallback] --> B[Deterministic Buy Score]
   F --> H
   S --> B
+  G --> H
   B --> D[Advice provider contract]
   D --> H[Static HTML + JSON + Markdown]
   P --> H
@@ -64,7 +67,7 @@ flowchart LR
   Y -. no aggregate or score join .-> B
 ```
 
-Build 只從已保存的 normalized history 重算，不從生成後的 HTML 或 aggregate history 反推資料。`data/`、`site/`、`reports/` 以 staging + rollback promotion 一次更新。
+Build 只從已保存的 normalized history 重算，不從生成後的 HTML 或 aggregate history 反推資料。`data/`、`site/`、`reports/` 以 staging + rollback promotion 一次更新。量化價格圖只消費 `data/series/*.json` 的 deterministic 衍生欄位與有效 daily observations；缺資料或休市不插值、不補 0。
 
 產季地圖只消費同一份月份 catalog、checked-in county registry、checked-in 官方市場 registry 與人工審查的簡化 SVG；瀏覽器不連外抓地圖、GeoJSON 或行情。衍生 payload 固定寫入 `site/data/season-map/current.json`，不擴張 `site/data/current.json`，因此相同 input 下原有 aggregate、features 與 Buy Score 不變。
 
@@ -139,7 +142,7 @@ python3 -m http.server 8000 --directory site
 | `fetch-traceability-events --as-of DATE` | 受控更新農業部 H44 單日市場事件；只有同 requested date 的 LKG 可 stale，跨日期失敗不搬用舊事件 |
 | `validate-traceability-events` | 驗證 H44 事件、source profile、event identity 與 aggregate／Buy Score 排除旗標 |
 | `backfill --days N --end DATE` | 以最多 4 日的 bounded windows 抓取市場資料 |
-| `build --as-of DATE` | 從 retained normalized history 重建所有衍生資料與網站 |
+| `build --as-of DATE` | 從 retained normalized history 重建所有衍生資料、range statistics、量化價格 SVG 與網站 |
 | `validate-data --as-of DATE` | 驗證 normalized 與 PR2–PR5 衍生資料樹 |
 | `verify-site --as-of DATE` | 檢查 routes、links、SVG sprite／fragment、disclaimers、secrets、size 與 prototype gates |
 
@@ -148,7 +151,7 @@ python3 -m http.server 8000 --directory site
 | Route | 內容 |
 |---|---|
 | [`/`](https://trionnemesis.github.io/tw-agri-copilot/) | 推薦、advice、產季、movers、trends、履歷與來源 |
-| `/produce/<canonical-id>.html` | 20 個品項的價格、coverage、score，以及分開呈現的 7556 履歷與 H44 事件 |
+| `/produce/<canonical-id>.html` | 20 個品項的價格量化摘要、最多 120 日刻度折線、7D／30D 參考均價、30D high／low、coverage、CV、score，以及分開呈現的 7556 履歷與 H44 事件 |
 | `/trends/daily.html` | 前一有效交易日比較 |
 | `/trends/weekly.html` | 7 日 rolling view |
 | `/trends/monthly.html` | 30 日 rolling view |
@@ -167,6 +170,7 @@ python3 -m http.server 8000 --directory site
 - 交易來源角色限為 `authoritative_final | provisional | validation | contextual`；目前農業部 8066 的 precedence 為 100 且是唯一 production `authoritative_final`。非 final 角色一律不得進 aggregate／Buy Score。
 - `data/source-runs/` 保存 adapter／source schema version、retrieved time、content hash、precedence、eligible／suppressed count，以及重疊 observation 的 machine-readable 決策。相同 economic identity 最多一筆 eligible；相同 identity 的不同正式來源同優先序時 fail closed。
 - 第二種 transaction schema 目前只存在於離線 contract fixture，用來證明 analytics、scoring、render 不依賴來源實作；沒有新增 production scraping，也沒有把 TAPMC 重複行情疊加到 8066。
+- 價格量化圖與 `range_stats` 只使用已保存的 8066-derived daily observations；Y 軸依實際觀測範圍產生可讀刻度，coverage 不足明確標示 `insufficient`，休市／缺資料不補 0。high／low、CV 與均價都是 descriptive statistics，不宣稱預測能力，也不改 Buy Score。
 - Market calendar 是獨立 `calendar` source：目前只涵蓋臺北一 `109`、臺北二 `104`。115 年 fixture 對應官方 PDF 的 80 個休市日／285 個交易日，保存 document URL、calendar／parser version、retrieved time 與 SHA-256；不以空 feed 或固定週一規則取代 fixture。
 - `expected_open | scheduled_closed | exceptional_open | unknown` 與 `available | empty | delayed | failed | not_checked` 分開判定；只有具 fixture lineage 的結果可標示「官方公告休市」。
 - Seasonality 優先使用農糧署官方月份清單，逐頁驗證分類、月份與欄位；transient failure 才使用 `stale`／`fallback`，schema drift 直接失敗。
@@ -192,7 +196,7 @@ python3 -m http.server 8000 --directory site
 
 ```text
 config/                 watchlist、county／official-market registry、map lineage、calendar 文件契約、score、fixture 與 fallback 設定
-src/tpw/                adapters、normalization、analytics、score、advice、season-map、render、CLI 與圖示 registry
+src/tpw/                adapters、normalization、analytics、trend_quant、score、advice、season-map、render、CLI 與圖示 registry
 src/tpw/assets/         專案自有 SVG sprite 與受控簡化的臺灣縣市 SVG 原始資產
 data/                   normalized history、source-run evidence、月份產季 catalog、產銷履歷 registry／H44 market-events、Agent Run 寫入區與可重建的衍生 JSON
 data/market-status/     最近一次市場日檢查與休市／延遲狀態
@@ -216,6 +220,7 @@ VERIFICATION.md         本地與遠端 acceptance evidence
 
 - Prototype fixture：可重建、可測試、可部署。
 - Live market adapter：已實作 bounded fetch path；本版未進行 live 120-day release 驗證。
+- Quantitative price trends：`data/series/*.json` 已保存 7／30／90D range stats；20 個品項頁以 build-time static SVG 顯示價格／日期刻度、最新價、7D／30D 參考均價、30D high／low、coverage 與 7D CV。fixture rebuild、`verify-site`、unit/integration 及桌機／手機 Playwright 都納入 CI；不做預測、不改 scoring。
 - Phase 2A source contract：8066 已移除 ingest／normalize 的來源硬編碼；第二 fixture adapter、四種角色、precedence、去重、supersession evidence 與 schema-drift fail-safe 均有離線測試。TAPMC parity、provisional feed、contextual layer、地方市場擴充與 Buy Score vNext 仍屬後續切片。
 - Official market calendar：臺北一／臺北二 115 年 fixture 已實作；calendar／feed 分離、特殊週一開市、非週一休市、未知年度與 discrepancy 均有離線測試。
 - External AI provider：未啟用；固定走 deterministic fallback。
