@@ -1,5 +1,6 @@
 import json
 import pathlib
+import re
 import tempfile
 import unittest
 
@@ -131,6 +132,9 @@ class TrendQuantTest(unittest.TestCase):
             self.assertIn("NT$ 28.00/kg", result)
             self.assertIn("30D 高點 NT$ 29.00/kg", result)
             self.assertIn("30D 低點 NT$ 26.00/kg", result)
+            self.assertIn("data-chart-label='7d'", result)
+            self.assertIn("data-chart-label='30d'", result)
+            self.assertIn("data-chart-label='latest'", result)
             self.assertIn("休市與缺資料不補 0", result)
             self.assertIn("資料不足", result)
             self.assertIn("keep-me", result)
@@ -165,6 +169,33 @@ class TrendQuantTest(unittest.TestCase):
             result = (root / "site/produce/banana.html").read_text(encoding="utf-8")
             self.assertIn("實際 4 個有效交易日", result)
             self.assertNotIn("最新 NT$ 0.00/kg", result)
+
+    def test_clustered_chart_annotations_have_spaced_bounded_baselines(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            self.prepare(root)
+            payload = self.series()
+            payload["windows"]["7d"]["price_twd_per_kg"] = 28.0
+            payload["windows"]["30d"]["price_twd_per_kg"] = 28.0
+            payload["range_stats"]["30d"]["max_date"] = "2026-08-30"
+            payload["range_stats"]["30d"]["max_price_twd_per_kg"] = 28.0
+            (root / "data/series/banana.json").write_text(
+                json.dumps(payload), encoding="utf-8"
+            )
+
+            enhance_price_trends(root)
+            result = (root / "site/produce/banana.html").read_text(encoding="utf-8")
+            labels = re.findall(
+                r"<text x='[^']+' y='([0-9.]+)' text-anchor='[^']+' class='[^']+' data-chart-label='([^']+)'>",
+                result,
+            )
+            self.assertEqual({key for _, key in labels}, {"7d", "30d", "latest", "high", "low"})
+            baselines = sorted(float(y) for y, _ in labels)
+            self.assertGreaterEqual(min(baselines), 36.0)
+            self.assertLessEqual(max(baselines), 224.0)
+            self.assertTrue(
+                all(next_y - current_y >= 17.9 for current_y, next_y in zip(baselines, baselines[1:]))
+            )
 
 
 if __name__ == "__main__":
