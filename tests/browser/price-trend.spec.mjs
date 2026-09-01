@@ -23,6 +23,27 @@ test('produce page exposes a readable quantitative price trend', async ({ page }
   await expect(chart.locator('.chart-point-low')).toHaveCount(1);
   await expect(chart.locator('.chart-tick').filter({ hasText: 'NT$' }).first()).toBeVisible();
 
+  const annotations = chart.locator('[data-chart-label]');
+  await expect(annotations).toHaveCount(5);
+  const annotationBoxes = await annotations.evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const box = node.getBoundingClientRect();
+      return {
+        key: node.getAttribute('data-chart-label'),
+        top: box.top,
+        bottom: box.bottom,
+      };
+    }),
+  );
+  for (let leftIndex = 0; leftIndex < annotationBoxes.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < annotationBoxes.length; rightIndex += 1) {
+      const leftBox = annotationBoxes[leftIndex];
+      const rightBox = annotationBoxes[rightIndex];
+      const overlap = Math.min(leftBox.bottom, rightBox.bottom) - Math.max(leftBox.top, rightBox.top);
+      expect(overlap, `${leftBox.key} overlaps ${rightBox.key}`).toBeLessThanOrEqual(0.5);
+    }
+  }
+
   const accessibleSummary = await chart.getAttribute('aria-label');
   expect(accessibleSummary).toContain('有效交易日');
   expect(accessibleSummary).toContain('7D 均價');
