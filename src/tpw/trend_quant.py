@@ -9,7 +9,7 @@ import re
 STYLE_ATTR = "data-trend-quant-style='v1'"
 PRICE_TREND_CSS = """
 /* quantitative-price-trends-v1 */
-.trend-quant-summary .grid{margin-top:12px}.trend-quant-summary .card{padding:13px}.trend-quant-summary .value{font-size:1.08rem}.trend-quant-summary .sub{margin-top:4px}.quantitative-chart{height:auto;min-height:300px;overflow-x:auto;padding:10px}.quantitative-chart svg{display:block;width:100%;min-width:640px;height:auto;aspect-ratio:760/280}.chart-grid{stroke:#e1e8f0;stroke-width:1}.chart-axis{stroke:#9ba9ba;stroke-width:1.2}.chart-line{fill:none;stroke:var(--blue);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.chart-ref{stroke-width:1.5;stroke-dasharray:6 5}.chart-ref-7d{stroke:var(--green)}.chart-ref-30d{stroke:var(--amber)}.chart-point{stroke:#fff;stroke-width:2}.chart-point-latest{fill:var(--blue)}.chart-point-high{fill:var(--red)}.chart-point-low{fill:var(--green)}.chart-tick,.chart-label,.chart-ref-label{fill:#53647a;font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif;font-size:11px}.chart-label{font-weight:800;fill:#26364b}.chart-ref-label{font-weight:750}.trend-chart-note{margin:.55rem 0 0;color:var(--muted);font-size:.82rem}.trend-stat-insufficient{color:var(--amber);font-weight:800}@media(max-width:620px){.quantitative-chart{margin-inline:-4px}.trend-quant-summary .grid-4{grid-template-columns:1fr 1fr}}@media print{.quantitative-chart{overflow:visible}.quantitative-chart svg{min-width:0}.trend-quant-summary .card{break-inside:avoid}}
+.trend-quant-summary .grid{margin-top:12px}.trend-quant-summary .card{padding:13px}.trend-quant-summary .value{font-size:1.08rem}.trend-quant-summary .sub{margin-top:4px}.quantitative-chart{height:auto;min-height:300px;overflow-x:auto;padding:10px}.quantitative-chart svg{display:block;width:100%;min-width:640px;height:auto;aspect-ratio:760/280}.chart-grid{stroke:#e1e8f0;stroke-width:1}.chart-axis{stroke:#9ba9ba;stroke-width:1.2}.chart-line{fill:none;stroke:var(--blue);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}.chart-ref{stroke-width:1.5;stroke-dasharray:6 5}.chart-ref-7d{stroke:var(--green)}.chart-ref-30d{stroke:var(--amber)}.chart-point{stroke:#fff;stroke-width:2}.chart-point-latest{fill:var(--blue)}.chart-point-high{fill:var(--red)}.chart-point-low{fill:var(--green)}.chart-tick,.chart-label,.chart-ref-label{fill:#53647a;font-family:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif;font-size:11px}.chart-label{font-weight:800;fill:#26364b}.chart-ref-label{font-weight:750}.chart-label,.chart-ref-label{paint-order:stroke;stroke:var(--surface,#f7f9fc);stroke-width:3px;stroke-linejoin:round}.trend-chart-note{margin:.55rem 0 0;color:var(--muted);font-size:.82rem}.trend-stat-insufficient{color:var(--amber);font-weight:800}@media(max-width:620px){.quantitative-chart{margin-inline:-4px}.trend-quant-summary .grid-4{grid-template-columns:1fr 1fr}}@media print{.quantitative-chart{overflow:visible}.quantitative-chart svg{min-width:0}.trend-quant-summary .card{break-inside:avoid}}
 """
 
 
@@ -167,6 +167,51 @@ def _x_ticks(points, count=5):
     return [points[index] for index in indexes]
 
 
+def _spread_label_positions(labels, min_y, max_y, min_gap=18.0):
+    """Return deterministic non-overlapping label baselines within the chart bounds."""
+    if not labels:
+        return {}
+    if max_y < min_y:
+        min_y, max_y = max_y, min_y
+
+    ordered = sorted(
+        enumerate(labels),
+        key=lambda item: (float(item[1]["desired_y"]), item[0]),
+    )
+    if len(ordered) == 1:
+        _, label = ordered[0]
+        return {label["key"]: min(max(float(label["desired_y"]), min_y), max_y)}
+
+    available = max_y - min_y
+    gap = min(float(min_gap), available / (len(ordered) - 1))
+    positions = []
+    for _, label in ordered:
+        desired = min(max(float(label["desired_y"]), min_y), max_y)
+        y = desired if not positions else max(desired, positions[-1] + gap)
+        positions.append(y)
+
+    overflow = positions[-1] - max_y
+    if overflow > 0:
+        positions = [y - overflow for y in positions]
+    if positions[0] < min_y:
+        positions[0] = min_y
+        for index in range(1, len(positions)):
+            positions[index] = max(positions[index], positions[index - 1] + gap)
+
+    return {
+        label["key"]: positions[position_index]
+        for position_index, (_, label) in enumerate(ordered)
+    }
+
+
+def _annotation_html(annotation, y):
+    return (
+        f"<text x='{annotation['x']:.1f}' y='{y:.1f}' text-anchor='{annotation['anchor']}' "
+        f"class='{annotation['css_class']}' data-chart-label='{annotation['key']}'>"
+        f"{annotation['text']}</text>"
+    )
+
+
 def _chart_html(series):
     points = _valid_points(series)
     if len(points) < 2:
@@ -217,6 +262,7 @@ def _chart_html(series):
     )
 
     references = []
+    annotations = []
     for window_name, css_class, label in (
         ("7d", "chart-ref-7d", "7D 均價"),
         ("30d", "chart-ref-30d", "30D 均價"),
@@ -227,15 +273,34 @@ def _chart_html(series):
         y = y_for(float(value))
         references.append(
             f"<line x1='{left:.1f}' y1='{y:.1f}' x2='{width-right:.1f}' y2='{y:.1f}' class='chart-ref {css_class}'/>"
-            f"<text x='{width-right-2:.1f}' y='{y-5:.1f}' text-anchor='end' class='chart-ref-label'>{label} {_price(value)}</text>"
+        )
+        annotations.append(
+            {
+                "key": window_name,
+                "x": width - right - 2,
+                "desired_y": y - 5,
+                "anchor": "end",
+                "css_class": "chart-ref-label",
+                "text": f"{label} {_price(value)}",
+            }
         )
 
     point_by_date = {point["date"]: point for point in points}
     markers = []
     latest = points[-1]
+    latest_y = y_for(latest["price"])
     markers.append(
-        f"<circle cx='{x_for(latest):.1f}' cy='{y_for(latest['price']):.1f}' r='5' class='chart-point chart-point-latest'/>"
-        f"<text x='{x_for(latest)-8:.1f}' y='{max(top+12, y_for(latest['price'])-10):.1f}' text-anchor='end' class='chart-label'>最新 {_price(latest['price'])}</text>"
+        f"<circle cx='{x_for(latest):.1f}' cy='{latest_y:.1f}' r='5' class='chart-point chart-point-latest'/>"
+    )
+    annotations.append(
+        {
+            "key": "latest",
+            "x": x_for(latest) - 8,
+            "desired_y": max(top + 12, latest_y - 10),
+            "anchor": "end",
+            "css_class": "chart-label",
+            "text": f"最新 {_price(latest['price'])}",
+        }
     )
 
     range_30d = series.get("range_stats", {}).get("30d", {})
@@ -248,12 +313,38 @@ def _chart_html(series):
         point = point_by_date.get(date_value)
         if point is None or price_value is None:
             continue
+        point_x = x_for(point)
         y = y_for(float(price_value))
-        y_text = max(top + 12, y - 10) if key == "max" else min(height - bottom - 8, y + 18)
+        desired_y = max(top + 12, y - 10) if key == "max" else min(height - bottom - 8, y + 18)
+        if point_x < left + 140:
+            text_x, anchor = point_x + 8, "start"
+        elif point_x > width - right - 140:
+            text_x, anchor = point_x - 8, "end"
+        else:
+            text_x, anchor = point_x, "middle"
         markers.append(
-            f"<circle cx='{x_for(point):.1f}' cy='{y:.1f}' r='4.5' class='chart-point {css_class}'/>"
-            f"<text x='{x_for(point):.1f}' y='{y_text:.1f}' text-anchor='middle' class='chart-label'>{label} {_price(price_value)} · {html.escape(date_value[5:])}</text>"
+            f"<circle cx='{point_x:.1f}' cy='{y:.1f}' r='4.5' class='chart-point {css_class}'/>"
         )
+        annotations.append(
+            {
+                "key": "high" if key == "max" else "low",
+                "x": text_x,
+                "desired_y": desired_y,
+                "anchor": anchor,
+                "css_class": "chart-label",
+                "text": f"{label} {_price(price_value)} · {html.escape(date_value[5:])}",
+            }
+        )
+
+    label_positions = _spread_label_positions(
+        annotations,
+        min_y=top + 12,
+        max_y=height - bottom - 8,
+    )
+    annotation_markup = [
+        _annotation_html(annotation, label_positions[annotation["key"]])
+        for annotation in annotations
+    ]
 
     status_note = _status_label(range_30d.get("status"))
     accessible = (
@@ -273,6 +364,7 @@ def _chart_html(series):
         + "".join(references)
         + f"<polyline points='{line_points}' class='chart-line'/>"
         + "".join(markers)
+        + "".join(annotation_markup)
         + "</svg>"
         + f"<p class='sr-only'>{html.escape(accessible)}</p></div>"
         + f"<p class='trend-chart-note'>價格軸依實際觀測範圍產生刻度，不強制從 0 起算；休市與缺資料不補 0。30D 高低點：<span class='{insufficient_class}'>{status_note}</span>。</p>"
