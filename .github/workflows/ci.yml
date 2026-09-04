@@ -35,15 +35,18 @@ jobs:
           PYTHONPATH=src python3 -m tpw validate-data --as-of "$(python3 -c 'import json, pathlib; print(json.loads(pathlib.Path("site/data/current.json").read_text(encoding="utf-8"))["as_of_date"])')"
       - run: PYTHONPATH=src python3 -m tpw seed-prototype --as-of 2026-08-25
       - run: PYTHONPATH=src python3 -m tpw validate-source-run --date 2026-08-25
-      - name: Run the test suite and prove it leaves the working tree untouched
-        # The preceding seed-prototype step deliberately writes fixture content, so compare the
-        # tree either side of the suite rather than requiring it to be clean.
+      - name: Run the test suite and prove it leaves the publication untouched
+        # The preceding seed-prototype step deliberately writes fixture content, so compare either
+        # side of the suite rather than requiring a clean tree. Compare content hashes, not
+        # `git status --porcelain`: that reports only status codes and pathnames, so a test
+        # overwriting a file seed-prototype already modified would slip through unnoticed.
         run: |
-          before="$(git status --porcelain)"
+          publication_signature() { find data reports site -type f -exec sha256sum {} + | sort | sha256sum; }
+          before="$(publication_signature)"
           PYTHONPATH=src python3 -m unittest discover -s tests -t . -v
-          if [ "$before" != "$(git status --porcelain)" ]; then
+          if [ "$before" != "$(publication_signature)" ]; then
             git status --porcelain
-            echo '::error::the test suite modified the working tree; tests must not write to data/, site/ or reports/'
+            echo '::error::the test suite changed data/, reports/ or site/; tests must not write to them'
             exit 1
           fi
       - name: Rebuild the committed prototype fixture

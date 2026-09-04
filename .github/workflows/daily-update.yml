@@ -219,13 +219,17 @@ jobs:
           PYTHONPATH=src python3 -m tpw verify-site --as-of "$AS_OF_DATE"
       - name: Run the repository test suite against the publication
         # A GITHUB_TOKEN push never starts a new workflow run, so ci.yml never sees the daily data
-        # commit. Run the same suite here, before the commit, and fail closed if the suite wrote to
-        # the tree: a non-hermetic test would otherwise publish fixture values as live data.
+        # commit. Run the same suite here, before the commit, and fail closed if the suite changed
+        # anything under the publication trees: a non-hermetic test would otherwise publish fixture
+        # values as live data. Compare content hashes rather than `git status --porcelain`, which
+        # reports only status codes and pathnames — a test overwriting a file the build has already
+        # modified leaves that output byte-identical, which is exactly the case that matters here.
         run: |
-          before="$(git status --porcelain)"
+          publication_signature() { find data reports site -type f -exec sha256sum {} + | sort | sha256sum; }
+          before="$(publication_signature)"
           PYTHONPATH=src python3 -m unittest discover -s tests -t .
-          if [ "$before" != "$(git status --porcelain)" ]; then
-            echo '::error::the test suite modified the working tree; refusing to publish test output as live data'
+          if [ "$before" != "$(publication_signature)" ]; then
+            echo '::error::the test suite changed data/, reports/ or site/; refusing to publish test output as live data'
             git status --porcelain
             exit 1
           fi

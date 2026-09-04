@@ -52,9 +52,15 @@ execution of the pre-push gates added by this release.
 `Daily market update` run #54 — success
 (https://github.com/trionnemesis/tw-agri-copilot/actions/runs/33835384821):
 
-- `Run the repository test suite against the publication` — success. The step exits 1 when the
-  before/after `git status --porcelain` comparison differs, so its success is the remote proof that
-  the suite left the built publication untouched.
+- `Run the repository test suite against the publication` — success. Run #54 ran the original form
+  of this guard, which compared `git status --porcelain` either side of the suite, so its success
+  proves the suite added, removed and re-statused nothing under the publication trees. It does not
+  prove content equality: porcelain reports status codes and pathnames only, so a test overwriting
+  a file the build had already modified would have left it byte-identical. Reproduced directly — a
+  live `site/data/current.json` written by the build and then replaced with fixture values keeps
+  the porcelain output ` M site/data/current.json` on both sides. The guard now compares a
+  sha256 signature of every file under `data/`, `reports/` and `site/` instead; that stronger form
+  has no remote evidence yet.
 - `Run the browser suite against the publication` — `31 passed`, `1 skipped`, run against the built
   publication rather than the fixture rebuild.
 - `Guard the published size` — success, both `du` caps.
@@ -78,6 +84,9 @@ green CI recorded on `main` since 2026-09-01.
   fetches upstream first.
 - The `ci.yml` schedule (`cron: '40 22 * * *'`) has not fired yet; only its push and pull_request
   paths have remote runtime evidence.
+- The content-hash form of the publication guard has local evidence only: it passes on the current
+  hermetic suite and catches the overwrite case the status-only form missed, both verified in a
+  scratch copy. No remote run has exercised it.
 - Part B of Issue #44 (livestock and aquaculture seasonality) is untouched and remains at Phase 1.
 
 
