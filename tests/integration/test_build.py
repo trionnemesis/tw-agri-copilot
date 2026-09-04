@@ -306,9 +306,17 @@ class BuildTest(unittest.TestCase):
   self.assertEqual(season_html.count("data-filter='"),3)
   self.assertIn("id='season-semantics' data-season-semantics",season_html)
   self.assertIn('畜產',season_html);self.assertIn('養殖水產',season_html)
+  # Finding A: with no extension file, fruit/vegetable are the only rows and share one status --
+  # exactly one (unlabelled, no data-season-source-categories) notice, on both pages. The
+  # per-county <span data-season-source='...'> status spans are a different, unrelated element
+  # (added in WP-2, unaffected by Finding A), so match the notice's own <p class='note...'> shape.
+  self.assertEqual(season_html.count("<p class='note' data-season-source='live'>"),1)
+  self.assertNotIn('data-season-source-categories',season_html)
   map_html=(ROOT/'site/season/map.html').read_text()
   self.assertEqual(map_html.count('data-season-semantics-unknown'),22)
   self.assertIn('data-season-semantics-notice',map_html)
+  self.assertEqual(map_html.count("<p class='note' data-season-source='live'>"),1)
+  self.assertNotIn('data-season-source-categories',map_html)
   self.command('verify-site','--as-of','2026-08-25');self.command('validate-data','--as-of','2026-08-25')
   first=hashlib.sha256((ROOT/'site/index.html').read_bytes()).hexdigest();self.command('build','--as-of','2026-08-25')
   self.assertEqual(first,hashlib.sha256((ROOT/'site/index.html').read_bytes()).hexdigest())
@@ -364,6 +372,19 @@ class BuildTest(unittest.TestCase):
   season_html=(ROOT/'site/season/current.html').read_text()
   self.assertIn("data-filter='test_fishery'",season_html);self.assertIn('測試漁產',season_html)
   self.assertIn('produce-test_fishery-fallback',season_html)
+  # Finding A: a heterogeneous merged catalog (AFA live + test_fishery stale) must not describe
+  # everything using only the first row's status -- each source_status gets its own notice. The
+  # map page's per-county <span data-season-source='...'> status spans (one per county per
+  # category, unrelated to Finding A) also match a bare "data-season-source='live'" substring, so
+  # count by the notice-only data-season-source-categories attribute instead (never emitted by
+  # the per-county spans -- see _season_map_county_section) to keep this scoped to the notice.
+  map_html=(ROOT/'site/season/map.html').read_text()
+  for html_text in (season_html,map_html):
+   self.assertEqual(html_text.count("data-season-source-categories='fruit,vegetable'"),1)
+   self.assertEqual(html_text.count("data-season-source-categories='test_fishery'"),1)
+   self.assertIn("data-season-source='live' data-season-source-categories='fruit,vegetable'",html_text)
+   self.assertIn("data-season-source='stale' data-season-source-categories='test_fishery'",html_text)
+   self.assertIn('水果、蔬菜：',html_text);self.assertIn('測試漁產：',html_text)
   self.command_from_temp_src('verify-site','--as-of','2026-08-25')
   self.command_from_temp_src('validate-data','--as-of','2026-08-25')
  def test_livestock_extension_rows_fail_closed_and_preserve_last_known_good(self):

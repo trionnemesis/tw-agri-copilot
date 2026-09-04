@@ -235,6 +235,31 @@ class ValidateExtensionRowsTest(_IsolatedRegistryCase):
         with self.assertRaises(SeasonExtensionError):
             validate_extension_rows([_extension_row(county_count=99)], "2026-09", self.registry)
 
+    def test_county_count_rejects_bool_and_float_masquerading_as_the_right_length(self):
+        # counties has exactly 1 entry, so True (== 1) and 1.0 (== 1) would silently pass a bare
+        # `county_count == len(counties)` check; "1" (str) never equals 1 either way, but must
+        # still be rejected as not-an-int rather than merely "does not match".
+        for bad_value in (True, 1.0, "1"):
+            with self.subTest(bad_value=bad_value):
+                with self.assertRaises(SeasonExtensionError):
+                    validate_extension_rows(
+                        [_extension_row(counties=["臺南市"], county_count=bad_value)], "2026-09", self.registry,
+                    )
+
+    def test_variety_count_rejects_bool_and_float_masquerading_as_the_right_length(self):
+        for bad_value in (True, 1.0, "1"):
+            with self.subTest(bad_value=bad_value):
+                with self.assertRaises(SeasonExtensionError):
+                    validate_extension_rows(
+                        [_extension_row(varieties=["測試品種"], variety_count=bad_value)], "2026-09", self.registry,
+                    )
+
+    def test_district_count_rejects_bool_float_and_string(self):
+        for bad_value in (True, 1.0, "1"):
+            with self.subTest(bad_value=bad_value):
+                with self.assertRaises(SeasonExtensionError):
+                    validate_extension_rows([_extension_row(district_count=bad_value)], "2026-09", self.registry)
+
     def test_duplicate_or_empty_counties_are_rejected(self):
         with self.assertRaises(SeasonExtensionError):
             validate_extension_rows([_extension_row(counties=["臺南市", "臺南市"], county_count=2)], "2026-09", self.registry)

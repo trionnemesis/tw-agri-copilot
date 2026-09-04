@@ -160,18 +160,67 @@ def _market_status_notice(status):
     )
 
 
-def _season_source_notice(rows):
-    status = rows[0].get("source_status", "fallback") if rows else "fallback"
-    source_url = rows[0].get("source_url", "") if rows else ""
+def _season_source_message(status):
     if status == "live":
-        message = "清單已由農糧署『農產品產地產期查詢』抓取並完成欄位與分頁驗證。"
-    elif status == "stale":
-        message = "本次官方查詢暫時無法取得，清單沿用同月份最近一次通過驗證的資料。"
-    else:
-        message = "目前使用專案內建產季參考資料；未涵蓋品項不會直接判定為非當季。"
-    source = f" <a href='{_escape(source_url)}'>查看官方來源</a>" if source_url else ""
+        return "清單已由農糧署『農產品產地產期查詢』抓取並完成欄位與分頁驗證。"
+    if status == "stale":
+        return "本次官方查詢暫時無法取得，清單沿用同月份最近一次通過驗證的資料。"
+    return "目前使用專案內建產季參考資料；未涵蓋品項不會直接判定為非當季。"
+
+
+def _season_source_link(source_url):
+    return f" <a href='{_escape(source_url)}'>查看官方來源</a>" if source_url else ""
+
+
+def _single_season_source_notice(status, source_url):
     note_class = "note warn" if status != "live" else "note"
-    return f"<p class='{note_class}' data-season-source='{_escape(status)}'>{_escape(message)}{source}</p>"
+    return (
+        f"<p class='{note_class}' data-season-source='{_escape(status)}'>"
+        f"{_escape(_season_source_message(status))}{_season_source_link(source_url)}</p>"
+    )
+
+
+def _season_source_notice(rows, registry=None):
+    """One notice per distinct (source_status, source_url) group in rows.
+
+    A homogeneous catalog (today: every watchlist call site, and any build with no extension
+    rows) always has exactly one group and renders byte-identically to the single, unlabelled
+    notice this used to unconditionally emit. A heterogeneous merged catalog (Issue #44 Part B:
+    AFA fruit/vegetable rows at one status, an extension category's rows at another) must not
+    describe every row using only the first row's status/source -- that would tell users an
+    extension category's stale/fallback data is live AFA data. Groups are ordered by the
+    registry rank of the lowest-ranked category in each group, never by comparing source_url text.
+    """
+    if not rows:
+        return _single_season_source_notice("fallback", "")
+    groups = {}
+    order = []
+    for row in rows:
+        key = (row.get("source_status", "fallback"), row.get("source_url", ""))
+        member = groups.setdefault(key, set())
+        if not member:
+            order.append(key)
+        member.add(row.get("category"))
+    if len(groups) == 1:
+        return _single_season_source_notice(*order[0])
+    registry = registry or default_category_registry()
+    registry_rank = {category.id: index for index, category in enumerate(registry.categories)}
+    fallback_rank = len(registry_rank)
+    def anchor_rank(key):
+        return min((registry_rank.get(category_id, fallback_rank) for category_id in groups[key]), default=fallback_rank)
+    notices = []
+    for key in sorted(order, key=anchor_rank):
+        status, source_url = key
+        categories_in_group = sorted(groups[key], key=lambda category_id: registry_rank.get(category_id, fallback_rank))
+        labels = "、".join(category_label(category_id, registry) for category_id in categories_in_group)
+        note_class = "note warn" if status != "live" else "note"
+        categories_attr = ",".join(categories_in_group)
+        notices.append(
+            f"<p class='{note_class}' data-season-source='{_escape(status)}' "
+            f"data-season-source-categories='{_escape(categories_attr)}'>"
+            f"{_escape(labels)}：{_escape(_season_source_message(status))}{_season_source_link(source_url)}</p>"
+        )
+    return "".join(notices)
 
 
 def _traceability_source_notice(profile):
@@ -299,7 +348,7 @@ def _season_page(catalog, series, traceability, include_season_map=False, regist
         + "<button type='button' data-filter='fruit' aria-pressed='false'>水果</button><button type='button' data-filter='vegetable' aria-pressed='false'>蔬菜</button>"
         + extra_filter_buttons
         + "</div></div>"
-        + _season_source_notice(catalog)
+        + _season_source_notice(catalog, registry)
         + ("<p><a class='card-link' href='map.html'>用產季地圖依縣市查看 →</a></p>" if include_season_map else "")
         + "<div class='season-controls'><label class='season-search' for='season-search'><span>搜尋蔬果名稱</span>"
         + "<input id='season-search' type='search' data-season-search aria-controls='season-grid' "
@@ -439,7 +488,7 @@ def _season_map_page(payload, county_svg, catalog, registry=None):
         + "<main id='main' class='wrap'><section class='section season-map-intro'><div class='section-heading'><div>"
         + f"<h2>{_escape(payload['as_of_month'])} 縣市導覽</h2>"
         + "<p class='lead'>點選地圖、使用鍵盤或從下拉選單選擇縣市。滑鼠 hover 只提供提示，不會提交選取。</p></div>"
-        + f"<span class='badge info'>22 縣市</span></div>{_season_source_notice(catalog)}"
+        + f"<span class='badge info'>22 縣市</span></div>{_season_source_notice(catalog, registry)}"
         + semantics_notice
         + "<p class='note warn semantic-warning'>「產地產期」與「批發市場成交」是不同資料語意。"
         + "市場位於該縣市，不代表成交品項產自該縣市。</p>"
@@ -620,7 +669,7 @@ def _home(items, scores, series, seasonality, advice, traceability, traceability
         + _advice_section(advice, items)
         + "<section class='section' id='season'><div class='section-heading'><div><div class='eyebrow ink'>SEASONALITY</div><h2>本月當季蔬果</h2></div>"
         + "<div class='filter-group' aria-label='當季品項篩選'><button type='button' data-filter='all' aria-pressed='true'>全部</button><button type='button' data-filter='fruit' aria-pressed='false'>水果</button><button type='button' data-filter='vegetable' aria-pressed='false'>蔬菜</button></div></div>"
-        + _season_source_notice(seasonality)
+        + _season_source_notice(seasonality, registry)
         + f"<div class='grid grid-3' data-season-grid>{season_cards}</div><p><a href='season/current.html'>查看完整當季清單 →</a></p></section>"
         + "<section class='section' id='movers'><h2>今日變便宜／今日變貴</h2><p class='lead'>以各品項前一個有效交易日為基準。</p>"
         + f"<div class='grid grid-2'><div class='verdict positive'><strong>今天變便宜</strong><ul class='mover-list'>{mover_list(cheaper)}</ul></div>"

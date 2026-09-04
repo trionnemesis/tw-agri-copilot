@@ -177,6 +177,20 @@ class SeasonMapTest(unittest.TestCase):
                 ("aquaculture", "no_official_season_registry", 0),
             ],
         )
+
+    def test_catalog_row_count_rejects_bool_masquerading_as_the_right_value(self):
+        # fruit's catalog_row_count is 1 in this fixture, so True (== 1) would silently pass a
+        # bare `isinstance(count, int)` check without the explicit bool exclusion.
+        payload = build_season_map_payload(
+            ROOT,
+            [catalog_row("香蕉", ["屏東縣"], canonical_id="banana")],
+            "2026-08-27",
+        )
+        tampered = copy.deepcopy(payload)
+        fruit = next(row for row in tampered["categories"] if row["id"] == "fruit")
+        fruit["catalog_row_count"] = True
+        with self.assertRaisesRegex(SeasonMapContractError, "catalog_row_count"):
+            validate_season_map_payload(tampered)
         self.assertEqual(payload["inputs"]["seasonality_sources"], {"fruit": {"source_status": "live"}})
 
     def test_different_categories_may_use_different_source_status(self):

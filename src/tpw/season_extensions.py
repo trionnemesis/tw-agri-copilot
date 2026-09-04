@@ -74,6 +74,15 @@ def _nonempty_text(value, label):
     return value
 
 
+def _nonnegative_int(value, label):
+    # bool is an int subclass and 1.0 == 1 in Python, so both would otherwise silently pass an
+    # `== len(...)` check; reject them explicitly rather than let a malformed count reach
+    # site/data/current.json and render literally (e.g. "True 個產地縣市").
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise SeasonExtensionError(f"{label} must be a non-negative integer")
+    return value
+
+
 def _real_month(value, label="month"):
     if not isinstance(value, str) or not re.fullmatch(r"\d{4}-\d{2}", value):
         raise SeasonExtensionError(f"{label} must use YYYY-MM")
@@ -176,7 +185,8 @@ def validate_extension_rows(rows, month, registry):
             raise SeasonExtensionError("seasonality extension counties must be a unique non-empty list")
         for county in counties:
             _nonempty_text(county, "seasonality extension county")
-        if row["county_count"] != len(counties):
+        county_count = _nonnegative_int(row["county_count"], "seasonality extension county_count")
+        if county_count != len(counties):
             raise SeasonExtensionError("seasonality extension county_count does not match counties")
 
         varieties = row["varieties"]
@@ -184,12 +194,11 @@ def validate_extension_rows(rows, month, registry):
             raise SeasonExtensionError("seasonality extension varieties must be a list")
         for variety in varieties:
             _nonempty_text(variety, "seasonality extension variety")
-        if row["variety_count"] != len(varieties):
+        variety_count = _nonnegative_int(row["variety_count"], "seasonality extension variety_count")
+        if variety_count != len(varieties):
             raise SeasonExtensionError("seasonality extension variety_count does not match varieties")
 
-        district_count = row["district_count"]
-        if isinstance(district_count, bool) or not isinstance(district_count, int) or district_count < 0:
-            raise SeasonExtensionError("seasonality extension district_count is invalid")
+        _nonnegative_int(row["district_count"], "seasonality extension district_count")
 
         _nonempty_text(row["fetched_at"], "seasonality extension fetched_at")
 
