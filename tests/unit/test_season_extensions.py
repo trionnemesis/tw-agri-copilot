@@ -39,8 +39,8 @@ def _extension_row(**overrides):
         "schema_version": "1.0",
         "month": "2026-09",
         "canonical_id": None,
-        "display_name": "虱目魚",
-        "source_display_names": ["虱目魚"],
+        "display_name": "測試魚甲",
+        "source_display_names": ["測試魚甲"],
         "category": "test_fishery",
         "counties": ["臺南市", "嘉義縣"],
         "county_count": 2,
@@ -93,11 +93,11 @@ class LoadExtensionCatalogTest(_IsolatedRegistryCase):
 
     def test_valid_extension_file_loads_and_sorts_by_category_then_display_name(self):
         self.write_extension("2026-09", [
-            _extension_row(display_name="虱目魚"),
-            _extension_row(display_name="石斑"),
+            _extension_row(display_name="測試魚甲"),
+            _extension_row(display_name="測試魚乙"),
         ])
         rows = load_extension_catalog(self.root, "2026-09", self.registry)
-        self.assertEqual([row["display_name"] for row in rows], ["石斑", "虱目魚"])
+        self.assertEqual([row["display_name"] for row in rows], ["測試魚乙", "測試魚甲"])
 
     def test_malformed_json_is_rejected(self):
         path = extension_path(self.root, "2026-09")
@@ -118,7 +118,7 @@ class ValidateExtensionRowsTest(_IsolatedRegistryCase):
     def test_valid_row_round_trips(self):
         rows = validate_extension_rows([_extension_row()], "2026-09", self.registry)
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["display_name"], "虱目魚")
+        self.assertEqual(rows[0]["display_name"], "測試魚甲")
 
     def test_non_official_season_registry_category_is_rejected_with_citation(self):
         for category in ("livestock", "aquaculture"):
@@ -147,8 +147,8 @@ class ValidateExtensionRowsTest(_IsolatedRegistryCase):
         with self.assertRaises(SeasonExtensionError):
             validate_extension_rows(
                 [
-                    _extension_row(display_name="虱目魚", source_status="live"),
-                    _extension_row(display_name="石斑", source_status="stale"),
+                    _extension_row(display_name="測試魚甲", source_status="live"),
+                    _extension_row(display_name="測試魚乙", source_status="stale"),
                 ],
                 "2026-09",
                 self.registry,
@@ -159,7 +159,7 @@ class ValidateExtensionRowsTest(_IsolatedRegistryCase):
         # for tests), but the rule is per-category, not global: this proves the mixed-status
         # rejection above is keyed by category, not by "any two rows in the file".
         rows = validate_extension_rows(
-            [_extension_row(display_name="虱目魚", source_status="live"), _extension_row(display_name="石斑", source_status="live")],
+            [_extension_row(display_name="測試魚甲", source_status="live"), _extension_row(display_name="測試魚乙", source_status="live")],
             "2026-09",
             self.registry,
         )
@@ -186,7 +186,7 @@ class ValidateExtensionRowsTest(_IsolatedRegistryCase):
             validate_extension_rows([_extension_row(), _extension_row()], "2026-09", self.registry)
 
     def test_empty_or_untrimmed_display_name_is_rejected(self):
-        for bad_name in ("", "  ", " 虱目魚"):
+        for bad_name in ("", "  ", " 測試魚甲"):
             with self.subTest(bad_name=bad_name):
                 with self.assertRaises(SeasonExtensionError):
                     validate_extension_rows([_extension_row(display_name=bad_name)], "2026-09", self.registry)
@@ -203,7 +203,7 @@ class ValidateExtensionRowsTest(_IsolatedRegistryCase):
 
     def test_variety_count_mismatch_is_rejected(self):
         with self.assertRaises(SeasonExtensionError):
-            validate_extension_rows([_extension_row(varieties=["虱目魚一號"], variety_count=0)], "2026-09", self.registry)
+            validate_extension_rows([_extension_row(varieties=["測試魚甲一號"], variety_count=0)], "2026-09", self.registry)
 
     def test_negative_district_count_is_rejected(self):
         with self.assertRaises(SeasonExtensionError):
@@ -238,9 +238,9 @@ class MergeSeasonCatalogTest(unittest.TestCase):
 
     def test_merge_inserts_extension_rows_by_display_name(self):
         afa_rows = [{"display_name": "木瓜"}, {"display_name": "芒果"}, {"display_name": "鳳梨"}]
-        extension_rows = [{"display_name": "虱目魚"}]
+        extension_rows = [{"display_name": "測試魚甲"}]
         merged = merge_season_catalog(afa_rows, extension_rows)
-        self.assertEqual([row["display_name"] for row in merged], ["木瓜", "芒果", "虱目魚", "鳳梨"])
+        self.assertEqual([row["display_name"] for row in merged], ["木瓜", "測試魚甲", "芒果", "鳳梨"])
 
     def test_merge_does_not_mutate_its_inputs(self):
         afa_rows = [{"display_name": "b"}, {"display_name": "d"}]
