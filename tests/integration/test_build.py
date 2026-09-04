@@ -5,6 +5,10 @@ from tpw.cli import ingest, backfill, main, persist_seasonality, refresh_seasona
 from tpw.market import UpstreamUnavailable
 REPO=pathlib.Path(__file__).parents[2]
 ROOT=REPO
+# Everything .gitignore excludes, plus .git. A local .venv or a browser run's test-results/
+# would otherwise be copied for every test, and copytree dereferences symlinks by default,
+# so one dangling link inside an ignored directory would error the whole class.
+IGNORED=shutil.ignore_patterns('.git','.venv','__pycache__','.pytest_cache','*.py[cod]','dist','build','*.egg-info','node_modules','playwright-report','test-results')
 def official_seasonality_rows(month_number):
  return [
   {'category':'fruit','display_name':'香蕉','variety':'北蕉','county':'屏東縣','district':'高樹鄉','months':[month_number]},
@@ -16,7 +20,7 @@ class BuildTest(unittest.TestCase):
   # Point the CLI and this module's assertions at a throwaway copy of the repository so a test
   # run can never replace published live content with prototype fixture values.
   workspace=tempfile.TemporaryDirectory();self.addCleanup(workspace.cleanup)
-  work=pathlib.Path(workspace.name)/'repo';shutil.copytree(REPO,work,ignore=shutil.ignore_patterns('.git','__pycache__','node_modules'))
+  work=pathlib.Path(workspace.name)/'repo';shutil.copytree(REPO,work,ignore=IGNORED,symlinks=True)
   for patch in (mock.patch.object(sys.modules[__name__],'ROOT',work),mock.patch('tpw.cli.ROOT',work)):patch.start();self.addCleanup(patch.stop)
  def command(self,*args): subprocess.run([sys.executable,"-m","tpw",*args],cwd=ROOT,check=True,capture_output=True,text=True,env={**os.environ,'PYTHONPATH':str(REPO/'src')})
  def test_double_build_and_site_contract(self):
