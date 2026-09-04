@@ -26,6 +26,7 @@ import urllib.parse
 
 from .categories import CategoryRegistryError, NO_OFFICIAL_SEASON_REGISTRY_CITATION
 from .season_map import SOURCE_STATUSES
+from .seasonality import CATEGORIES as _AFA_CATEGORIES
 
 
 EXTENSION_DIR = pathlib.PurePosixPath("data/seasonality/extensions")
@@ -41,8 +42,9 @@ REQUIRED_FIELDS = frozenset({
 # fruit/vegetable rows may only come from the AFA adapter (tpw.seasonality); this is a
 # structural fact about which adapter owns which category's season rows, not something
 # derived from a registry flag (market_watchlist/buy_score_eligible are orthogonal to
-# "who is allowed to publish this category's season catalog").
-AFA_OWNED_CATEGORIES = frozenset({"fruit", "vegetable"})
+# "who is allowed to publish this category's season catalog"). Derived from
+# tpw.seasonality.CATEGORIES (rather than hard-coded again) so the two can never drift.
+AFA_OWNED_CATEGORIES = frozenset(_AFA_CATEGORIES)
 
 
 class SeasonExtensionError(ValueError):

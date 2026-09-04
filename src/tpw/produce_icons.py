@@ -101,10 +101,21 @@ def safe_symbol_id_pattern(registry=None):
 # Backward-compatible module-level names bound to the default (checked-in) registry, so
 # existing `from tpw.produce_icons import CATEGORIES` / `FALLBACK_ICON_REGISTRY` call sites
 # keep working. Prefer the registry-aware functions above for any new, registry-parameterised
-# code path.
-CATEGORIES = default_category_registry().ids()
-FALLBACK_ICON_REGISTRY = fallback_icon_registry()
-_SAFE_SYMBOL_ID = safe_symbol_id_pattern()
+# code path. Lazy (PEP 562 module __getattr__): nothing in this module reads them internally
+# (every function below takes its own registry parameter), so no config/produce-categories.json
+# disk read happens merely by importing tpw.produce_icons -- only on first access to one of these.
+_LAZY_DEFAULTS = {
+    "CATEGORIES": lambda: default_category_registry().ids(),
+    "FALLBACK_ICON_REGISTRY": lambda: fallback_icon_registry(),
+    "_SAFE_SYMBOL_ID": lambda: safe_symbol_id_pattern(),
+}
+
+
+def __getattr__(name):
+    factory = _LAZY_DEFAULTS.get(name)
+    if factory is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return factory()
 
 
 def validate_produce_icon_registry(registry=None):

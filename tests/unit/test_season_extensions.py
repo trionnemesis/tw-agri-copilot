@@ -33,6 +33,23 @@ TEST_FISHERY_CATEGORY = {
     "note": "測試用",
 }
 
+# A second, independent test-only category (different id, different season_source), so tests
+# can prove a rule is genuinely per-category rather than incidentally true for a single category.
+TEST_ORCHARD_CATEGORY = {
+    "id": "test_orchard",
+    "label": "測試果園",
+    "season_semantics": "official_season_registry",
+    "season_source": {
+        "source_id": "test_orchard_source",
+        "source_url": "https://example.test/orchard",
+        "allowed_hosts": ["example.test"],
+    },
+    "market_watchlist": False,
+    "buy_score_eligible": False,
+    "icon_fallback_symbol": "produce-test_orchard-fallback",
+    "note": "測試用",
+}
+
 
 def _extension_row(**overrides):
     row = {
@@ -69,7 +86,7 @@ class _IsolatedRegistryCase(unittest.TestCase):
         self.root = pathlib.Path(workspace.name)
         (self.root / "config").mkdir()
         payload = json.loads((ROOT / "config/produce-categories.json").read_text(encoding="utf-8"))
-        payload = {**payload, "categories": payload["categories"] + [TEST_FISHERY_CATEGORY]}
+        payload = {**payload, "categories": payload["categories"] + [TEST_FISHERY_CATEGORY, TEST_ORCHARD_CATEGORY]}
         (self.root / "config/produce-categories.json").write_text(
             json.dumps(payload, ensure_ascii=False), encoding="utf-8",
         )
@@ -154,20 +171,43 @@ class ValidateExtensionRowsTest(_IsolatedRegistryCase):
                 self.registry,
             )
 
-    def test_different_categories_may_still_use_different_status(self):
-        # Not exercised by the checked-in registry (only one non-AFA category is registered
-        # for tests), but the rule is per-category, not global: this proves the mixed-status
-        # rejection above is keyed by category, not by "any two rows in the file".
-        rows = validate_extension_rows(
-            [_extension_row(display_name="測試魚甲", source_status="live"), _extension_row(display_name="測試魚乙", source_status="live")],
-            "2026-09",
-            self.registry,
+    def test_different_categories_may_use_different_source_status(self):
+        # The mixed-status rejection above is keyed by category, not by "any two rows in the
+        # file": two DIFFERENT registered categories, each internally consistent but with
+        # different statuses from each other, must both validate in the same extension file.
+        fishery_row = _extension_row(category="test_fishery", display_name="測試魚甲", source_status="live")
+        orchard_row = _extension_row(
+            category="test_orchard",
+            display_name="測試果甲",
+            source_status="stale",
+            source_id="test_orchard_source",
+            source_url="https://example.test/orchard",
         )
-        self.assertEqual(len(rows), 2)
+        rows = validate_extension_rows([fishery_row, orchard_row], "2026-09", self.registry)
+        self.assertEqual(
+            {row["category"]: row["source_status"] for row in rows},
+            {"test_fishery": "live", "test_orchard": "stale"},
+        )
 
     def test_wrong_source_id_is_rejected(self):
         with self.assertRaises(SeasonExtensionError):
             validate_extension_rows([_extension_row(source_id="not_the_registered_source")], "2026-09", self.registry)
+
+    def test_wrong_schema_version_is_rejected(self):
+        with self.assertRaises(SeasonExtensionError):
+            validate_extension_rows([_extension_row(schema_version="1.1")], "2026-09", self.registry)
+
+    def test_illegal_source_status_is_rejected(self):
+        with self.assertRaises(SeasonExtensionError):
+            validate_extension_rows([_extension_row(source_status="guess")], "2026-09", self.registry)
+
+    def test_empty_source_display_names_is_rejected(self):
+        with self.assertRaises(SeasonExtensionError):
+            validate_extension_rows([_extension_row(source_display_names=[])], "2026-09", self.registry)
+
+    def test_empty_fetched_at_is_rejected(self):
+        with self.assertRaises(SeasonExtensionError):
+            validate_extension_rows([_extension_row(fetched_at="")], "2026-09", self.registry)
 
     def test_host_outside_allowlist_is_rejected(self):
         with self.assertRaises(SeasonExtensionError):

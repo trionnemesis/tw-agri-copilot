@@ -42,6 +42,10 @@ _ENTRY_FIELDS = frozenset({
     "market_watchlist", "buy_score_eligible", "icon_fallback_symbol", "note",
 })
 _SEASON_SOURCE_FIELDS = frozenset({"source_id", "source_url", "allowed_hosts"})
+# These two are SPEC.md pins (section 9.2.1 for Buy Score eligibility, section 7.2.5 / 11.7
+# for the watchlist categories), not a general "which categories are allowed" gate: they hold
+# fruit/vegetable fixed even as more categories are registered, exactly like
+# tpw.seasonality.CATEGORIES pins the AFA adapter to its own two categories.
 _BUY_SCORE_ELIGIBLE_IDS = frozenset({"fruit", "vegetable"})
 _REQUIRED_WATCHLIST_CATEGORIES = ("fruit", "vegetable")
 
@@ -264,9 +268,9 @@ def default_category_registry():
 def category_label(category_id, registry=None):
     """Human label for a category id; raises CategoryRegistryError on an unknown id.
 
-    This is the loud-failure replacement for the ``'水果' if category == 'fruit' else '蔬菜'``
-    ternaries that used to be scattered across tpw.render: an unrecognised category is a bug,
-    never a silent fallback to one of the two original labels.
+    This is the loud-failure replacement for the two-way (fruit-or-else-vegetable) conditionals
+    that used to be scattered across tpw.render: an unrecognised category is a bug, never a
+    silent fallback to one of the two original labels.
     """
     registry = registry or default_category_registry()
     return registry.by_id(category_id).label

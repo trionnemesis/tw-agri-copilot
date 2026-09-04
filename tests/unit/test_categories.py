@@ -135,6 +135,38 @@ class ValidateCategoryRegistryTest(unittest.TestCase):
         with self.assertRaises(CategoryRegistryError):
             validate_category_registry(payload, _PLACEHOLDER_HASH)
 
+    def test_season_source_id_pattern_is_enforced(self):
+        for bad_source_id in ("Afa_Produce_Season_1103", "_leading-underscore", "", "has space"):
+            with self.subTest(bad_source_id=bad_source_id):
+                payload = _valid_payload()
+                payload["categories"][0]["season_source"]["source_id"] = bad_source_id
+                with self.assertRaisesRegex(CategoryRegistryError, "source_id"):
+                    validate_category_registry(payload, _PLACEHOLDER_HASH)
+
+    def test_market_watchlist_must_be_a_boolean(self):
+        for bad_value in ("true", 1, None):
+            with self.subTest(bad_value=bad_value):
+                payload = _valid_payload()
+                payload["categories"][2]["market_watchlist"] = bad_value
+                with self.assertRaisesRegex(CategoryRegistryError, "market_watchlist"):
+                    validate_category_registry(payload, _PLACEHOLDER_HASH)
+
+    def test_buy_score_eligible_must_be_a_boolean(self):
+        for bad_value in ("false", 0, None):
+            with self.subTest(bad_value=bad_value):
+                payload = _valid_payload()
+                payload["categories"][2]["buy_score_eligible"] = bad_value
+                with self.assertRaisesRegex(CategoryRegistryError, "buy_score_eligible"):
+                    validate_category_registry(payload, _PLACEHOLDER_HASH)
+
+    def test_empty_note_fails_closed(self):
+        for bad_note in ("", "   ", " 有前導空白"):
+            with self.subTest(bad_note=bad_note):
+                payload = _valid_payload()
+                payload["categories"][0]["note"] = bad_note
+                with self.assertRaises(CategoryRegistryError):
+                    validate_category_registry(payload, _PLACEHOLDER_HASH)
+
     def test_buy_score_eligible_only_allowed_for_fruit_and_vegetable(self):
         payload = _valid_payload()
         payload["categories"][2]["buy_score_eligible"] = True
@@ -239,8 +271,12 @@ class SchemaConsistencyTest(unittest.TestCase):
             schema["properties"]["counties"]["items"]["properties"]["local_seasonal_produce"]
             ["items"]["properties"]["category"]["enum"]
         )
+        seasonality_sources_property_names_enum = (
+            schema["properties"]["inputs"]["properties"]["seasonality_sources"]["propertyNames"]["enum"]
+        )
         self.assertEqual(set(categories_id_enum), set(registry.ids()))
         self.assertEqual(set(produce_category_enum), set(registry.ids()))
+        self.assertEqual(set(seasonality_sources_property_names_enum), set(registry.official_ids()))
         self.assertEqual(schema["properties"]["schema_version"], {"const": "1.1"})
 
 
