@@ -5,6 +5,20 @@ MARKETS = (
     ("104", "台北二", 0.98, 0.7),
     ("109", "台北一", 1.02, 0.3),
 )
+# The 8066 fixture only ever fabricates market rows for the price-watchlist categories
+# (config/produce.yml never lists anything else); N05/N04 is that fixture's own crop-category
+# code, not a general category encoding, so any other category is a bug in the caller, not a
+# case to silently fall through to N04 for.
+_FIXTURE_CATEGORY_CODES = {"fruit": "N05", "vegetable": "N04"}
+
+
+def _fixture_category_code(category):
+    try:
+        return _FIXTURE_CATEGORY_CODES[category]
+    except KeyError:
+        raise ValueError(
+            "8066 market fixture only serves the fruit/vegetable watchlist; got category: " + repr(category)
+        ) from None
 
 
 def generate_market_rows(items, fixture, as_of_date):
@@ -31,7 +45,7 @@ def generate_market_rows(items, fixture, as_of_date):
                     {
                         "交易日期": "%03d.%02d.%02d"
                         % (date.year - 1911, date.month, date.day),
-                        "種類代碼": "N05" if item["category"] == "fruit" else "N04",
+                        "種類代碼": _fixture_category_code(item["category"]),
                         "作物代號": crop_code,
                         "作物名稱": item["display_name"],
                         "市場代號": market_code,

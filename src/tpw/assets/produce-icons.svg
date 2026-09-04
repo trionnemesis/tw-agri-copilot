@@ -131,4 +131,10 @@
   <symbol id="produce-vegetable-fallback" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
     <path d="M12 21V8m0 4C8 8 5 8 3 9c1 4 4 6 9 6m0-3c4-4 7-4 9-3-1 4-4 6-9 6M12 8c-2-3-2-5 0-7 2 2 2 4 0 7Z"/>
   </symbol>
+  <symbol id="produce-livestock-fallback" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="11" r="7.5"/><path d="M6 6 3 3l1 4M18 6l3-3-1 4"/><ellipse cx="12" cy="14.5" rx="3.4" ry="2.4"/><circle cx="10.8" cy="14.5" r=".4"/><circle cx="13.2" cy="14.5" r=".4"/>
+  </symbol>
+  <symbol id="produce-aquaculture-fallback" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="10" cy="12" rx="7" ry="4.3"/><path d="M17 12 22 8v8Z"/><path d="M8 9.5c1 1 1 4 0 5"/><circle cx="6.4" cy="10.6" r=".55"/>
+  </symbol>
 </svg>

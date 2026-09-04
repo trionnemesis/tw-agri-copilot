@@ -101,6 +101,25 @@ test('hydrates valid, invalid, and blank URL state', async ({ page }) => {
     hash: '#season',
   });
 
+  // "livestock" is a real, registered category (Issue #44 Part B) -- but it has no
+  // no_official_season_registry filter button on this page (only categories with rows in this
+  // month's catalog get one), so validCategories (derived from this section's own [data-filter]
+  // buttons) must treat it exactly like any other invalid value: fall back to "all".
+  await page.goto(
+    '/season/current.html?keep=one&keep=two&q=瓜&category=livestock#season',
+  );
+  await expect(search).toHaveValue('瓜');
+  await expect(
+    page.getByRole('button', { name: '全部', exact: true }),
+  ).toHaveAttribute('aria-pressed', 'true');
+  await expectCardState(page, filtered(await cards(page), '瓜'));
+  expect(urlState(page)).toEqual({
+    q: '瓜',
+    category: null,
+    keep: ['one', 'two'],
+    hash: '#season',
+  });
+
   await page.goto(
     '/season/current.html?keep=one&keep=two&q=%20%E3%80%80%20&category=all#season',
   );

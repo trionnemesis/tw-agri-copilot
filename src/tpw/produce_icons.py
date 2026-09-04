@@ -3,12 +3,12 @@ import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 
+from .categories import default_category_registry
 
-CATEGORIES = ("fruit", "vegetable")
+
 ICON_FIDELITIES = ("exact", "representative", "category_fallback")
 SPRITE_PATH = Path(__file__).with_name("assets") / "produce-icons.svg"
 SPRITE_MAX_BYTES = 64 * 1024
-_SAFE_SYMBOL_ID = re.compile(r"^produce-(?:fruit|vegetable)-[a-z0-9]+(?:-[a-z0-9]+)*$")
 _SVG_NAMESPACE = "http://www.w3.org/2000/svg"
 _ALLOWED_SVG_ELEMENTS = {"svg", "symbol", "g", "path", "circle", "ellipse", "rect", "line", "polyline", "polygon"}
 _ALLOWED_SVG_ATTRIBUTES = {
@@ -75,44 +75,87 @@ PRODUCE_ICON_REGISTRY = {
     ("vegetable", "麻竹筍"): ProduceIconSpec("produce-vegetable-makino-bamboo-shoot", "representative"),
 }
 
-FALLBACK_ICON_REGISTRY = {
-    "fruit": ProduceIconSpec("produce-fruit-fallback", "category_fallback"),
-    "vegetable": ProduceIconSpec("produce-vegetable-fallback", "category_fallback"),
+
+def fallback_icon_registry(registry=None):
+    """category id -> ProduceIconSpec fallback, derived from a category registry.
+
+    Every registered category gets exactly one category_fallback spec, whose symbol id is
+    its ``icon_fallback_symbol`` (already validated by tpw.categories). This is what lets a
+    catalog name with no authored icon -- and every ``no_official_season_registry`` category,
+    which by definition has no authored names at all -- still render a safe, checked-in symbol.
+    """
+    registry = registry or default_category_registry()
+    return {
+        category.id: ProduceIconSpec(category.icon_fallback_symbol, "category_fallback")
+        for category in registry.categories
+    }
+
+
+def safe_symbol_id_pattern(registry=None):
+    """Compiled ``produce-<registered category>-<name>`` pattern for a category registry."""
+    registry = registry or default_category_registry()
+    category_alternation = "|".join(re.escape(category_id) for category_id in registry.ids())
+    return re.compile(rf"^produce-(?:{category_alternation})-[a-z0-9]+(?:-[a-z0-9]+)*$")
+
+
+# Backward-compatible module-level names bound to the default (checked-in) registry, so
+# existing `from tpw.produce_icons import CATEGORIES` / `FALLBACK_ICON_REGISTRY` call sites
+# keep working. Prefer the registry-aware functions above for any new, registry-parameterised
+# code path. Lazy (PEP 562 module __getattr__): nothing in this module reads them internally
+# (every function below takes its own registry parameter), so no config/produce-categories.json
+# disk read happens merely by importing tpw.produce_icons -- only on first access to one of these.
+_LAZY_DEFAULTS = {
+    "CATEGORIES": lambda: default_category_registry().ids(),
+    "FALLBACK_ICON_REGISTRY": lambda: fallback_icon_registry(),
+    "_SAFE_SYMBOL_ID": lambda: safe_symbol_id_pattern(),
 }
 
 
-def validate_produce_icon_registry():
-    if set(FALLBACK_ICON_REGISTRY) != set(CATEGORIES):
-        raise ValueError("produce icon fallbacks must cover fruit and vegetable")
+def __getattr__(name):
+    factory = _LAZY_DEFAULTS.get(name)
+    if factory is None:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    return factory()
+
+
+def validate_produce_icon_registry(registry=None):
+    registry = registry or default_category_registry()
+    fallbacks = fallback_icon_registry(registry)
+    safe_symbol_id = safe_symbol_id_pattern(registry)
+    category_ids = set(registry.ids())
+    if set(fallbacks) != category_ids:
+        raise ValueError("produce icon fallbacks must cover every registered category")
     symbol_ids = []
     for key, spec in PRODUCE_ICON_REGISTRY.items():
         if not isinstance(key, tuple) or len(key) != 2:
             raise ValueError("produce icon registry keys must be category/name tuples")
         category, display_name = key
-        if category not in CATEGORIES:
+        if category not in category_ids:
             raise ValueError("invalid produce icon category")
         if not isinstance(display_name, str) or not display_name.strip():
             raise ValueError("invalid produce icon display name")
         if spec.fidelity not in ("exact", "representative"):
             raise ValueError("registered produce icon fidelity must be exact or representative")
         symbol_ids.append(spec.symbol_id)
-    for category, spec in FALLBACK_ICON_REGISTRY.items():
-        if category not in CATEGORIES or spec.fidelity != "category_fallback":
+    for category, spec in fallbacks.items():
+        if category not in category_ids or spec.fidelity != "category_fallback":
             raise ValueError("invalid produce icon fallback")
         symbol_ids.append(spec.symbol_id)
-    if any(not isinstance(symbol_id, str) or not _SAFE_SYMBOL_ID.fullmatch(symbol_id) for symbol_id in symbol_ids):
+    if any(not isinstance(symbol_id, str) or not safe_symbol_id.fullmatch(symbol_id) for symbol_id in symbol_ids):
         raise ValueError("unsafe produce icon symbol id")
     if len(symbol_ids) != len(set(symbol_ids)):
         raise ValueError("produce icon symbol ids must be unique")
     return frozenset(symbol_ids)
 
 
-def resolve_produce_icon(category, display_name):
-    if category not in CATEGORIES:
+def resolve_produce_icon(category, display_name, registry=None):
+    registry = registry or default_category_registry()
+    fallbacks = fallback_icon_registry(registry)
+    if category not in fallbacks:
         raise ValueError("invalid produce icon category")
     if not isinstance(display_name, str) or not display_name.strip():
         raise ValueError("invalid produce icon display name")
-    return PRODUCE_ICON_REGISTRY.get((category, display_name), FALLBACK_ICON_REGISTRY[category])
+    return PRODUCE_ICON_REGISTRY.get((category, display_name), fallbacks[category])
 
 
 def uncovered_display_names(rows):
@@ -124,8 +167,10 @@ def _local_name(value):
     return value.rsplit("}", 1)[-1]
 
 
-def validate_produce_icon_sprite(content):
-    expected = validate_produce_icon_registry()
+def validate_produce_icon_sprite(content, registry=None):
+    registry = registry or default_category_registry()
+    expected = validate_produce_icon_registry(registry)
+    safe_symbol_id = safe_symbol_id_pattern(registry)
     if not isinstance(content, bytes) or not content:
         raise ValueError("produce icon sprite must be non-empty bytes")
     if len(content) > SPRITE_MAX_BYTES:
@@ -160,7 +205,7 @@ def validate_produce_icon_sprite(content):
                 all_ids.append(raw_value)
         if element_name == "symbol":
             symbol_id = element.get("id")
-            if not symbol_id or not _SAFE_SYMBOL_ID.fullmatch(symbol_id):
+            if not symbol_id or not safe_symbol_id.fullmatch(symbol_id):
                 raise ValueError("produce icon sprite has an unsafe symbol id")
             if element.get("viewBox") != "0 0 24 24":
                 raise ValueError("produce icon symbols must use viewBox 0 0 24 24")
@@ -180,7 +225,7 @@ def validate_produce_icon_sprite(content):
     return frozenset(symbol_ids)
 
 
-def read_produce_icon_sprite(path=SPRITE_PATH):
+def read_produce_icon_sprite(path=SPRITE_PATH, registry=None):
     content = Path(path).read_bytes()
-    validate_produce_icon_sprite(content)
+    validate_produce_icon_sprite(content, registry)
     return content

@@ -4,24 +4,54 @@
   "title": "Taiwan Produce Watch current county season map",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "as_of_month", "resolved_market_date", "inputs", "unmapped_source_counties", "counties"],
+  "required": ["schema_version", "as_of_month", "resolved_market_date", "inputs", "unmapped_source_counties", "categories", "counties"],
   "properties": {
-    "schema_version": {"const": "1.0"},
+    "schema_version": {"const": "1.1"},
     "as_of_month": {"type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])$"},
     "resolved_market_date": {"type": "string", "format": "date"},
     "inputs": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["seasonality_source_status", "seasonality_snapshot_hash", "county_registry_hash", "market_registry_hash", "geometry_hash"],
+      "required": ["seasonality_sources", "seasonality_snapshot_hash", "county_registry_hash", "market_registry_hash", "geometry_hash", "category_registry_hash"],
       "properties": {
-        "seasonality_source_status": {"enum": ["live", "stale", "fallback"]},
+        "seasonality_sources": {
+          "description": "Keyed by category id; only categories with at least one catalog row this month appear here (see the categories array's catalog_row_count). A no_official_season_registry category (config/produce-categories.json) never appears -- only an official_season_registry category can ever have catalog rows, so the key set is a subset of today's official ids (propertyNames).",
+          "type": "object",
+          "minProperties": 1,
+          "propertyNames": {"enum": ["fruit", "vegetable"]},
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["source_status"],
+            "properties": {
+              "source_status": {"enum": ["live", "stale", "fallback"]}
+            }
+          }
+        },
         "seasonality_snapshot_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "county_registry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "market_registry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-        "geometry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+        "geometry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "category_registry_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
       }
     },
     "unmapped_source_counties": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "categories": {
+      "description": "Every registered produce category (config/produce-categories.json), in registry order. A no_official_season_registry category (Issue #44 BC-2 / BC-3, SPEC.md section 6.2.6) always has catalog_row_count 0 and never has rows under counties[*].local_seasonal_produce -- its map cells are unknown, not populated.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "season_semantics", "catalog_row_count"],
+        "properties": {
+          "id": {"enum": ["fruit", "vegetable", "livestock", "aquaculture"]},
+          "label": {"type": "string", "minLength": 1},
+          "season_semantics": {"enum": ["official_season_registry", "no_official_season_registry"]},
+          "catalog_row_count": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
     "counties": {
       "type": "array",
       "minItems": 22,
@@ -42,7 +72,7 @@
               "additionalProperties": false,
               "required": ["category", "display_name", "canonical_id", "source_status"],
               "properties": {
-                "category": {"enum": ["fruit", "vegetable"]},
+                "category": {"enum": ["fruit", "vegetable", "livestock", "aquaculture"]},
                 "display_name": {"type": "string", "minLength": 1},
                 "canonical_id": {"type": ["string", "null"], "minLength": 1},
                 "source_status": {"enum": ["live", "stale", "fallback"]}

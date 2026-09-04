@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "categories": [
+    {
+      "id": "fruit",
+      "label": "水果",
+      "season_semantics": "official_season_registry",
+      "season_source": {
+        "source_id": "afa_produce_season_1103",
+        "source_url": "https://www.afa.gov.tw/cht/index.php?code=list&ids=1103",
+        "allowed_hosts": ["www.afa.gov.tw"]
+      },
+      "market_watchlist": true,
+      "buy_score_eligible": true,
+      "icon_fallback_symbol": "produce-fruit-fallback",
+      "note": "農糧署「農產品產地產期查詢」type=1；每月 catalog 由官方 HTML adapter 抓取。"
+    },
+    {
+      "id": "vegetable",
+      "label": "蔬菜",
+      "season_semantics": "official_season_registry",
+      "season_source": {
+        "source_id": "afa_produce_season_1103",
+        "source_url": "https://www.afa.gov.tw/cht/index.php?code=list&ids=1103",
+        "allowed_hosts": ["www.afa.gov.tw"]
+      },
+      "market_watchlist": true,
+      "buy_score_eligible": true,
+      "icon_fallback_symbol": "produce-vegetable-fallback",
+      "note": "農糧署「農產品產地產期查詢」type=2。"
+    },
+    {
+      "id": "livestock",
+      "label": "畜產",
+      "season_semantics": "no_official_season_registry",
+      "season_source": null,
+      "market_watchlist": false,
+      "buy_score_eligible": false,
+      "icon_fallback_symbol": "produce-livestock-fallback",
+      "note": "毛豬、家禽、雞蛋為舍飼全年生產，農業部目前沒有對應的產地產期登錄（Issue #44 BC-2）。本站依 SPEC §6.2.6 標示 unknown，不判定當季或非當季。"
+    },
+    {
+      "id": "aquaculture",
+      "label": "養殖水產",
+      "season_semantics": "no_official_season_registry",
+      "season_source": null,
+      "market_watchlist": false,
+      "buy_score_eligible": false,
+      "icon_fallback_symbol": "produce-aquaculture-fallback",
+      "note": "虱目魚、吳郭魚、石斑等養殖漁業為排程生產，目前沒有官方的（魚種 × 縣市 × 月份）產期登錄（Issue #44 BC-3）。捕撈漁業具真實汛期，但尚無第一手驗證的官方登錄，未登錄為類別。"
+    }
+  ]
+}

@@ -134,12 +134,12 @@ class SeasonMapTest(unittest.TestCase):
         self.assertEqual(first["inputs"]["seasonality_snapshot_hash"], canonical_hash(catalog))
         self.assertEqual(canonical_hash(first), canonical_hash(second))
 
-    def test_duplicate_county_produce_conflict_fails_closed(self):
+    def test_duplicate_category_display_name_in_catalog_fails_closed(self):
         catalog = [
             catalog_row("香蕉", ["屏東縣"], canonical_id="banana"),
             catalog_row("香蕉", ["屏東縣"], canonical_id=None),
         ]
-        with self.assertRaisesRegex(SeasonMapContractError, "conflicting catalog evidence"):
+        with self.assertRaisesRegex(SeasonMapContractError, "duplicate"):
             build_season_map_payload(ROOT, catalog, "2026-08-27")
 
     def test_mixed_month_or_source_status_fails_closed(self):
@@ -162,6 +162,72 @@ class SeasonMapTest(unittest.TestCase):
                 "2026-08-27",
             )
 
+    def test_categories_axis_lists_every_registered_category_in_registry_order(self):
+        payload = build_season_map_payload(
+            ROOT,
+            [catalog_row("香蕉", ["屏東縣"], canonical_id="banana")],
+            "2026-08-27",
+        )
+        self.assertEqual(
+            [(row["id"], row["season_semantics"], row["catalog_row_count"]) for row in payload["categories"]],
+            [
+                ("fruit", "official_season_registry", 1),
+                ("vegetable", "official_season_registry", 0),
+                ("livestock", "no_official_season_registry", 0),
+                ("aquaculture", "no_official_season_registry", 0),
+            ],
+        )
+        self.assertEqual(payload["inputs"]["seasonality_sources"], {"fruit": {"source_status": "live"}})
+
+    def test_catalog_row_count_rejects_bool_masquerading_as_the_right_value(self):
+        # fruit's catalog_row_count is 1 in this fixture, so True (== 1) would silently pass a
+        # bare `isinstance(count, int)` check without the explicit bool exclusion.
+        payload = build_season_map_payload(
+            ROOT,
+            [catalog_row("香蕉", ["屏東縣"], canonical_id="banana")],
+            "2026-08-27",
+        )
+        tampered = copy.deepcopy(payload)
+        fruit = next(row for row in tampered["categories"] if row["id"] == "fruit")
+        fruit["catalog_row_count"] = True
+        with self.assertRaisesRegex(SeasonMapContractError, "catalog_row_count"):
+            validate_season_map_payload(tampered)
+
+    def test_different_categories_may_use_different_source_status(self):
+        payload = build_season_map_payload(
+            ROOT,
+            [
+                catalog_row("香蕉", ["屏東縣"], canonical_id="banana", source_status="live"),
+                catalog_row("胡瓜", ["屏東縣"], category="vegetable", canonical_id="cucumber", source_status="stale"),
+            ],
+            "2026-08-27",
+        )
+        self.assertEqual(
+            payload["inputs"]["seasonality_sources"],
+            {"fruit": {"source_status": "live"}, "vegetable": {"source_status": "stale"}},
+        )
+
+    def test_no_official_season_registry_category_in_catalog_fails_closed(self):
+        for category in ("livestock", "aquaculture"):
+            with self.subTest(category=category):
+                with self.assertRaises(SeasonMapContractError) as ctx:
+                    build_season_map_payload(
+                        ROOT,
+                        [catalog_row("測試品項", ["屏東縣"], category=category)],
+                        "2026-08-27",
+                    )
+                message = str(ctx.exception)
+                self.assertIn("6.2.6", message)
+                self.assertIn("BC-2", message)
+
+    def test_unregistered_category_in_catalog_fails_closed(self):
+        with self.assertRaisesRegex(SeasonMapContractError, "unregistered"):
+            build_season_map_payload(
+                ROOT,
+                [catalog_row("穀類", ["屏東縣"], category="grain")],
+                "2026-08-27",
+            )
+
     def test_payload_validator_rejects_count_and_registry_drift(self):
         config = load_season_map_config(ROOT)
         payload = build_season_map_payload(
@@ -178,6 +244,54 @@ class SeasonMapTest(unittest.TestCase):
         bad_registry["counties"][0]["display_name"] = "猜測縣市"
         with self.assertRaisesRegex(SeasonMapContractError, "checked-in registry"):
             validate_season_map_payload(bad_registry, config)
+
+    def test_category_registry_hash_drift_fails_closed_with_config(self):
+        config = load_season_map_config(ROOT)
+        payload = build_season_map_payload(
+            ROOT,
+            [catalog_row("香蕉", ["屏東縣"], canonical_id="banana")],
+            "2026-08-27",
+        )
+        drifted = copy.deepcopy(payload)
+        drifted["inputs"]["category_registry_hash"] = "sha256:" + "0" * 64
+        with self.assertRaisesRegex(SeasonMapContractError, "checked-in input hash"):
+            validate_season_map_payload(drifted, config)
+
+    def test_internal_consistency_without_config_catches_status_and_count_drift(self):
+        payload = build_season_map_payload(
+            ROOT,
+            [catalog_row("香蕉", ["屏東縣"], canonical_id="banana")],
+            "2026-08-27",
+        )
+        # config=None still validates internal consistency: a row whose source_status no
+        # longer matches its category's declared inputs.seasonality_sources status.
+        drifted_row_status = copy.deepcopy(payload)
+        pingtung = next(county for county in drifted_row_status["counties"] if county["slug"] == "pingtung-county")
+        pingtung["local_seasonal_produce"][0]["source_status"] = "stale"
+        with self.assertRaisesRegex(SeasonMapContractError, "source status differs"):
+            validate_season_map_payload(drifted_row_status)
+
+        # A no_official_season_registry category must keep catalog_row_count at zero.
+        nonzero_no_official = copy.deepcopy(payload)
+        livestock = next(row for row in nonzero_no_official["categories"] if row["id"] == "livestock")
+        livestock["catalog_row_count"] = 1
+        with self.assertRaisesRegex(SeasonMapContractError, "zero catalog rows"):
+            validate_season_map_payload(nonzero_no_official)
+
+        # inputs.seasonality_sources must exactly match the categories that have rows: build a
+        # payload with two categories present so deleting one leaves a non-empty, still-invalid dict.
+        two_category_payload = build_season_map_payload(
+            ROOT,
+            [
+                catalog_row("香蕉", ["屏東縣"], canonical_id="banana"),
+                catalog_row("胡瓜", ["屏東縣"], category="vegetable", canonical_id="cucumber"),
+            ],
+            "2026-08-27",
+        )
+        missing_source = copy.deepcopy(two_category_payload)
+        del missing_source["inputs"]["seasonality_sources"]["fruit"]
+        with self.assertRaisesRegex(SeasonMapContractError, "seasonality sources"):
+            validate_season_map_payload(missing_source)
 
     def test_svg_validator_rejects_active_content_and_path_drift(self):
         config = load_season_map_config(ROOT)
@@ -204,7 +318,7 @@ class SeasonMapTest(unittest.TestCase):
             isolated = pathlib.Path(raw)
             (isolated / "config").mkdir()
             (isolated / "src/tpw/assets").mkdir(parents=True)
-            for name in ("county-registry.json", "official-produce-markets.json", "map-boundary-source.json"):
+            for name in ("county-registry.json", "official-produce-markets.json", "map-boundary-source.json", "produce-categories.json"):
                 shutil.copy2(ROOT / "config" / name, isolated / "config" / name)
             shutil.copy2(
                 ROOT / "src/tpw/assets/taiwan-counties.svg",

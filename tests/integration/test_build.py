@@ -23,6 +23,14 @@ class BuildTest(unittest.TestCase):
   work=pathlib.Path(workspace.name)/'repo';shutil.copytree(REPO,work,ignore=IGNORED,symlinks=True)
   for patch in (mock.patch.object(sys.modules[__name__],'ROOT',work),mock.patch('tpw.cli.ROOT',work)):patch.start();self.addCleanup(patch.stop)
  def command(self,*args): subprocess.run([sys.executable,"-m","tpw",*args],cwd=ROOT,check=True,capture_output=True,text=True,env={**os.environ,'PYTHONPATH':str(REPO/'src')})
+ def command_from_temp_src(self,*args):
+  # Unlike command() above (always PYTHONPATH=REPO/src, the real repository), this imports tpw
+  # from the throwaway copy's OWN src/. Needed only when a test edits config/produce-categories.json
+  # or src/tpw/assets/produce-icons.svg inside the copy: tpw.categories.default_category_registry()
+  # and tpw.produce_icons.SPRITE_PATH are both derived from the importing package's own location
+  # (pathlib.Path(__file__)), not from ROOT/cwd, so a subprocess started with the real repo's
+  # PYTHONPATH would silently keep reading the real registry/sprite instead of the copy's.
+  subprocess.run([sys.executable,"-m","tpw",*args],cwd=ROOT,check=True,capture_output=True,text=True,env={**os.environ,'PYTHONPATH':str(ROOT/'src')})
  def test_double_build_and_site_contract(self):
   ingest(json.loads((ROOT/'tests/fixtures/market_success.json').read_text()),'2026-08-25','2026-08-25')
   self.command("build","--as-of","2026-08-25"); first=hashlib.sha256((ROOT/"site/index.html").read_bytes()).hexdigest(); self.command("build","--as-of","2026-08-25"); self.assertEqual(first,hashlib.sha256((ROOT/"site/index.html").read_bytes()).hexdigest()); self.command("validate-data","--as-of","2026-08-25"); self.command("verify-site")
@@ -246,8 +254,14 @@ class BuildTest(unittest.TestCase):
   payload_path=ROOT/'site/data/season-map/current.json';page_path=ROOT/'site/season/map.html'
   self.assertTrue(payload_path.exists());self.assertTrue(page_path.exists())
   first=payload_path.read_bytes();payload=json.loads(first);current=json.loads((ROOT/'site/data/current.json').read_text())
-  self.assertEqual(payload['schema_version'],'1.0');self.assertEqual(payload['as_of_month'],current['publication_status']['requested_date'][:7]);self.assertEqual(payload['resolved_market_date'],'2026-08-25')
+  self.assertEqual(payload['schema_version'],'1.1');self.assertEqual(payload['as_of_month'],current['publication_status']['requested_date'][:7]);self.assertEqual(payload['resolved_market_date'],'2026-08-25')
   self.assertEqual(len(payload['counties']),22);self.assertNotIn('season_map',current)
+  self.assertNotIn('seasonality_source_status',payload['inputs'])
+  self.assertEqual(
+   [(row['id'],row['season_semantics'],row['catalog_row_count']) for row in payload['categories']],
+   [('fruit','official_season_registry',20),('vegetable','official_season_registry',19),('livestock','no_official_season_registry',0),('aquaculture','no_official_season_registry',0)],
+  )
+  self.assertEqual(payload['inputs']['seasonality_sources'],{'fruit':{'source_status':'live'},'vegetable':{'source_status':'live'}})
   taipei=next(county for county in payload['counties'] if county['slug']=='taipei-city')
   self.assertEqual([(market['market_code'],market['feed_market_name']) for market in taipei['official_markets']],[('104','臺北二'),('109','臺北一')])
   tampered=json.loads(first);county=next(row for row in tampered['counties'] if row['local_seasonal_produce']);county['local_seasonal_produce'][0]['canonical_id']='tampered-canonical-id';payload_path.write_text(json.dumps(tampered,ensure_ascii=False,separators=(',',':')))
@@ -279,3 +293,139 @@ class BuildTest(unittest.TestCase):
      with self.assertRaises(ValueError):verify_site(root)
    build_site(rows,'2026-08-25',root);sprite=root/'assets/icons/produce.svg';sprite.write_bytes(sprite.read_bytes().replace(b'</svg>',b'<!-- ghp_example -->\n</svg>'))
    with self.assertRaises(ValueError):verify_site(root)
+ def test_no_extension_file_build_exposes_categories_axis_and_semantics_sections(self):
+  # Scenario (a): the ordinary, no-extension-file build. Issue #44 Part B, work order section 8 WP-2.
+  self.command('seed-prototype','--as-of','2026-08-25');self.command('build','--as-of','2026-08-25')
+  payload=json.loads((ROOT/'site/data/season-map/current.json').read_text())
+  self.assertEqual(payload['schema_version'],'1.1')
+  self.assertEqual(
+   [(row['id'],row['season_semantics'],row['catalog_row_count']) for row in payload['categories']],
+   [('fruit','official_season_registry',20),('vegetable','official_season_registry',19),('livestock','no_official_season_registry',0),('aquaculture','no_official_season_registry',0)],
+  )
+  season_html=(ROOT/'site/season/current.html').read_text()
+  self.assertEqual(season_html.count("data-filter='"),3)
+  self.assertIn("id='season-semantics' data-season-semantics",season_html)
+  self.assertIn('畜產',season_html);self.assertIn('養殖水產',season_html)
+  # Finding A: with no extension file, fruit/vegetable are the only rows and share one status --
+  # exactly one (unlabelled, no data-season-source-categories) notice, on both pages. The
+  # per-county <span data-season-source='...'> status spans are a different, unrelated element
+  # (added in WP-2, unaffected by Finding A), so match the notice's own <p class='note...'> shape.
+  self.assertEqual(season_html.count("<p class='note' data-season-source='live'>"),1)
+  self.assertNotIn('data-season-source-categories',season_html)
+  map_html=(ROOT/'site/season/map.html').read_text()
+  self.assertEqual(map_html.count('data-season-semantics-unknown'),22)
+  self.assertIn('data-season-semantics-notice',map_html)
+  self.assertEqual(map_html.count("<p class='note' data-season-source='live'>"),1)
+  self.assertNotIn('data-season-source-categories',map_html)
+  self.command('verify-site','--as-of','2026-08-25');self.command('validate-data','--as-of','2026-08-25')
+  first=hashlib.sha256((ROOT/'site/index.html').read_bytes()).hexdigest();self.command('build','--as-of','2026-08-25')
+  self.assertEqual(first,hashlib.sha256((ROOT/'site/index.html').read_bytes()).hexdigest())
+ def test_category_label_change_is_reflected_in_the_rendered_season_page(self):
+  # Guard test (supervisor B-1): render.py must thread the loaded registry through, not fall
+  # back to a package-location-bound default -- a label edit in this copy's own
+  # config/produce-categories.json must reach the rendered page built from this same copy.
+  categories_path=ROOT/'config/produce-categories.json';payload=json.loads(categories_path.read_text())
+  fruit=next(entry for entry in payload['categories'] if entry['id']=='fruit');fruit['label']='測試水果'
+  categories_path.write_text(json.dumps(payload,ensure_ascii=False))
+  self.command('seed-prototype','--as-of','2026-08-25');self.command('build','--as-of','2026-08-25')
+  season_html=(ROOT/'site/season/current.html').read_text()
+  # The fixed filter button text ("水果") is a SPEC section 11.7 pin and correctly stays as-is;
+  # only the per-card category label is registry-driven, so check that element specifically.
+  self.assertIn("<div class='label'>測試水果</div>",season_html)
+  self.assertNotIn("<div class='label'>水果</div>",season_html)
+  self.assertIn("data-filter='fruit' aria-pressed='false'>水果</button>",season_html)
+  self.command('verify-site','--as-of','2026-08-25')
+ def test_extension_slot_with_a_test_only_category_builds_and_verifies(self):
+  # Scenario (b): a test-only registry category plus its extension file (supervisor B-2). Never
+  # committed -- config/produce-categories.json and the sprite are edited only in this copy.
+  categories_path=ROOT/'config/produce-categories.json';payload=json.loads(categories_path.read_text())
+  payload['categories'].append({
+   'id':'test_fishery','label':'測試漁產','season_semantics':'official_season_registry',
+   'season_source':{'source_id':'test_fishery_source','source_url':'https://example.test/season','allowed_hosts':['example.test']},
+   'market_watchlist':False,'buy_score_eligible':False,
+   'icon_fallback_symbol':'produce-test_fishery-fallback','note':'測試用',
+  })
+  categories_path.write_text(json.dumps(payload,ensure_ascii=False))
+  sprite_path=ROOT/'src/tpw/assets/produce-icons.svg';sprite=sprite_path.read_text(encoding='utf-8')
+  symbol=("  <symbol id='produce-test_fishery-fallback' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'>"
+          "<circle cx='12' cy='12' r='8'/></symbol>\n")
+  sprite_path.write_text(sprite.replace('</svg>',symbol+'</svg>'),encoding='utf-8')
+  self.command('seed-prototype','--as-of','2026-08-25')
+  self.command_from_temp_src('validate-config')
+  extension_path=ROOT/'data/seasonality/extensions/2026-08.json';extension_path.parent.mkdir(parents=True,exist_ok=True)
+  extension_row={
+   'schema_version':'1.0','month':'2026-08','canonical_id':None,'display_name':'測試魚甲',
+   'source_display_names':['測試魚甲'],'category':'test_fishery','counties':['屏東縣'],
+   'county_count':1,'district_count':1,'varieties':[],'variety_count':0,
+   'source_url':'https://example.test/season','source_status':'stale','fetched_at':'fixture',
+   'source_id':'test_fishery_source',
+  }
+  extension_path.write_text(json.dumps([extension_row],ensure_ascii=False))
+  self.command_from_temp_src('build','--as-of','2026-08-25')
+  payload=json.loads((ROOT/'site/data/season-map/current.json').read_text())
+  test_fishery_row=next(row for row in payload['categories'] if row['id']=='test_fishery')
+  self.assertEqual(test_fishery_row['catalog_row_count'],1)
+  self.assertEqual(payload['inputs']['seasonality_sources']['test_fishery'],{'source_status':'stale'})
+  self.assertEqual(payload['inputs']['seasonality_sources']['fruit'],{'source_status':'live'})
+  pingtung=next(county for county in payload['counties'] if county['slug']=='pingtung-county')
+  self.assertIn('test_fishery',{row['category'] for row in pingtung['local_seasonal_produce']})
+  season_html=(ROOT/'site/season/current.html').read_text()
+  self.assertIn("data-filter='test_fishery'",season_html);self.assertIn('測試漁產',season_html)
+  self.assertIn('produce-test_fishery-fallback',season_html)
+  # Finding A: a heterogeneous merged catalog (AFA live + test_fishery stale) must not describe
+  # everything using only the first row's status -- each source_status gets its own notice. The
+  # map page's per-county <span data-season-source='...'> status spans (one per county per
+  # category, unrelated to Finding A) also match a bare "data-season-source='live'" substring, so
+  # count by the notice-only data-season-source-categories attribute instead (never emitted by
+  # the per-county spans -- see _season_map_county_section) to keep this scoped to the notice.
+  map_html=(ROOT/'site/season/map.html').read_text()
+  for html_text in (season_html,map_html):
+   self.assertEqual(html_text.count("data-season-source-categories='fruit,vegetable'"),1)
+   self.assertEqual(html_text.count("data-season-source-categories='test_fishery'"),1)
+   self.assertIn("data-season-source='live' data-season-source-categories='fruit,vegetable'",html_text)
+   self.assertIn("data-season-source='stale' data-season-source-categories='test_fishery'",html_text)
+   self.assertIn('水果、蔬菜：',html_text);self.assertIn('測試漁產：',html_text)
+  self.command_from_temp_src('verify-site','--as-of','2026-08-25')
+  self.command_from_temp_src('validate-data','--as-of','2026-08-25')
+ def test_livestock_extension_rows_fail_closed_and_preserve_last_known_good(self):
+  # Scenario (c): SPEC section 6.2.6 / Issue #44 BC-2 -- a no_official_season_registry category
+  # must never be populated from an extension file; a bad extension file must not corrupt the
+  # already-published data/site/reports.
+  self.command('seed-prototype','--as-of','2026-08-25');self.command('build','--as-of','2026-08-25')
+  data_before=hashlib.sha256((ROOT/'data/seasonality/catalog/2026-08.json').read_bytes()).hexdigest()
+  site_before=hashlib.sha256((ROOT/'site/index.html').read_bytes()).hexdigest()
+  reports_before=hashlib.sha256((ROOT/'reports/daily/2026/08/2026-08-25.md').read_bytes()).hexdigest()
+  extension_path=ROOT/'data/seasonality/extensions/2026-08.json';extension_path.parent.mkdir(parents=True,exist_ok=True)
+  bad_row={
+   'schema_version':'1.0','month':'2026-08','canonical_id':None,'display_name':'測試畜產甲',
+   'source_display_names':['測試畜產甲'],'category':'livestock','counties':['測試甲縣'],
+   'county_count':1,'district_count':1,'varieties':[],'variety_count':0,
+   'source_url':'https://example.test/season','source_status':'live','fetched_at':'fixture',
+   'source_id':'whatever',
+  }
+  extension_path.write_text(json.dumps([bad_row],ensure_ascii=False))
+  with self.assertRaises(subprocess.CalledProcessError) as raised:self.command('build','--as-of','2026-08-25')
+  self.assertIn('BC-2',raised.exception.stderr)
+  self.assertEqual(data_before,hashlib.sha256((ROOT/'data/seasonality/catalog/2026-08.json').read_bytes()).hexdigest())
+  self.assertEqual(site_before,hashlib.sha256((ROOT/'site/index.html').read_bytes()).hexdigest())
+  self.assertEqual(reports_before,hashlib.sha256((ROOT/'reports/daily/2026/08/2026-08-25.md').read_bytes()).hexdigest())
+ def test_verify_site_rejects_unregistered_category_and_stale_schema_in_published_payload(self):
+  # Scenario (d): a tampered / stale-schema site/data/season-map/current.json must be rejected.
+  self.command('seed-prototype','--as-of','2026-08-25');self.command('build','--as-of','2026-08-25')
+  payload_path=ROOT/'site/data/season-map/current.json';original=payload_path.read_bytes()
+  tampered=json.loads(original);county=next(row for row in tampered['counties'] if row['local_seasonal_produce'])
+  county['local_seasonal_produce'][0]['category']='grain'
+  payload_path.write_text(json.dumps(tampered,ensure_ascii=False,separators=(',',':')))
+  with self.assertRaises(subprocess.CalledProcessError) as raised:self.command('verify-site','--as-of','2026-08-25')
+  self.assertIn('unregistered',raised.exception.stderr)
+  payload_path.write_bytes(original)
+  old=json.loads(original);old['schema_version']='1.0';old['inputs']=dict(old['inputs'])
+  old['inputs']['seasonality_source_status']='live';del old['inputs']['seasonality_sources'];del old['categories']
+  payload_path.write_text(json.dumps(old,ensure_ascii=False,separators=(',',':')))
+  with self.assertRaises(subprocess.CalledProcessError) as raised:self.command('verify-site','--as-of','2026-08-25')
+  # An old schema_version 1.0 shape is missing 1.1's categories/inputs.seasonality_sources
+  # fields entirely, so this rejects at the top-level field-set check before schema_version is
+  # ever compared -- itself proof that an old payload cannot slip past verify-site.
+  self.assertIn('SeasonMapContractError',raised.exception.stderr)
+  self.assertIn('fields do not match the contract',raised.exception.stderr)
+  payload_path.write_bytes(original)

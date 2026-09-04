@@ -216,6 +216,28 @@ test('Taipei keeps official markets separate from the official produce empty sta
   await expect(taipei.locator('.semantic-warning')).toHaveText(
     '「產地產期」與「批發市場成交」是不同資料語意。市場位於該縣市，不代表成交品項產自該縣市。',
   );
+  // The no-official-season-registry unknown line comes after the empty state, not instead of
+  // it: it is the matrix cell value for livestock/aquaculture in every county, Taipei included.
+  await expect(taipei.locator('[data-season-semantics-unknown]')).toHaveText(
+    '畜產、養殖水產：無官方產地產期登錄，本站不判定當季或非當季（unknown）。',
+  );
+  expect(browserErrors).toEqual([]);
+});
+
+test('the intro notice and every county carry the no-official-season-registry explainer', async ({ page }) => {
+  const browserErrors = collectBrowserErrors(page);
+  await page.goto('/season/map.html?county=taipei-city');
+
+  const notice = page.locator('[data-season-semantics-notice]');
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText('畜產');
+  await expect(notice).toContainText('養殖水產');
+
+  await expect(page.locator('[data-season-semantics-unknown]')).toHaveCount(22);
+  const texts = await page.locator('[data-season-semantics-unknown]').allTextContents();
+  expect(new Set(texts)).toEqual(
+    new Set(['畜產、養殖水產：無官方產地產期登錄，本站不判定當季或非當季（unknown）。']),
+  );
   expect(browserErrors).toEqual([]);
 });
 
@@ -291,6 +313,9 @@ test('all county details and map anchors remain readable without JavaScript', as
     );
     await expect(page.locator('[data-county-section="taipei-city"] .official-market-card')).toHaveCount(2);
     await expect(page.locator('[data-county-section="taipei-city"] [data-produce-empty]')).toBeVisible();
+    await expect(page.locator('[data-season-semantics-notice]')).toBeVisible();
+    await expect(page.locator('[data-county-section="taipei-city"] [data-season-semantics-unknown]')).toBeVisible();
+    expect(await page.locator('[data-season-semantics-unknown]').count()).toBe(22);
     expect(requestFailures).toEqual([]);
   } finally {
     await context.close();
