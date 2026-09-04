@@ -1,6 +1,7 @@
 import html
 import json
 
+from . import __version__
 from .produce_icons import read_produce_icon_sprite, resolve_produce_icon
 from .publication import validate_market_status
 
@@ -566,7 +567,7 @@ def _home(items, scores, series, seasonality, advice, traceability, traceability
         + "<section class='section sources' id='sources'><h2>資料來源、方法與限制</h2>"
         + f"<p class='disclaimer'>{DISCLAIM}</p><p>行情以各市場交易量加權；推薦由 deterministic Buy Score 產生，AI 只能解釋，不能改變數值或 verdict。</p>"
         + f"<p class='small'>資料狀態：{_escape(source_status)} · 品質警示：{_escape(warning_text)}</p><a href='methodology.html'>閱讀完整方法 →</a></section>"
-        + "</main><footer class='footer'>Taiwan Produce Watch · side-project prototype</footer>"
+        + f"</main><footer class='footer'>Taiwan Produce Watch · side-project prototype · v{__version__}</footer>"
     )
 
 

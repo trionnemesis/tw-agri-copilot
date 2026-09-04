@@ -4,6 +4,7 @@
 [![Deploy Pages](https://github.com/trionnemesis/tw-agri-copilot/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/trionnemesis/tw-agri-copilot/actions/workflows/deploy-pages.yml)
 ![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB)
 ![Status](https://img.shields.io/badge/status-prototype-f59e0b)
+[![Release v1.0.0](https://img.shields.io/badge/release-v1.0.0-2d6cdf)](https://github.com/trionnemesis/tw-agri-copilot/releases/tag/v1.0.0)
 
 > 把每日批發市場行情、當季脈絡與可解釋 Buy Score，整理成一個可重建、可追溯的靜態採買情報原型。
 
@@ -28,7 +29,7 @@
 | Issue #3 · Traceability PR A | 農業部 7556 bounded adapter、schema／pagination 驗證、exact mapping、active／expired、date-scoped LKG、粗粒度縣市與來源 profile | 生產者姓名、精確地址、地段地號、通路與作業明細不發布；履歷不加入 Buy Score |
 | Issue #3 · Traceability PR B | 農業部 H44 單日 bounded adapter、strict schema／日期／數值／分頁驗證、exact crop mapping、exact-date event evidence 與獨立 Pages 頁面 | 溯源代號不等於 7556 履歷碼；金額／交易量不併入 8066 aggregate，也不改 Buy Score |
 | Issue #8 · Live seasonality | 農糧署 HTML adapter、完整分頁、月份 catalog、LKG／fallback、完整當季清單 | 只做明確名稱 mapping；不做 fuzzy mapping |
-| Issue #19 · Produce icons | 專案自有 SVG sprite、39 個現有顯示名稱的 exact registry、分類 fallback、列印與 responsive 樣式 | 圖示是裝飾性提示；文字名稱仍是唯一語意來源 |
+| Issue #19 · Produce icons | 專案自有 SVG sprite、41 個顯示名稱的 exact registry（跨月份聯集）、分類 fallback、列印與 responsive 樣式 | 圖示是裝飾性提示；文字名稱仍是唯一語意來源 |
 | Issue #30 · County season map | 內政部國土測繪中心 22 縣市界線衍生 SVG、exact county aggregation、verified official-market registry、靜態 no-JS sections、URL／鍵盤／touch 操作 | 產期與市場 metadata 分區呈現；品項數不是產量，市場所在地不證明成交品產地 |
 | Issue #40 · Quantitative price trends | 7／30／90D range stats、價格／日期刻度、最新價、7D／30D 參考均價、30D high／low、coverage／CV 摘要與 desktop/mobile browser verification | 純描述統計；不插值、不把休市／缺資料補 0、不做價格預測、不改 Buy Score |
 | Issue #3 · Official calendar | 臺北農產 115 年休市日曆、臺北一／臺北二 market registry、calendar／feed 分離與 discrepancy 狀態 | 日曆不加入行情 aggregate 或 Buy Score；未知年度不宣稱官方休市 |
@@ -83,6 +84,8 @@ H44 refresh 以單一 `StartDate`／`EndDate` 加 `$top`／`$skip` 擷取，保�
 
 GitHub Actions 是資料抓取、建置、驗證、commit 與 GitHub Pages 發布的唯一自動化執行層。外部 ChatGPT 排程預設只做事後驗證；只有在 primary 與 internal guard 都沒有產生 run、目前沒有 queued／in-progress Daily run、publication 已落後今日，而且能確認 recovery-capable push run 時，才可作為 bounded recovery actuator，**唯一允許的動作是 re-run 既有 GitHub Actions `update` job**。ChatGPT 不自行抓取或寫入行情／7556／H44，不推測休市，也不能改寫 Buy Score。完整契約見 [`docs/EXTERNAL_RECOVERY.md`](docs/EXTERNAL_RECOVERY.md)。
 
+`GITHUB_TOKEN` 的 push 不會觸發新的 workflow run，因此每日資料 commit 不會啟動 `ci.yml`。發布路徑改為自我驗證：`update` job 在 commit 之前執行完整測試套件與 repository size gate，並比對測試前後的工作樹；只要測試動過工作樹就 fail closed，不會把 fixture 當成 live 資料發布。`ci.yml` 另外每日排程執行一次，讓 `main` 的健康狀態不只在有人 push 時才被檢查。
+
 | 時間 / 觸發 | 行情 8066 | 產季 | 7556 registry | H44 單日事件 | 發布 |
 |---|---|---|---|---|---|
 | 每日 09:17 Asia/Taipei | bounded refresh；資料未完整時解析最近可發布交易日 | 同月份 live snapshot 可直接重用 | 更新 / 驗證；即使只有 fixture context 也保存當日 exact-date evidence | 不主動抓取；當日無 live exact-date snapshot 時安全使用當日 fixture context | build、validate、Pages deploy |
@@ -111,6 +114,7 @@ PYTHONPATH=src python3 -m tpw validate-config
 PYTHONPATH=src python3 -m tpw validate-market-calendar --year 2026
 PYTHONPATH=src python3 -m tpw seed-prototype --as-of 2026-08-25
 PYTHONPATH=src python3 -m tpw build --as-of 2026-08-25
+PYTHONPATH=src python3 -m tpw.presentation
 PYTHONPATH=src python3 -m tpw validate-data --as-of 2026-08-25
 PYTHONPATH=src python3 -m tpw validate-traceability
 PYTHONPATH=src python3 -m tpw validate-traceability-events
@@ -159,6 +163,7 @@ python3 -m http.server 8000 --directory site
 | `/season/current.html` | 本月完整盛產清單、專案自有蔬果圖示、搜尋／分類篩選、產地數與行情／履歷狀態 |
 | [`/season/map.html`](https://trionnemesis.github.io/tw-agri-copilot/season/map.html) | 22 縣市互動 SVG、已驗證官方果菜批發市場與本月 exact-match 當地盛產品項；支援 touch、鍵盤、URL state、列印與 no-JS fallback |
 | `/traceability/index.html` | 有效履歷批次、驗證經營者、涵蓋品項、來源狀態與 non-join 警示 |
+| `/traceability/<canonical-id>.html` | 20 個品項的履歷批次明細；僅部分由索引頁連出，其餘為 URL-only |
 | `/traceability/market-events.html` | H44 日期／市場事件、來源狀態、溯源代號原值與 no-aggregate／no-score 警示 |
 | `/daily/YYYY/MM/YYYY-MM-DD.html` | 每日靜態快照 |
 | `/archive/index.html` | retained history |
@@ -175,7 +180,7 @@ python3 -m http.server 8000 --directory site
 - `expected_open | scheduled_closed | exceptional_open | unknown` 與 `available | empty | delayed | failed | not_checked` 分開判定；只有具 fixture lineage 的結果可標示「官方公告休市」。
 - Seasonality 優先使用農糧署官方月份清單，逐頁驗證分類、月份與欄位；transient failure 才使用 `stale`／`fallback`，schema drift 直接失敗。
 - Watchlist 與官方產季名稱只允許 `config/produce.yml` 的明確對照；`unknown` 不等於非當季。
-- 當季圖示只依 `(category, display_name)` exact registry 選取；`representative` 代表同類代表圖，未知名稱只使用水果／蔬菜分類 fallback，不做 fuzzy matching。SVG paths 為本專案新作並隨站點發布，不在 runtime 讀取第三方資產、CDN 或 data URI。
+- 當季圖示只依 `(category, display_name)` exact registry 選取；`representative` 代表同類代表圖，未知名稱只使用水果／蔬菜分類 fallback，不做 fuzzy matching。農糧署月份清單會輪替，registry 因此是跨月份的聯集而非單月快照；未涵蓋的名稱由每日排程以 job summary 與 `::warning::` 回報，不阻擋當日行情發布。SVG paths 為本專案新作並隨站點發布，不在 runtime 讀取第三方資產、CDN 或 data URI。
 - 當季圖示標記為裝飾性 `aria-hidden`；可存取名稱與搜尋文字一律沿用已轉義的蔬果文字名稱。
 - 縣市地圖幾何由[內政部國土測繪中心 2025「直轄市、縣市界線（TWD97經緯度；COUNTY_MOI_1140318）」](https://data.gov.tw/dataset/7442)官方 GML 於每日 build 之外受控轉換；依[政府資料開放授權條款第1版](https://data.gov.tw/license)使用，本 SVG 為簡化及 inset 排版衍生物。原始 archive hash、geometry hash、轉換參數、版本與 attribution 保存於 `config/map-boundary-source.json`；每日排程不會下載或覆寫邊界。
 - `config/county-registry.json` 與 SVG path 必須一對一涵蓋 22 縣市；產期縣市只做人工審查 alias 的 exact match。unknown source county 只列入 `unmapped_source_counties`，不做 fuzzy 或行政區反推。
@@ -190,6 +195,7 @@ python3 -m http.server 8000 --directory site
 - H44 source role 固定為 `authoritative_market_event`、dataset semantics 固定為 `traceability_market_event`。事件與 7556 registry lot、8066 `authoritative_final` observation 分開保存；`data/traceability/market-events/source-profile.json`、`daily/`、`profiles/` 與每列都明確禁止 aggregate／Buy Score。
 - H44 日期必須等於 requested date；只有相同 requested date 的 LKG 可標示 stale。空白、HTML、非 JSON、schema drift、日期漂移、非法數值、重複頁、超出頁數或 LKG 80% count gate 都 fail closed。
 - **H44 溯源代號只按官方欄位原值顯示，不推論 7556 `Tracecode`，也不證明本站 8066 當日成交來源。**
+- 測試套件不寫入 `data/`、`site/`、`reports/`：驅動 CLI 的測試在暫存的 repository 副本上執行，`ci.yml` 與每日排程都會比對測試前後的工作樹。
 - 不提交上游全量 dump、credentials、`.env`、private keys 或 base64 圖片。
 
 ## Repository anatomy
@@ -206,18 +212,21 @@ data/traceability/daily/         7556 exact-date 公開 registry snapshot
 data/traceability/profiles/      7556 exact-date source profile
 data/traceability/market-events/daily/     H44 exact-date event snapshot
 data/traceability/market-events/profiles/  H44 exact-date event profile
-schema/                 Agent Run、market calendar、source-run、season-map 與 traceability JSON Schema
+schema/                 Agent Run、market calendar、source-run、season-map、county／official-market／map-boundary 與 traceability JSON Schema
 site/                   GitHub Pages 靜態成品；含獨立 `data/season-map/current.json`
 reports/                每日 Markdown 快照
-tests/                  unit、contract、integration tests
+tests/                  unit、contract、integration 與 Playwright browser tests
 tools/                  人工審查用、非每日排程的 deterministic county SVG 轉換器
 .github/workflows/      fixture CI、daily update、scheduler recovery guard、Pages deploy
+docs/                   外部 recovery actuator 契約
+references/             hash-pinned 視覺參考輸入；不進入 build
 SPEC.md                 完整產品／資料契約
 VERIFICATION.md         本地與遠端 acceptance evidence
 ```
 
 ## 狀態
 
+- Release v1.0.0：Issue #44 Part A 的 D-1（圖示 registry 綁定輪替中的上游清單）、D-2（每日資料 commit 沒有 CI 覆蓋）、D-3（測試污染已發布內容）均已修正，並各自留下回歸保護。變更紀錄見 [`CHANGELOG.md`](CHANGELOG.md)。
 - Prototype fixture：可重建、可測試、可部署。
 - Live market adapter：已實作 bounded fetch path；本版未進行 live 120-day release 驗證。
 - Quantitative price trends：`data/series/*.json` 已保存 7／30／90D range stats；20 個品項頁以 build-time static SVG 顯示價格／日期刻度、最新價、7D／30D 參考均價、30D high／low、coverage 與 7D CV。fixture rebuild、`verify-site`、unit/integration 及桌機／手機 Playwright 都納入 CI；不做預測、不改 scoring。

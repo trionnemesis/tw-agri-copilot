@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "taiwan-produce-watch"
-version = "0.3.0"
+dynamic = ["version"]
 requires-python = ">=3.11"
 
 [project.optional-dependencies]
@@ -12,6 +12,9 @@ calendar = ["pypdf==6.10.0"]
 
 [project.scripts]
 tpw = "tpw.entrypoint:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "tpw.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
