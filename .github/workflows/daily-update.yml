@@ -213,6 +213,40 @@ jobs:
           PYTHONPATH=src python3 -m tpw.presentation
           PYTHONPATH=src python3 -m tpw validate-data --as-of "$AS_OF_DATE"
           PYTHONPATH=src python3 -m tpw verify-site --as-of "$AS_OF_DATE"
+      - name: Run the repository test suite against the publication
+        # A GITHUB_TOKEN push never starts a new workflow run, so ci.yml never sees the daily data
+        # commit. Run the same suite here, before the commit, and fail closed if the suite wrote to
+        # the tree: a non-hermetic test would otherwise publish fixture values as live data.
+        run: |
+          before="$(git status --porcelain)"
+          PYTHONPATH=src python3 -m unittest discover -s tests -t .
+          if [ "$before" != "$(git status --porcelain)" ]; then
+            echo '::error::the test suite modified the working tree; refusing to publish test output as live data'
+            git status --porcelain
+            exit 1
+          fi
+      - name: Guard the repository size
+        # verify-site already caps site/ and scans it for secrets; only the whole-repository cap,
+        # which grows with each day of committed market data, is left uncovered.
+        run: test "$(du -sm --exclude=.git . | cut -f1)" -le 900
+      - name: Report produce icon coverage
+        # Icons are decorative and unknown names already degrade to the category fallback, so an
+        # uncovered name is reported here and never blocks the publication.
+        run: |
+          PYTHONPATH=src python3 - <<'PY'
+          import json, os, pathlib
+          from tpw.produce_icons import uncovered_display_names
+          catalog = json.loads(pathlib.Path("site/data/current.json").read_text(encoding="utf-8"))["season_catalog"]
+          uncovered = uncovered_display_names(catalog)
+          line = "Produce icon coverage: %d/%d." % (len(catalog) - len(uncovered), len(catalog))
+          if uncovered:
+              names = "、".join(name for _, name in uncovered)
+              print("::warning::published catalogue names without an authored produce icon: " + names)
+              line += " Missing: " + names
+          print(line)
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as handle:
+              handle.write(line + "\n")
+          PY
       - name: Commit changed content to main
         run: |
           git add data reports site
