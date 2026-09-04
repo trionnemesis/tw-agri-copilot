@@ -236,10 +236,14 @@ jobs:
           npm ci --ignore-scripts
           npx --no-install playwright install --with-deps --only-shell chromium
           npm run test:browser
-      - name: Guard the repository size
-        # verify-site already caps site/ and scans it for secrets; only the whole-repository cap,
-        # which grows with each day of committed market data, is left uncovered.
-        run: test "$(du -sm --exclude=.git . | cut -f1)" -le 900
+      - name: Guard the published size
+        # Both caps mirror ci.yml. verify-site's own 900 MB cap sums apparent file sizes while du
+        # counts allocated blocks — about 29% larger on this tree, and the gap widens with file
+        # count — so verify-site does not subsume the site cap. Running after npm ci also keeps the
+        # repository measurement comparable to ci.yml's, which counts node_modules.
+        run: |
+          test "$(du -sm site | cut -f1)" -le 900
+          test "$(du -sm --exclude=.git . | cut -f1)" -le 900
       - name: Report produce icon coverage
         # Icons are decorative and unknown names already degrade to the category fallback, so an
         # uncovered name is reported here and never blocks the publication.

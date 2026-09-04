@@ -348,7 +348,8 @@ def local_svg_reference(reference):
  except ValueError as exc:raise ValueError('SVG use is not a valid local reference') from exc
  if parsed.scheme or parsed.netloc or parsed.query or not parsed.path or not parsed.fragment or parsed.path.startswith('/') or not SAFE_LOCAL_SVG_PATH.fullmatch(parsed.path):raise ValueError('SVG use must reference a local sprite fragment')
  return parsed.path,parsed.fragment
-def verify_site(root=ROOT/'site',date=None):
+def verify_site(root=None,date=None):
+ root=ROOT/'site' if root is None else root  # bind at call time so tests redirecting ROOT reach it
  files=list(root.rglob('*.html'));assert files,'no generated HTML'; total=0;largest=(0,None)
  index=(root/'index.html')
  if not index.exists() or "id='recommendations'" not in index.read_text():raise ValueError('homepage lacks recommendations section')
