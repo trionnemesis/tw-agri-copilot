@@ -22,7 +22,7 @@
 - 新增測試：`test_categories.py` 32、`test_season_extensions.py` 32、`test_season_map.py` +6（+1 改名）、`test_produce_icons.py` +4、`test_model.py` +1、`test_build.py` +5（情境 a／b／c／d + 一個 registry-threading guard）；browser +1 spec「the intro notice and every county carry the no-official-season-registry explainer」（desktop／mobile 兩個 project 各一次）。
 - `git diff --stat a87a722`（不含 work order 文件本身）：30 files changed, 1967 insertions(+), 132 deletions(-)。新增：`config/produce-categories.json`、`schema/produce-categories.schema.json`、`src/tpw/categories.py`、`src/tpw/season_extensions.py`、`tests/unit/test_categories.py`、`tests/unit/test_season_extensions.py`；修改：`schema/season-map.schema.json`、`src/tpw/{render,season_map,cli,produce_icons,prototype,model,seasonality,__init__}.py`、`src/tpw/assets/produce-icons.svg`、`tests/integration/test_build.py`、`tests/unit/{test_season_map,test_produce_icons,test_model}.py`、`tests/browser/{season-map,season-search}.spec.mjs`、`site/` 下 8 個檔案。
 
-**Documented deviation.** `cli.ingest_sources` 仍以預設（default）類別 registry 呼叫 `canonical_map`，而不是 `tpw.cli` 其餘各處使用的、以顯式 `ROOT` 載入的 registry。這是安全的：registry validator 強制 `fruit`／`vegetable` 必須維持為 official watchlist 類別，而 `config/produce.yml` 從未設定其他類別，因此以預設 registry 得到的 watchlist 只會是（不會窄於）以 `ROOT` registry 得到的結果的子集——實際行為與顯式傳入 `ROOT` registry 完全相同。
+**Documented deviation.** `cli.ingest_sources` 仍以預設（default）類別 registry 呼叫 `canonical_map`，而不是 `tpw.cli` 其餘各處使用的、以顯式 `ROOT` 載入的 registry。這是安全的：registry validator 強制 `fruit`／`vegetable` 必須維持為 official watchlist 類別，因此**任何合法 registry 的 watchlist 都是 `{fruit, vegetable}` 的超集**；而 `config/produce.yml` 從未設定 `fruit`／`vegetable` 以外的類別，所以 `canonical_map` 的閘門在預設 registry 與 `ROOT` registry 之下判定結果完全相同。
 
 ### Artifact integrity
 

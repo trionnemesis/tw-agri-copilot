@@ -31,6 +31,8 @@ server-side WebFetch to www.afa.gov.tw / data.moa.gov.tw / data.gov.tw -> EGRESS
 
 Proxy 的 `recentRelayFailures` 同時記錄上述每個 host 的 `connect_rejected` 事件，時間與上述一致；伺服器端 WebFetch 對 `www.afa.gov.tw`／`data.moa.gov.tw`／`data.gov.tw` 三者也回報 `EGRESS_BLOCKED`。這是 Issue #44 第 0 節與第一則留言記錄的同一狀況，第三次發生。
 
+同一組 probe 於 2026-09-04 17:10 UTC 由 supervisor 獨立重跑一次，八個 URL 全部回報相同的 `curl: (56) CONNECT tunnel failed, response 403`，proxy `recentRelayFailures` 亦新增 `2026-09-04T17:10:45.926Z`–`17:10:48.211Z` 區間、`kind=connect_rejected`、`detail="gateway answered 403 to CONNECT (policy denial or upstream failure)"` 的紀錄，涵蓋 `data.moa.gov.tw`、`data.gov.tw`、`www.afa.gov.tw`、`fae.moa.gov.tw`、`efish.fa.gov.tw`、`www.fa.gov.tw`、`ppg.naif.org.tw` 全部七個 host。兩次觀測互相印證，封鎖為環境常態而非單次瞬時失敗。
+
 ### 2. 候選來源表（全部 A／B 級，未一手讀取）
 
 以下每一列的 URL 屬 A 級（官方網域，本身未被讀取，僅記錄其存在）；欄位清單、單位與更新狀態等描述屬 B 級，來自搜尋引擎摘要，**並未一手讀取確認**，因此標註「待查證」處在下表 probe 完成前不得視為事實。
