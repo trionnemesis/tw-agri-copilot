@@ -1,16 +1,24 @@
-import hashlib, html, io, json, pathlib, re, shutil, subprocess, sys, tempfile, unittest
+import hashlib, html, io, json, os, pathlib, re, shutil, subprocess, sys, tempfile, unittest
 from collections import Counter
 from unittest import mock
 from tpw.cli import ingest, backfill, main, persist_seasonality, refresh_seasonality, swap_all, verify_site
 from tpw.market import UpstreamUnavailable
-ROOT=pathlib.Path(__file__).parents[2]
+REPO=pathlib.Path(__file__).parents[2]
+ROOT=REPO
 def official_seasonality_rows(month_number):
  return [
   {'category':'fruit','display_name':'香蕉','variety':'北蕉','county':'屏東縣','district':'高樹鄉','months':[month_number]},
   {'category':'vegetable','display_name':'胡瓜','variety':'黑刺','county':'屏東縣','district':'里港鄉','months':[month_number]},
  ]
 class BuildTest(unittest.TestCase):
- def command(self,*args): subprocess.run([sys.executable,"-m","tpw",*args],cwd=ROOT,check=True,capture_output=True,text=True)
+ def setUp(self):
+  # These tests drive the real CLI, which writes data/, site/ and reports/ below tpw.cli.ROOT.
+  # Point the CLI and this module's assertions at a throwaway copy of the repository so a test
+  # run can never replace published live content with prototype fixture values.
+  workspace=tempfile.TemporaryDirectory();self.addCleanup(workspace.cleanup)
+  work=pathlib.Path(workspace.name)/'repo';shutil.copytree(REPO,work,ignore=shutil.ignore_patterns('.git','__pycache__','node_modules'))
+  for patch in (mock.patch.object(sys.modules[__name__],'ROOT',work),mock.patch('tpw.cli.ROOT',work)):patch.start();self.addCleanup(patch.stop)
+ def command(self,*args): subprocess.run([sys.executable,"-m","tpw",*args],cwd=ROOT,check=True,capture_output=True,text=True,env={**os.environ,'PYTHONPATH':str(REPO/'src')})
  def test_double_build_and_site_contract(self):
   ingest(json.loads((ROOT/'tests/fixtures/market_success.json').read_text()),'2026-08-25','2026-08-25')
   self.command("build","--as-of","2026-08-25"); first=hashlib.sha256((ROOT/"site/index.html").read_bytes()).hexdigest(); self.command("build","--as-of","2026-08-25"); self.assertEqual(first,hashlib.sha256((ROOT/"site/index.html").read_bytes()).hexdigest()); self.command("validate-data","--as-of","2026-08-25"); self.command("verify-site")
@@ -212,14 +220,14 @@ class BuildTest(unittest.TestCase):
   for token in ('data-season-search','data-season-result-count','data-season-empty'):self.assertEqual(season.count(token),1)
   self.assertIn('data-season-empty hidden',season)
   self.assertNotIn('data-season-search',(ROOT/'site/index.html').read_text())
-  from tpw.produce_icons import PRODUCE_ICON_REGISTRY, read_produce_icon_sprite, resolve_produce_icon
+  from tpw.produce_icons import read_produce_icon_sprite, resolve_produce_icon, uncovered_display_names
   self.assertEqual((ROOT/'site/assets/icons/produce.svg').read_bytes(),read_produce_icon_sprite())
   self.assertEqual(season.count("class='produce-icon "),len(current['season_catalog']));self.assertEqual(season.count("aria-hidden='true' focusable='false'"),len(current['season_catalog']));self.assertEqual(season.count("<use href='../assets/icons/produce.svg#"),len(current['season_catalog']))
   expected_fidelity=Counter(resolve_produce_icon(row['category'],row['display_name']).fidelity for row in current['season_catalog'])
   for fidelity,count in expected_fidelity.items():self.assertEqual(season.count("data-icon-fidelity='"+fidelity+"'"),count)
   for row in current['season_catalog']:
    spec=resolve_produce_icon(row['category'],row['display_name']);self.assertIn("href='../assets/icons/produce.svg#"+spec.symbol_id+"'",season);self.assertNotIn('icon',row)
-  self.assertEqual({(row['category'],row['display_name']) for row in current['season_catalog']},set(PRODUCE_ICON_REGISTRY))
+  self.assertEqual(uncovered_display_names(current['season_catalog']),[])
   from tpw.cli import css, js, market_status_css
   script=(ROOT/'site/assets/js/app.js').read_text();self.assertEqual(script,js());self.assertEqual((ROOT/'site/assets/css/app.css').read_text(),css()+market_status_css())
   for token in ("normalize('NFKC')",'dataset.searchName','const applyFilters','textContent','URLSearchParams','replaceState','pushState','popstate'):self.assertIn(token,script)
