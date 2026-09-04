@@ -376,8 +376,8 @@ class BuildTest(unittest.TestCase):
   reports_before=hashlib.sha256((ROOT/'reports/daily/2026/08/2026-08-25.md').read_bytes()).hexdigest()
   extension_path=ROOT/'data/seasonality/extensions/2026-08.json';extension_path.parent.mkdir(parents=True,exist_ok=True)
   bad_row={
-   'schema_version':'1.0','month':'2026-08','canonical_id':None,'display_name':'毛豬',
-   'source_display_names':['毛豬'],'category':'livestock','counties':['雲林縣'],
+   'schema_version':'1.0','month':'2026-08','canonical_id':None,'display_name':'測試畜產甲',
+   'source_display_names':['測試畜產甲'],'category':'livestock','counties':['測試甲縣'],
    'county_count':1,'district_count':1,'varieties':[],'variety_count':0,
    'source_url':'https://example.test/season','source_status':'live','fetched_at':'fixture',
    'source_id':'whatever',
