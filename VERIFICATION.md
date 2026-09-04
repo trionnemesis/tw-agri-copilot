@@ -76,6 +76,12 @@ green CI recorded on `main` since 2026-09-01.
 `Deploy Pages` run #25 — success
 (https://github.com/trionnemesis/tw-agri-copilot/actions/runs/33835384836).
 
+`Fixture CI` run #278 — success
+(https://github.com/trionnemesis/tw-agri-copilot/actions/runs/33841026727), the first remote run of
+the content-hash form of the publication guard (`Run the test suite and prove it leaves the
+publication untouched`) and of the committed-publication validation that now runs ahead of
+`seed-prototype`.
+
 ### Unverified for this release
 
 - No live 8066, seasonality, 7556 or H44 fetch was performed anywhere in this release. Run #54 was
@@ -84,9 +90,9 @@ green CI recorded on `main` since 2026-09-01.
   fetches upstream first.
 - The `ci.yml` schedule (`cron: '40 22 * * *'`) has not fired yet; only its push and pull_request
   paths have remote runtime evidence.
-- The content-hash form of the publication guard has local evidence only: it passes on the current
-  hermetic suite and catches the overwrite case the status-only form missed, both verified in a
-  scratch copy. No remote run has exercised it.
+- The content-hash guard's *negative* case has local evidence only. Run #278 shows it passing on
+  the hermetic suite; that it catches the overwrite case the status-only form missed was verified
+  in a scratch copy, and no remote run has been made to fail on purpose.
 - Part B of Issue #44 (livestock and aquaculture seasonality) is untouched and remains at Phase 1.
 
 
