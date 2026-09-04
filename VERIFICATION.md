@@ -44,13 +44,40 @@ Hash-pinned inputs are unchanged by this release:
 - SPEC.md: `2be4f623cf882eca7302d41702ecf53a23564e8f82753a7f82d404f617858ff6`
 - reference HTML: `bd2ddaeb4a1ce1431d27ad5901310e0abd1a30a9cd8d8f4725f60f78a1b2e7dd`
 
+### Remote evidence
+
+Merging #45 as `df81f55` triggered the push path of `daily-update.yml`, which is the first remote
+execution of the pre-push gates added by this release.
+
+`Daily market update` run #54 — success
+(https://github.com/trionnemesis/tw-agri-copilot/actions/runs/33835384821):
+
+- `Run the repository test suite against the publication` — success. The step exits 1 when the
+  before/after `git status --porcelain` comparison differs, so its success is the remote proof that
+  the suite left the built publication untouched.
+- `Run the browser suite against the publication` — `31 passed`, `1 skipped`, run against the built
+  publication rather than the fixture rebuild.
+- `Guard the published size` — success, both `du` caps.
+- `Report produce icon coverage` — `Produce icon coverage: 39/39.`
+- `Commit changed content to main` — `No content changes`.
+- `deploy` job — Pages deployment successful.
+
+`Fixture CI` run #275 on `main` — success
+(https://github.com/trionnemesis/tw-agri-copilot/actions/runs/33835384855), including the new step
+that validates the committed publication before `seed-prototype` replaces it. This is the first
+green CI recorded on `main` since 2026-09-01.
+
+`Deploy Pages` run #25 — success
+(https://github.com/trionnemesis/tw-agri-copilot/actions/runs/33835384836).
+
 ### Unverified for this release
 
-- The pre-push validation added to `daily-update.yml` (including its browser gate) and the new
-  `ci.yml` schedule have no remote runtime evidence yet; both were exercised only by local
-  simulation of the same command sequence.
-- No live 8066, seasonality, 7556 or H44 fetch was performed; the published tree was rebuilt from
-  committed normalized history only.
+- No live 8066, seasonality, 7556 or H44 fetch was performed anywhere in this release. Run #54 was
+  a `push` event, so its refresh steps were skipped by design and the gates ran against a build
+  from committed normalized history; they have not yet been exercised on a scheduled run that
+  fetches upstream first.
+- The `ci.yml` schedule (`cron: '40 22 * * *'`) has not fired yet; only its push and pull_request
+  paths have remote runtime evidence.
 - Part B of Issue #44 (livestock and aquaculture seasonality) is untouched and remains at Phase 1.
 
 
