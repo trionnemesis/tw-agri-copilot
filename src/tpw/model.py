@@ -1,4 +1,5 @@
 import datetime as dt, hashlib, json, math
+from .categories import default_category_registry
 
 REQUIRED = ("交易日期", "作物代號", "作物名稱", "市場代號", "市場名稱", "平均價", "交易量")
 
@@ -15,10 +16,12 @@ def number(value):
     if not math.isfinite(n) or n < 0: raise ValueError("numeric field must be finite and nonnegative")
     return n
 
-def canonical_map(items):
+def canonical_map(items, registry=None):
+    registry = registry or default_category_registry()
+    watchlist = set(registry.watchlist_ids())
     result = {}; ids=set(); seasonality_names=set()
     for item in items:
-        if item.get("category") not in ("fruit","vegetable"): raise ValueError("invalid category")
+        if item.get("category") not in watchlist: raise ValueError("invalid category")
         if item["canonical_id"] in ids: raise ValueError("duplicate canonical_id")
         ids.add(item["canonical_id"])
         names=item.get("seasonality_names") or [item.get("display_name")]

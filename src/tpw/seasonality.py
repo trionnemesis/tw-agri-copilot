@@ -12,6 +12,13 @@ from .market import RETRYABLE_STATUS, UpstreamUnavailable
 
 URL = "https://www.afa.gov.tw/cht/index.php"
 SOURCE_URL = "https://www.afa.gov.tw/cht/index.php?code=list&ids=1103"
+# This is the AFA "農產品產地產期查詢" adapter's own contract -- the two `type` query values
+# that endpoint accepts -- not the site-wide category set. It intentionally stays fixed to
+# fruit/vegetable even though tpw.categories.default_category_registry() now also lists
+# livestock and aquaculture: those have no official season registry to query at all
+# (Issue #44 BC-2 / BC-3), so there is no `type` value for this adapter to add. A future,
+# separately reviewed adapter for a newly-official category writes to the extension slot
+# (tpw.season_extensions) instead of extending this dict.
 CATEGORIES = {
     "fruit": {"type": "1", "label": "水果"},
     "vegetable": {"type": "2", "label": "蔬菜"},

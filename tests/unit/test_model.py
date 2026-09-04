@@ -1,6 +1,7 @@
 import unittest
 from tpw.model import iso_date, normalize, canonical_map, upsert
 from tpw.analytics import aggregate
+from tpw.categories import default_category_registry
 class ModelTest(unittest.TestCase):
  def test_roc_and_weighted_average(self):
   self.assertEqual(iso_date("115.08.25"),"2026-08-25")
@@ -18,3 +19,9 @@ class ModelTest(unittest.TestCase):
   mapping=canonical_map([{"canonical_id":"banana","display_name":"香蕉","category":"fruit","enabled":True,"market_crop_codes":["A1"]}]);a={"交易日期":"115.08.25","作物代號":"A1","作物名稱":"香蕉","市場代號":"a","市場名稱":"A","平均價":20,"交易量":1}
   with self.assertRaises(TypeError):normalize(a,mapping)
   self.assertNotEqual(normalize(a,mapping,source_id='moa_market_8066')['row_hash'],normalize(a,mapping,source_id='fixture_validation')['row_hash'])
+ def test_canonical_map_rejects_non_watchlist_and_unregistered_categories(self):
+  self.assertEqual(default_category_registry().watchlist_ids(),("fruit","vegetable"))
+  with self.assertRaisesRegex(ValueError,"^invalid category"):canonical_map([{"canonical_id":"pig","display_name":"毛豬","category":"livestock","enabled":True,"market_crop_codes":["N1"]}])
+  with self.assertRaisesRegex(ValueError,"^invalid category"):canonical_map([{"canonical_id":"grain","display_name":"穀類","category":"grain","enabled":True,"market_crop_codes":["N2"]}])
+  mapping=canonical_map([{"canonical_id":"banana","display_name":"香蕉","category":"fruit","enabled":True,"market_crop_codes":["A1"]},{"canonical_id":"cucumber","display_name":"胡瓜","category":"vegetable","enabled":True,"market_crop_codes":["FC1"]}])
+  self.assertEqual({item["category"] for item in mapping.values()},{"fruit","vegetable"})

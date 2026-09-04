@@ -3,13 +3,17 @@ import pathlib
 import unittest
 import xml.etree.ElementTree as ET
 
+from tpw.categories import default_category_registry
 from tpw.produce_icons import (
+    CATEGORIES,
     FALLBACK_ICON_REGISTRY,
     ICON_FIDELITIES,
     PRODUCE_ICON_REGISTRY,
     SPRITE_MAX_BYTES,
+    fallback_icon_registry,
     read_produce_icon_sprite,
     resolve_produce_icon,
+    safe_symbol_id_pattern,
     uncovered_display_names,
     validate_produce_icon_registry,
     validate_produce_icon_sprite,
@@ -66,6 +70,9 @@ class ProduceIconTest(unittest.TestCase):
         self.assertLessEqual(len(content), SPRITE_MAX_BYTES)
         self.assertEqual(symbol_ids, validate_produce_icon_registry())
         self.assertEqual(len(symbol_ids), len(PRODUCE_ICON_REGISTRY) + len(FALLBACK_ICON_REGISTRY))
+        self.assertEqual(len(symbol_ids), 45)
+        self.assertEqual(len(PRODUCE_ICON_REGISTRY), 41)
+        self.assertEqual(len(FALLBACK_ICON_REGISTRY), 4)
         root = ET.fromstring(content)
         self.assertEqual(root.tag, "{http://www.w3.org/2000/svg}svg")
         lowered = content.lower()
@@ -87,6 +94,37 @@ class ProduceIconTest(unittest.TestCase):
         extra = b'<symbol id="produce-fruit-extra" viewBox="0 0 24 24"><path d="M1 1h1"/></symbol>'
         with self.assertRaises(ValueError):
             validate_produce_icon_sprite(content.replace(b"</svg>", extra + b"\n</svg>"))
+
+    def test_categories_and_fallback_registry_are_derived_from_the_default_registry(self):
+        registry = default_category_registry()
+        self.assertEqual(CATEGORIES, registry.ids())
+        self.assertEqual(set(FALLBACK_ICON_REGISTRY), set(registry.ids()))
+        for category in registry.categories:
+            self.assertEqual(FALLBACK_ICON_REGISTRY[category.id].symbol_id, category.icon_fallback_symbol)
+            self.assertEqual(FALLBACK_ICON_REGISTRY[category.id].fidelity, "category_fallback")
+        self.assertEqual(fallback_icon_registry(), FALLBACK_ICON_REGISTRY)
+
+    def test_new_categories_resolve_to_their_own_category_fallback(self):
+        livestock = resolve_produce_icon("livestock", "毛豬")
+        self.assertEqual((livestock.symbol_id, livestock.fidelity), ("produce-livestock-fallback", "category_fallback"))
+        aquaculture = resolve_produce_icon("aquaculture", "虱目魚")
+        self.assertEqual((aquaculture.symbol_id, aquaculture.fidelity), ("produce-aquaculture-fallback", "category_fallback"))
+        # Any display name for these categories resolves the same way: there is no authored
+        # (category, name) entry for either, by definition (no_official_season_registry).
+        self.assertEqual(resolve_produce_icon("livestock", "家禽"), livestock)
+
+    def test_safe_symbol_id_pattern_accepts_new_fallbacks_and_still_rejects_unregistered(self):
+        pattern = safe_symbol_id_pattern()
+        self.assertTrue(pattern.fullmatch("produce-livestock-fallback"))
+        self.assertTrue(pattern.fullmatch("produce-aquaculture-fallback"))
+        self.assertFalse(pattern.fullmatch("produce-grain-x"))
+        self.assertFalse(pattern.fullmatch("produce-livestock-fallback-"))
+        self.assertFalse(pattern.fullmatch("produce-livestockfallback"))
+
+    def test_unknown_category_still_raises_for_every_registry_aware_entry_point(self):
+        with self.assertRaises(ValueError):
+            resolve_produce_icon("grain", "x")
+        self.assertNotIn("grain", fallback_icon_registry())
 
 
 if __name__ == "__main__":

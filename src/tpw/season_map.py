@@ -11,6 +11,8 @@ import urllib.parse
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 
+from .categories import CategoryRegistry, NO_OFFICIAL_SEASON_REGISTRY_CITATION, SEASON_SEMANTICS, load_category_registry
+
 
 COUNTY_REGISTRY_PATH = pathlib.PurePosixPath("config/county-registry.json")
 MARKET_REGISTRY_PATH = pathlib.PurePosixPath("config/official-produce-markets.json")
@@ -20,7 +22,6 @@ COUNTY_COUNT = 22
 COUNTY_SVG_MAX_BYTES = 128 * 1024
 SOURCE_STATUSES = frozenset({"live", "stale", "fallback"})
 FEED_COVERAGE_STATUSES = frozenset({"observed", "not_observed", "unknown"})
-CATEGORIES = frozenset({"fruit", "vegetable"})
 HASH_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
 COUNTY_CODE_PATTERN = re.compile(r"[0-9]{5}")
 MARKET_CODE_PATTERN = re.compile(r"[0-9]{3}")
@@ -50,6 +51,8 @@ class SeasonMapConfig:
     county_registry_hash: str
     market_registry_hash: str
     geometry_hash: str
+    category_registry: CategoryRegistry
+    category_registry_hash: str
 
 
 def _strict_object(pairs):
@@ -496,6 +499,7 @@ def load_season_map_config(root):
     svg = read_county_svg(root, county_registry)
     boundary_source = load_boundary_source(root, county_registry, svg)
     market_registry = load_official_market_registry(root, county_registry)
+    category_registry = load_category_registry(root)
     return SeasonMapConfig(
         county_registry=county_registry,
         market_registry=market_registry,
@@ -504,6 +508,8 @@ def load_season_map_config(root):
         county_registry_hash=_hash_bytes((root / COUNTY_REGISTRY_PATH).read_bytes()),
         market_registry_hash=_hash_bytes((root / MARKET_REGISTRY_PATH).read_bytes()),
         geometry_hash=_hash_bytes(svg),
+        category_registry=category_registry,
+        category_registry_hash=category_registry.content_hash,
     )
 
 
@@ -527,8 +533,11 @@ def build_season_map_payload(root, catalog, resolved_market_date):
     for county in config.county_registry["counties"]:
         for source_name in county["source_names"]:
             aliases[source_name] = county["slug"]
+    categories_by_id = {category.id: category for category in config.category_registry.categories}
     months = set()
-    statuses = set()
+    statuses_by_category = {}
+    catalog_row_counts = {}
+    catalog_keys = set()
     by_county = {county["slug"]: {} for county in config.county_registry["counties"]}
     unmapped = set()
     required_fields = {"month", "category", "display_name", "canonical_id", "source_status", "counties"}
@@ -537,39 +546,49 @@ def build_season_map_payload(root, catalog, resolved_market_date):
             raise SeasonMapContractError("seasonality catalog row is incomplete")
         month = _real_month(row["month"], "seasonality catalog month")
         months.add(month)
-        if row["category"] not in CATEGORIES:
-            raise SeasonMapContractError("seasonality catalog category is invalid")
+        category_id = row["category"]
+        category = categories_by_id.get(category_id)
+        if category is None:
+            raise SeasonMapContractError("seasonality catalog category is unregistered: " + repr(category_id))
+        if category.season_semantics == "no_official_season_registry":
+            raise SeasonMapContractError(
+                "seasonality catalog row uses a category with no official season registry "
+                "(" + NO_OFFICIAL_SEASON_REGISTRY_CITATION + "); its map cells must stay unknown, "
+                "not be populated from a catalog row: " + repr(category_id)
+            )
         _nonempty_text(row["display_name"], "seasonality display name")
         canonical_id = row["canonical_id"]
         if canonical_id is not None:
             _nonempty_text(canonical_id, "seasonality canonical id")
         if row["source_status"] not in SOURCE_STATUSES:
             raise SeasonMapContractError("seasonality source status is invalid")
-        statuses.add(row["source_status"])
+        key = (category_id, row["display_name"])
+        if key in catalog_keys:
+            raise SeasonMapContractError("seasonality catalog contains a duplicate (category, display_name): " + repr(key))
+        catalog_keys.add(key)
+        existing_status = statuses_by_category.get(category_id)
+        if existing_status is not None and existing_status != row["source_status"]:
+            raise SeasonMapContractError("seasonality catalog must use one source status per category: " + repr(category_id))
+        statuses_by_category[category_id] = row["source_status"]
+        catalog_row_counts[category_id] = catalog_row_counts.get(category_id, 0) + 1
         source_counties = row["counties"]
         if not isinstance(source_counties, list) or len(source_counties) != len(set(source_counties)):
             raise SeasonMapContractError("seasonality counties must be a unique list")
         produce = {
-            "category": row["category"],
+            "category": category_id,
             "display_name": row["display_name"],
             "canonical_id": canonical_id,
             "source_status": row["source_status"],
         }
-        key = (row["category"], row["display_name"])
         for source_county in source_counties:
             _nonempty_text(source_county, "seasonality source county")
             slug = aliases.get(source_county)
             if slug is None:
                 unmapped.add(source_county)
                 continue
-            previous = by_county[slug].get(key)
-            if previous is not None and previous != produce:
-                raise SeasonMapContractError("duplicate county produce has conflicting catalog evidence")
             by_county[slug][key] = produce
     if len(months) != 1:
         raise SeasonMapContractError("seasonality catalog must cover exactly one month")
-    if len(statuses) != 1:
-        raise SeasonMapContractError("seasonality catalog must use one source status")
     markets_by_county = {county["slug"]: [] for county in config.county_registry["counties"]}
     for market in config.market_registry["markets"]:
         markets_by_county[market["county_slug"]].append(_public_market(market))
@@ -591,19 +610,33 @@ def build_season_map_payload(root, catalog, resolved_market_date):
             }
         )
     month = next(iter(months))
-    source_status = next(iter(statuses))
+    categories_payload = [
+        {
+            "id": category.id,
+            "label": category.label,
+            "season_semantics": category.season_semantics,
+            "catalog_row_count": catalog_row_counts.get(category.id, 0),
+        }
+        for category in config.category_registry.categories
+    ]
+    seasonality_sources = {
+        category_id: {"source_status": status}
+        for category_id, status in statuses_by_category.items()
+    }
     payload = {
-        "schema_version": "1.0",
+        "schema_version": "1.1",
         "as_of_month": month,
         "resolved_market_date": resolved_market_date,
         "inputs": {
-            "seasonality_source_status": source_status,
+            "seasonality_sources": seasonality_sources,
             "seasonality_snapshot_hash": canonical_hash(catalog),
             "county_registry_hash": config.county_registry_hash,
             "market_registry_hash": config.market_registry_hash,
             "geometry_hash": config.geometry_hash,
+            "category_registry_hash": config.category_registry_hash,
         },
         "unmapped_source_counties": sorted(unmapped),
+        "categories": categories_payload,
         "counties": counties,
     }
     return validate_season_map_payload(
@@ -623,10 +656,10 @@ def validate_season_map_payload(
 ):
     _require_object(
         payload,
-        {"schema_version", "as_of_month", "resolved_market_date", "inputs", "unmapped_source_counties", "counties"},
+        {"schema_version", "as_of_month", "resolved_market_date", "inputs", "unmapped_source_counties", "categories", "counties"},
         "season-map payload",
     )
-    if payload["schema_version"] != "1.0":
+    if payload["schema_version"] != "1.1":
         raise SeasonMapContractError("season-map schema version is invalid")
     month = _real_month(payload["as_of_month"])
     _real_date(payload["resolved_market_date"], "resolved_market_date")
@@ -636,12 +669,23 @@ def validate_season_map_payload(
         raise SeasonMapContractError("season-map market date does not match publication")
     inputs = _require_object(
         payload["inputs"],
-        {"seasonality_source_status", "seasonality_snapshot_hash", "county_registry_hash", "market_registry_hash", "geometry_hash"},
+        {
+            "seasonality_sources", "seasonality_snapshot_hash", "county_registry_hash",
+            "market_registry_hash", "geometry_hash", "category_registry_hash",
+        },
         "season-map inputs",
     )
-    if inputs["seasonality_source_status"] not in SOURCE_STATUSES:
-        raise SeasonMapContractError("season-map seasonality source status is invalid")
-    for field in ("seasonality_snapshot_hash", "county_registry_hash", "market_registry_hash", "geometry_hash"):
+    seasonality_sources = inputs["seasonality_sources"]
+    if not isinstance(seasonality_sources, dict) or not seasonality_sources:
+        raise SeasonMapContractError("season-map seasonality sources must be a non-empty object")
+    for category_id, source in seasonality_sources.items():
+        _require_object(source, {"source_status"}, "season-map seasonality source")
+        if source["source_status"] not in SOURCE_STATUSES:
+            raise SeasonMapContractError("season-map seasonality source status is invalid")
+    for field in (
+        "seasonality_snapshot_hash", "county_registry_hash", "market_registry_hash",
+        "geometry_hash", "category_registry_hash",
+    ):
         if not isinstance(inputs[field], str) or not HASH_PATTERN.fullmatch(inputs[field]):
             raise SeasonMapContractError("season-map input hash is invalid")
     unmapped = payload["unmapped_source_counties"]
@@ -649,6 +693,40 @@ def validate_season_map_payload(
         raise SeasonMapContractError("unmapped source counties must be sorted and unique")
     for value in unmapped:
         _nonempty_text(value, "unmapped source county")
+
+    categories = payload["categories"]
+    if not isinstance(categories, list) or not categories:
+        raise SeasonMapContractError("season-map categories must be a non-empty list")
+    category_fields = {"id", "label", "season_semantics", "catalog_row_count"}
+    category_ids = []
+    semantics_by_id = {}
+    counts_by_id = {}
+    for category in categories:
+        _require_object(category, category_fields, "season-map category")
+        category_id = category["id"]
+        if not isinstance(category_id, str) or not category_id:
+            raise SeasonMapContractError("season-map category id is invalid")
+        _nonempty_text(category["label"], "season-map category label")
+        semantics = category["season_semantics"]
+        if semantics not in SEASON_SEMANTICS:
+            raise SeasonMapContractError("season-map category season_semantics is invalid")
+        count = category["catalog_row_count"]
+        if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            raise SeasonMapContractError("season-map category catalog_row_count is invalid")
+        if semantics == "no_official_season_registry" and count != 0:
+            raise SeasonMapContractError(
+                "season-map no_official_season_registry category must have zero catalog rows "
+                "(" + NO_OFFICIAL_SEASON_REGISTRY_CITATION + "): " + repr(category_id)
+            )
+        category_ids.append(category_id)
+        semantics_by_id[category_id] = semantics
+        counts_by_id[category_id] = count
+    if len(category_ids) != len(set(category_ids)):
+        raise SeasonMapContractError("season-map categories must have unique ids")
+    categories_with_rows = {category_id for category_id, count in counts_by_id.items() if count > 0}
+    if set(seasonality_sources) != categories_with_rows:
+        raise SeasonMapContractError("season-map seasonality sources must match the categories with catalog rows")
+
     counties = payload["counties"]
     if not isinstance(counties, list) or len(counties) != COUNTY_COUNT:
         raise SeasonMapContractError("season-map payload must contain exactly 22 counties")
@@ -656,6 +734,7 @@ def validate_season_map_payload(
     produce_fields = {"category", "display_name", "canonical_id", "source_status"}
     market_fields = {"market_code", "feed_market_name", "official_name", "official_url", "evidence_url", "feed_coverage_status"}
     identities = []
+    category_id_set = set(category_ids)
     for county in counties:
         _require_object(county, county_fields, "season-map county")
         if not isinstance(county["county_code"], str) or not COUNTY_CODE_PATTERN.fullmatch(county["county_code"]):
@@ -673,14 +752,21 @@ def validate_season_map_payload(
         produce_keys = []
         for produce in produce_rows:
             _require_object(produce, produce_fields, "season-map local produce")
-            if produce["category"] not in CATEGORIES:
-                raise SeasonMapContractError("season-map produce category is invalid")
+            produce_category = produce["category"]
+            if produce_category not in category_id_set:
+                raise SeasonMapContractError("season-map produce category is unregistered: " + repr(produce_category))
+            if semantics_by_id[produce_category] == "no_official_season_registry":
+                raise SeasonMapContractError(
+                    "season-map local produce must not use a category with no official season registry "
+                    "(" + NO_OFFICIAL_SEASON_REGISTRY_CITATION + "): " + repr(produce_category)
+                )
             _nonempty_text(produce["display_name"], "season-map produce display name")
             if produce["canonical_id"] is not None:
                 _nonempty_text(produce["canonical_id"], "season-map produce canonical id")
-            if produce["source_status"] != inputs["seasonality_source_status"]:
+            expected_source = seasonality_sources.get(produce_category)
+            if expected_source is None or produce["source_status"] != expected_source["source_status"]:
                 raise SeasonMapContractError("season-map produce source status differs from its input")
-            produce_keys.append((produce["category"], produce["display_name"]))
+            produce_keys.append((produce_category, produce["display_name"]))
         if produce_keys != sorted(produce_keys) or len(produce_keys) != len(set(produce_keys)):
             raise SeasonMapContractError("season-map local produce must be sorted and unique")
         market_rows = county["official_markets"]
@@ -703,6 +789,7 @@ def validate_season_map_payload(
         identities.append((county["county_code"], county["slug"], county["display_name"]))
     if len(identities) != len(set(identities)):
         raise SeasonMapContractError("season-map county identities must be unique")
+
     if config is not None:
         expected_identities = [
             (county["county_code"], county["slug"], county["display_name"])
@@ -714,9 +801,20 @@ def validate_season_map_payload(
             "county_registry_hash": config.county_registry_hash,
             "market_registry_hash": config.market_registry_hash,
             "geometry_hash": config.geometry_hash,
+            "category_registry_hash": config.category_registry_hash,
         }
         if any(inputs[field] != value for field, value in expected_hashes.items()):
             raise SeasonMapContractError("season-map checked-in input hash differs from its source")
+        expected_category_projection = [
+            {"id": category.id, "label": category.label, "season_semantics": category.season_semantics}
+            for category in config.category_registry.categories
+        ]
+        actual_category_projection = [
+            {"id": category["id"], "label": category["label"], "season_semantics": category["season_semantics"]}
+            for category in categories
+        ]
+        if actual_category_projection != expected_category_projection:
+            raise SeasonMapContractError("season-map categories differ from the checked-in registry")
         markets_by_county = {county["slug"]: [] for county in config.county_registry["counties"]}
         for market in config.market_registry["markets"]:
             markets_by_county[market["county_slug"]].append(_public_market(market))
