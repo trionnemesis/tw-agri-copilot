@@ -5,10 +5,12 @@ import xml.etree.ElementTree as ET
 
 from tpw.produce_icons import (
     FALLBACK_ICON_REGISTRY,
+    ICON_FIDELITIES,
     PRODUCE_ICON_REGISTRY,
     SPRITE_MAX_BYTES,
     read_produce_icon_sprite,
     resolve_produce_icon,
+    uncovered_display_names,
     validate_produce_icon_registry,
     validate_produce_icon_sprite,
 )
@@ -18,18 +20,31 @@ ROOT = pathlib.Path(__file__).parents[2]
 
 
 class ProduceIconTest(unittest.TestCase):
-    def test_registry_exactly_covers_the_published_fixture_catalog(self):
+    def test_uncovered_catalog_names_are_reported_not_raised(self):
+        # The published catalogue is the agency's full monthly list and rotates every month, so the
+        # registry can only ever be a superset of one month. Coverage is reported, never asserted
+        # equal, and an uncovered name still renders through the category fallback.
+        rows = [
+            {"category": "fruit", "display_name": "香蕉"},
+            {"category": "vegetable", "display_name": "青蔥"},
+            {"category": "fruit", "display_name": "尚未繪製的水果"},
+        ]
+        self.assertEqual(uncovered_display_names(rows), [("fruit", "尚未繪製的水果")])
+        self.assertEqual(uncovered_display_names(rows[:2]), [])
+        self.assertEqual(
+            resolve_produce_icon("fruit", "尚未繪製的水果"), FALLBACK_ICON_REGISTRY["fruit"]
+        )
+        self.assertIn(("fruit", "釋迦"), PRODUCE_ICON_REGISTRY)
+        self.assertNotIn(("fruit", "番荔枝"), PRODUCE_ICON_REGISTRY)
+
+    def test_every_published_catalog_name_resolves_into_the_sprite(self):
         current = json.loads((ROOT / "site/data/current.json").read_text())
-        published = {
-            (row["category"], row["display_name"])
-            for row in current["season_catalog"]
-        }
-        self.assertEqual(published, set(PRODUCE_ICON_REGISTRY))
-        self.assertEqual(len(PRODUCE_ICON_REGISTRY), 39)
-        self.assertEqual(sum(category == "fruit" for category, _ in published), 20)
-        self.assertEqual(sum(category == "vegetable" for category, _ in published), 19)
-        self.assertIn(("fruit", "釋迦"), published)
-        self.assertNotIn(("fruit", "番荔枝"), published)
+        symbol_ids = validate_produce_icon_registry()
+        self.assertTrue(current["season_catalog"])
+        for row in current["season_catalog"]:
+            spec = resolve_produce_icon(row["category"], row["display_name"])
+            self.assertIn(spec.symbol_id, symbol_ids)
+            self.assertIn(spec.fidelity, ICON_FIDELITIES)
 
     def test_resolution_is_exact_and_unknown_names_use_only_category_fallback(self):
         banana = resolve_produce_icon("fruit", "香蕉")
@@ -50,7 +65,7 @@ class ProduceIconTest(unittest.TestCase):
         symbol_ids = validate_produce_icon_sprite(content)
         self.assertLessEqual(len(content), SPRITE_MAX_BYTES)
         self.assertEqual(symbol_ids, validate_produce_icon_registry())
-        self.assertEqual(len(symbol_ids), 41)
+        self.assertEqual(len(symbol_ids), len(PRODUCE_ICON_REGISTRY) + len(FALLBACK_ICON_REGISTRY))
         root = ET.fromstring(content)
         self.assertEqual(root.tag, "{http://www.w3.org/2000/svg}svg")
         lowered = content.lower()

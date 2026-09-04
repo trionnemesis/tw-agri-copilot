@@ -42,7 +42,9 @@ PRODUCE_ICON_REGISTRY = {
     ("fruit", "番石榴"): ProduceIconSpec("produce-fruit-guava", "exact"),
     ("fruit", "百香果"): ProduceIconSpec("produce-fruit-passion-fruit", "exact"),
     ("fruit", "紅龍果"): ProduceIconSpec("produce-fruit-dragon-fruit", "exact"),
+    ("fruit", "芒果"): ProduceIconSpec("produce-fruit-mango", "exact"),
     ("fruit", "葡萄"): ProduceIconSpec("produce-fruit-grapes", "exact"),
+    ("fruit", "葡萄柚"): ProduceIconSpec("produce-fruit-grapefruit", "exact"),
     ("fruit", "蓮霧"): ProduceIconSpec("produce-fruit-wax-apple", "exact"),
     ("fruit", "蘋果"): ProduceIconSpec("produce-fruit-apple", "exact"),
     ("fruit", "西瓜"): ProduceIconSpec("produce-fruit-watermelon", "exact"),
@@ -111,6 +113,11 @@ def resolve_produce_icon(category, display_name):
     if not isinstance(display_name, str) or not display_name.strip():
         raise ValueError("invalid produce icon display name")
     return PRODUCE_ICON_REGISTRY.get((category, display_name), FALLBACK_ICON_REGISTRY[category])
+
+
+def uncovered_display_names(rows):
+    """Catalogue names with no authored icon; they render as the category fallback, never as an error."""
+    return sorted({(row["category"], row["display_name"]) for row in rows} - set(PRODUCE_ICON_REGISTRY))
 
 
 def _local_name(value):
