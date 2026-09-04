@@ -19,7 +19,16 @@
 - `validate-config` (20 mapped items, 22 counties, 2 verified markets), `validate-market-calendar
   --year 2026`, `validate-agent-run tests/fixtures/agent-run.valid.json`, `validate-traceability`,
   `validate-traceability-events`, `validate-data --as-of 2026-09-03`, `verify-site` — all pass.
-- `npm run test:browser` (Playwright, chromium desktop + mobile) — `31 passed, 1 skipped`.
+- `npm run test:browser` (Playwright, chromium desktop + mobile) against the fixture rebuild —
+  `31 passed, 1 skipped`; against the committed live publication — `31 passed`.
+- The widened icon-fidelity assertion was verified both ways: with one live season card injected
+  as `category_fallback`, `season-search.spec.mjs` gives `6 passed`, and the original
+  `['exact','representative']` assertion gives `1 failed`. Without that change the new daily
+  browser gate would have blocked a publication over a decorative icon gap.
+- `verify-site` and `validate-data --as-of 2026-09-03` run against the checkout *before*
+  `seed-prototype` replaces `data/` — reproduced that `seed-prototype` alone leaves 38 dirty
+  paths under `data/` and none under `site/`, so every later check in `ci.yml` had been seeing
+  the August fixture rather than the committed publication.
 - AC-010 idempotency on the live publication: `build --as-of 2026-09-03` → `tpw.presentation` →
   `enhance_price_trends()` run twice produced an identical aggregate hash over `site/` and
   `reports/` (`0b3bd654…`).
@@ -37,8 +46,9 @@ Hash-pinned inputs are unchanged by this release:
 
 ### Unverified for this release
 
-- The pre-push validation added to `daily-update.yml` and the new `ci.yml` schedule have no remote
-  runtime evidence yet; both were exercised only by local simulation of the same command sequence.
+- The pre-push validation added to `daily-update.yml` (including its browser gate) and the new
+  `ci.yml` schedule have no remote runtime evidence yet; both were exercised only by local
+  simulation of the same command sequence.
 - No live 8066, seasonality, 7556 or H44 fetch was performed; the published tree was rebuilt from
   committed normalized history only.
 - Part B of Issue #44 (livestock and aquaculture seasonality) is untouched and remains at Phase 1.
