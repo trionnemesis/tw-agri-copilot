@@ -26,6 +26,13 @@ jobs:
       - run: PYTHONPATH=src python3 -m tpw validate-config
       - run: PYTHONPATH=src python3 -m tpw validate-market-calendar --year 2026
       - run: PYTHONPATH=src python3 -m tpw validate-agent-run tests/fixtures/agent-run.valid.json
+      - name: Validate the committed publication before fixtures replace it
+        # seed-prototype rewrites data/ and the later rebuild rewrites site/, so every check after
+        # this point sees the August fixture. On the scheduled run this is the only step that looks
+        # at what main actually publishes.
+        run: |
+          PYTHONPATH=src python3 -m tpw verify-site
+          PYTHONPATH=src python3 -m tpw validate-data --as-of "$(python3 -c 'import json, pathlib; print(json.loads(pathlib.Path("site/data/current.json").read_text(encoding="utf-8"))["as_of_date"])')"
       - run: PYTHONPATH=src python3 -m tpw seed-prototype --as-of 2026-08-25
       - run: PYTHONPATH=src python3 -m tpw validate-source-run --date 2026-08-25
       - name: Run the test suite and prove it leaves the working tree untouched

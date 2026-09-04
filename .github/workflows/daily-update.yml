@@ -44,6 +44,10 @@ jobs:
         with: {ref: main}
       - uses: actions/setup-python@v6
         with: {python-version: '3.11'}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
       - run: PYTHONPATH=src python3 -m tpw validate-config
       - run: PYTHONPATH=src python3 -m tpw validate-market-calendar --year 2026
       - id: dates
@@ -225,6 +229,13 @@ jobs:
             git status --porcelain
             exit 1
           fi
+      - name: Run the browser suite against the publication
+        # The season, map and trend pages are data-driven, and the GITHUB_TOKEN push that follows
+        # will not start ci.yml, so this is the only browser coverage the day's output ever gets.
+        run: |
+          npm ci --ignore-scripts
+          npx --no-install playwright install --with-deps --only-shell chromium
+          npm run test:browser
       - name: Guard the repository size
         # verify-site already caps site/ and scans it for secrets; only the whole-repository cap,
         # which grows with each day of committed market data, is left uncovered.
