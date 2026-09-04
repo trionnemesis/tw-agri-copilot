@@ -47,6 +47,19 @@
   repository anatomy 缺少 `docs/` 與 `references/`、路由表缺少 20 個品項履歷頁，以及快速開始
   漏掉 `python3 -m tpw.presentation`（照原步驟建置出的站台與已發布內容不一致）。
 
+### 文件版本對應
+
+參考文件隨本次 release 對齊，唯一例外是 `SPEC.md`。
+
+| 文件 | 版本 | 說明 |
+|---|---|---|
+| `tpw.__version__`／`pyproject.toml` | 1.0.0 | 套件版本的唯一來源；pyproject 以 `[tool.setuptools.dynamic]` 取用 |
+| `PLAN.md` | 1.0.0 | front matter 由 `0.3.0` 對齊至本次 release |
+| `TASKS.md` | 1.0.0 | front matter 新增 `version` 欄位 |
+| `VERIFICATION.md` | 逐次追加 | 最新段落為 `## v1.0.0 — Issue #44 Part A` |
+| `DISCOVERY.md` | 不改版 | 2026-08-26 一次性來源探查的原始紀錄，保留原貌 |
+| `SPEC.md` | **0.1.0（維持不變）** | `WORK_ORDER.md` 明列不得編輯，`PLAN.md` 要求 byte-for-byte 不變，acceptance criteria 要求 SHA-256 維持 `2be4f623…`。它是契約基線，不隨實作 release 改版 |
+
 ### Unchanged
 
 - `SPEC.md` 與 hash-pinned 視覺參考未被修改，SHA-256 維持 `2be4f623…` 與 `bd2ddaeb…`。
