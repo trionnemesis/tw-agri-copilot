@@ -17,6 +17,7 @@ Issue #44 Part B：多類別產季語意契約與畜產／養殖水產 22 縣市
 - 產季地圖新增 intro notice 與每個縣市一行的 unknown 說明（22 縣市各一行）。
 - 方法頁新增「產季語意與類別」表格。
 - `validate-config` 輸出新增已登錄類別數（`4 produce categories`）。
+- Extension catalog 的 `county_count`、`variety_count`、`district_count` 一律要求真正的非負整數，明確拒絕 `True`／`1.0`／`"1"` 這類會通過 `== len(...)` 比較的值（PR #47 review 指出）。
 
 ### Changed
 
@@ -24,6 +25,7 @@ Issue #44 Part B：多類別產季語意契約與畜產／養殖水產 22 縣市
 - 15 處類別 hard gate（`model.canonical_map`、`season_map.py`、`produce_icons.py`、`render.py` 五處 `'水果' if … else '蔬菜'`、`cli.py` 數處等）改由類別 registry 驅動；遇到未登錄類別時直接 loud failure（raise），取代先前把第三種類別靜默標成「蔬菜」的行為。
 - `assets/js/app.js` 的分類篩選集合改由畫面上實際存在的 `[data-filter]` 按鈕推導，不再硬編。
 - `model.canonical_map` 現在要求 category 必須是已登錄且 `market_watchlist=true` 的類別；`invalid category` 錯誤訊息前綴維持不變。
+- 當季頁、產季地圖與首頁的產季來源提示改為**逐來源分組**：一份混合來源狀態的 catalog（例如 AFA `live` 加上 extension `stale`）會依 `(source_status, source_url)` 各出一則提示並標明所屬類別，不再以第一列的狀態代表整份清單；單一來源狀態時輸出與先前逐位元相同（PR #47 review 指出）。
 
 ### Unchanged
 

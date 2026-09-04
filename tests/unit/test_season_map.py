@@ -177,6 +177,7 @@ class SeasonMapTest(unittest.TestCase):
                 ("aquaculture", "no_official_season_registry", 0),
             ],
         )
+        self.assertEqual(payload["inputs"]["seasonality_sources"], {"fruit": {"source_status": "live"}})
 
     def test_catalog_row_count_rejects_bool_masquerading_as_the_right_value(self):
         # fruit's catalog_row_count is 1 in this fixture, so True (== 1) would silently pass a
@@ -191,7 +192,6 @@ class SeasonMapTest(unittest.TestCase):
         fruit["catalog_row_count"] = True
         with self.assertRaisesRegex(SeasonMapContractError, "catalog_row_count"):
             validate_season_map_payload(tampered)
-        self.assertEqual(payload["inputs"]["seasonality_sources"], {"fruit": {"source_status": "live"}})
 
     def test_different_categories_may_use_different_source_status(self):
         payload = build_season_map_payload(

@@ -116,15 +116,15 @@ T-000 → T-101 → T-102 → T-103 → T-104 → T-105
 
 - [x] **T-302 — Season-map payload `schema_version 1.1`** (`NFR-001`, `NFR-008`)
   - `src/tpw/season_map.py`: per-category `source_status` under `inputs.seasonality_sources`, top-level `categories` axis with `catalog_row_count`, `inputs.category_registry_hash`; `schema/season-map.schema.json` synced to the same field set and category enum.
-  - Evidence: `VERIFICATION.md` `## v1.1.0 — Issue #44 Part B` (`site/data/season-map/current.json` field-by-field check); `tests/unit/test_season_map.py` (+6 tests, +1 stricter rename).
+  - Evidence: `VERIFICATION.md` `## v1.1.0 — Issue #44 Part B` (`site/data/season-map/current.json` field-by-field check); `tests/unit/test_season_map.py` (+7 tests, +1 stricter rename).
 
 - [x] **T-303 — Extension catalog slot** (`NFR-001`, `NFR-003`, `NFR-007`)
   - `data/seasonality/extensions/<YYYY-MM>.json` loader/validator (`src/tpw/season_extensions.py`): accepts only registered, non-AFA `official_season_registry` categories; rejects `no_official_season_registry` rows citing `SPEC.md §6.2.6` / Issue #44 BC-2; no extension file is committed by this work order.
-  - Evidence: `VERIFICATION.md` `## v1.1.0 — Issue #44 Part B`; `tests/unit/test_season_extensions.py` (32 tests); `tests/integration/test_build.py` scenarios (no-extension build, test-only category build, livestock-extension fail-closed, stale-schema rejection).
+  - Evidence: `VERIFICATION.md` `## v1.1.0 — Issue #44 Part B`; `tests/unit/test_season_extensions.py` (35 tests); `tests/integration/test_build.py` scenarios (no-extension build, test-only category build, livestock-extension fail-closed, stale-schema rejection).
 
 - [x] **T-304 — Registry-driven render/CLI/icons and loud failure on unknown category** (`FR-003`, `NFR-004`, `NFR-010`)
   - `src/tpw/render.py`, `src/tpw/cli.py`, `src/tpw/produce_icons.py`, `src/tpw/assets/produce-icons.svg`: the fifteen category hard gates now read the registry; two new category fallback icons (sprite 43 → 45 symbols); season page 「產季語意」 section; map intro notice plus 22 per-county unknown lines; methodology 「產季語意與類別」 table; `assets/js/app.js` filter set derived from the DOM instead of hard-coded.
-  - Evidence: `VERIFICATION.md` `## v1.1.0 — Issue #44 Part B`; `tests/integration/test_build.py`; `tests/browser/season-map.spec.mjs`, `tests/browser/season-search.spec.mjs` — `33 passed, 1 skipped`.
+  - Evidence: `VERIFICATION.md` `## v1.1.0 — Issue #44 Part B`; `tests/integration/test_build.py`; `tests/browser/season-map.spec.mjs`, `tests/browser/season-search.spec.mjs` — `33 passed, 1 skipped`; `tests/unit/test_season_source_notice.py` (6 tests, PR #47 review finding A).
 
 - [x] **T-305 — Committed publication rebuild and idempotency** (`AC-010`)
   - `src/tpw/__init__.py` `__version__` → `1.1.0`; the committed publication was rebuilt in place (`build` → `tpw.presentation` → `validate-data` → `verify-site`), mirroring `daily-update.yml`'s "Build, normalize, and validate" step, without running `seed-prototype` at the repository root.
