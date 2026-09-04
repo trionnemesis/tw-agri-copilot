@@ -1,5 +1,59 @@
 # Prototype verification evidence
 
+## v1.0.0 — Issue #44 Part A — 2026-09-04
+
+### Verified locally
+
+- `PYTHONPATH=src python3 -m compileall -q src tests` — clean.
+- `PYTHONPATH=src python3 -m unittest discover -s tests -t .` — `Ran 168 tests` / `OK`.
+- `git status --porcelain` compared either side of that run — identical, so the suite no longer
+  writes to `data/`, `site/` or `reports/`. Before the fix the same run left **126 modified tracked
+  files** plus 6 untracked artifacts, replacing live prices with prototype fixture values.
+- `PYTHONPATH=src python3 -m unittest tests.unit.test_produce_icons` standalone — `Ran 6 tests` / `OK`.
+  Before the fix this failed with `published` holding `('fruit','葡萄柚')` and `('fruit','芒果')`
+  while the registry held `('fruit','龍眼')` and `('fruit','高接梨')`, and passed only under
+  `unittest discover` because an earlier integration test had rewritten `site/data/current.json`
+  to the August fixture first.
+- CI order simulated in a scratch copy: `seed-prototype --as-of 2026-08-25` →
+  `validate-source-run --date 2026-08-25` → full suite → tree-comparison guard — guard passes.
+- `validate-config` (20 mapped items, 22 counties, 2 verified markets), `validate-market-calendar
+  --year 2026`, `validate-agent-run tests/fixtures/agent-run.valid.json`, `validate-traceability`,
+  `validate-traceability-events`, `validate-data --as-of 2026-09-03`, `verify-site` — all pass.
+- `npm run test:browser` (Playwright, chromium desktop + mobile) against the fixture rebuild —
+  `31 passed, 1 skipped`; against the committed live publication — `31 passed`.
+- The widened icon-fidelity assertion was verified both ways: with one live season card injected
+  as `category_fallback`, `season-search.spec.mjs` gives `6 passed`, and the original
+  `['exact','representative']` assertion gives `1 failed`. Without that change the new daily
+  browser gate would have blocked a publication over a decorative icon gap.
+- `verify-site` and `validate-data --as-of 2026-09-03` run against the checkout *before*
+  `seed-prototype` replaces `data/` — reproduced that `seed-prototype` alone leaves 38 dirty
+  paths under `data/` and none under `site/`, so every later check in `ci.yml` had been seeing
+  the August fixture rather than the committed publication.
+- AC-010 idempotency on the live publication: `build --as-of 2026-09-03` → `tpw.presentation` →
+  `enhance_price_trends()` run twice produced an identical aggregate hash over `site/` and
+  `reports/` (`0b3bd654…`).
+- Workflow YAML parsed with `yaml.safe_load` for `ci.yml` and `daily-update.yml`.
+- Published homepage footer carries the release version after presentation rewriting:
+  `Taiwan Produce Watch · 台灣蔬果公開資料觀察 · v1.0.0`.
+- Produce icon coverage on the published catalogue: 39/39.
+
+### Artifact integrity
+
+Hash-pinned inputs are unchanged by this release:
+
+- SPEC.md: `2be4f623cf882eca7302d41702ecf53a23564e8f82753a7f82d404f617858ff6`
+- reference HTML: `bd2ddaeb4a1ce1431d27ad5901310e0abd1a30a9cd8d8f4725f60f78a1b2e7dd`
+
+### Unverified for this release
+
+- The pre-push validation added to `daily-update.yml` (including its browser gate) and the new
+  `ci.yml` schedule have no remote runtime evidence yet; both were exercised only by local
+  simulation of the same command sequence.
+- No live 8066, seasonality, 7556 or H44 fetch was performed; the published tree was rebuilt from
+  committed normalized history only.
+- Part B of Issue #44 (livestock and aquaculture seasonality) is untouched and remains at Phase 1.
+
+
 ## Scheduler missing/delayed recovery — 2026-08-29
 
 - 19:30 Asia/Taipei 的公開 Actions evidence 顯示：18:17 primary scheduled run 未建立；最近 scheduled run 仍為 `33211062672`（2026-08-29 05:05 Asia/Taipei）。Workflow 位於 default branch、GitHub API 狀態為 active，09:17／18:17 timezone-aware cron 與 H44 evening condition 均存在。公開 evidence 無法再判定 GitHub 內部未 enqueue 的確切原因。

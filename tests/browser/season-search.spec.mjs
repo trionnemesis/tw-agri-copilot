@@ -285,7 +285,9 @@ test('local decorative icons render and reflow at a 200% zoom equivalent', async
   );
   expect(iconContract.every((icon) => icon.ariaHidden === 'true')).toBe(true);
   expect(iconContract.every((icon) => icon.focusable === 'false')).toBe(true);
-  expect(iconContract.every((icon) => ['exact', 'representative'].includes(icon.fidelity))).toBe(true);
+  // category_fallback is the documented degradation for an agency catalogue name nobody has
+  // authored an icon for. Forbidding it would make a decorative gap block a publication.
+  expect(iconContract.every((icon) => ['exact', 'representative', 'category_fallback'].includes(icon.fidelity))).toBe(true);
   expect(iconContract.every((icon) => icon.href.startsWith('../assets/icons/produce.svg#produce-'))).toBe(true);
   expect(iconContract.every((icon) => icon.width > 0 && icon.height > 0)).toBe(true);
 

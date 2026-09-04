@@ -1,5 +1,6 @@
 ---
 task_set: TPW-PR1-PR5-PROTOTYPE
+version: 1.0.0
 status: Done
 owner: gpt-5.6-terra implementation subagent
 reviewer: main agent

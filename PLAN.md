@@ -1,6 +1,6 @@
 ---
 plan_id: TPW-PLAN-001
-version: 0.3.0
+version: 1.0.0
 status: Public prototype with county season map released and verified
 scope: PR 1-5 + Issue 30 - Public side-project prototype
 source_spec: SPEC.md
