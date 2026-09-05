@@ -50,6 +50,10 @@ Merge `2963922` 後由 GitHub Actions 產生，全部經 API 逐一查證（非�
 
 ### Explicit limits
 
+以下每一條描述的是**本次實作階段（merge 之前）在 agent 環境內的行為**，不是 merge 後由 GitHub Actions
+代表本 repo 執行的動作。後者的實際行為 —— 包含抓取上游、提交 `dba7746` 與部署 Pages —— 記在上方
+Remote evidence；兩節主詞不同，不互相牴觸。
+
 - 不編輯或擴張 `SPEC.md`；SHA-256 維持 `2be4f623…` 未變動；`references/*.html` 維持 `bd2ddaeb…`。
 - 未新增任何 live adapter（畜產／水產產期或行情）；未對 `*.gov.tw` 或任何外部來源發出請求；required tests 不依賴 live API。
 - 未把畜產／水產加入 `config/produce.yml` watchlist；未新增第二種 `dataset_semantics` 的行情資料；未處理 TC-1 單位、TC-4 代號命名空間、TC-5 `market_kind`／`MARKET_HOST_ALLOWLIST`（`official-produce-markets` 契約原封不動）。
