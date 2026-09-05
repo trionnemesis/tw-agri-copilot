@@ -10,7 +10,7 @@
 - Baseline（`main` @ `a87a722`）— `Ran 168 tests` / `OK`；本分支 — `Ran 258 tests` / `OK`（+90；91 個新增測試方法，其中 1 個為更嚴格的改名：`test_duplicate_county_produce_conflict_fails_closed` → `test_duplicate_category_display_name_in_catalog_fails_closed`）。Publication signature 於該次測試前後皆為
   `f6818e79871908884353c71e2ef09c87ce4d7c296f7b2f33d90270e82ca2b0dc` — 測試套件未寫入 publication。
 - `validate-config` — `config valid: 20 mapped items, 22 counties, 2 verified markets, 4 produce categories`；`validate-market-calendar --year 2026` — `valid market calendar: 2026 115-114.07.30-fruit-vegetable`；`validate-agent-run tests/fixtures/agent-run.valid.json` — `agent run valid: 1`；`validate-traceability` — `valid traceability registry: fixture 5`；`validate-traceability-events` — `valid traceability market events: fixture 5`。
-- Committed publication 重建（repo 根目錄，`AS_OF=2026-09-03` 讀自 `site/data/current.json`，未執行 `seed-prototype`，鏡射 `daily-update.yml` 的「Build, normalize, and validate」步驟，共執行兩次）：`build` — `build promoted safely`；`python3 -m tpw.presentation` — `presentation 2026-08-30.1 normalized: 55 files`；`validate-data` — `data valid`；`verify-site` — `site verified`。Signature：重建前（與 `main` @ `a87a722` 相同）= `b28c66e1147d470d4203b950e2e7b0ba78f056e63eff7caab199908bef06f47f`；第一次重建後 = `f6818e79871908884353c71e2ef09c87ce4d7c296f7b2f33d90270e82ca2b0dc`；第二次重建後 = 相同 → idempotent（`AC-010`）。Merge 後 `daily-update.yml` 的 push run 預期回報 `No content changes`；此事尚未發生，留待 merge 後補記。
+- Committed publication 重建（repo 根目錄，`AS_OF=2026-09-03` 讀自 `site/data/current.json`，未執行 `seed-prototype`，鏡射 `daily-update.yml` 的「Build, normalize, and validate」步驟，共執行兩次）：`build` — `build promoted safely`；`python3 -m tpw.presentation` — `presentation 2026-08-30.1 normalized: 55 files`；`validate-data` — `data valid`；`verify-site` — `site verified`。Signature：重建前（與 `main` @ `a87a722` 相同）= `b28c66e1147d470d4203b950e2e7b0ba78f056e63eff7caab199908bef06f47f`；第一次重建後 = `f6818e79871908884353c71e2ef09c87ce4d7c296f7b2f33d90270e82ca2b0dc`；第二次重建後 = 相同 → idempotent（`AC-010`）。Merge 後 `daily-update.yml` 的 push run（#58 attempt 1）未產生 content commit，與此預測一致；但該 run 於 2026-09-05 02:45 UTC（台北 10:45，落在 README 記載的 morning-recovery 窗口）被重跑為 attempt 2，依 recovery 路徑實際抓取上游後提交 `dba7746`（30 檔案）。詳見下方 Remote evidence。
 - Scratch copy，完整 `ci.yml` 順序：`compileall` 無輸出；`validate-config`／`validate-market-calendar`／`validate-agent-run` 通過；對 committed publication 執行 `verify-site` + `validate-data` 通過；`seed-prototype --as-of 2026-08-25` — `seeded normalized rows: 1400`；`validate-source-run --date 2026-08-25` — `valid source run: 2026-07-22 2026-08-25 1`；完整套件 — `Ran 258 tests` / `OK`，signature `eafadf7ea85b3619a62c1a64c5dbfe6c1409e4129daaf26e3c7e6627a3696a40` 測試前後相同；`seed-prototype` → `build` → `presentation`（54 files）→ `validate-traceability` → `validate-traceability-events` → `validate-data` → `verify-site` 全部通過；`npm run test:browser` — `33 passed, 1 skipped`；`du -sm site` = 1（≤900）；`du -sm --exclude=.git .` = 8（≤900）；secret-pattern `rg 'AKIA|ghp_|glpat-|github_pat_|BEGIN PRIVATE KEY|base64,' site` — 無命中。
 - `npm run test:browser` 對 committed publication（repo 根目錄 `site/`）— `33 passed, 1 skipped`（baseline 為 `31 passed, 1 skipped`；+2 為新的 season-semantics spec 在 desktop／mobile 兩個 project 各跑一次）；publication signature 不變（`f6818e79…`）；`test-results/` 事後已移除。
 - `site/data/season-map/current.json` 重建後檢查：`schema_version` 為 `1.1`；`categories` = `[(fruit, official_season_registry, 20), (vegetable, official_season_registry, 19), (livestock, no_official_season_registry, 0), (aquaculture, no_official_season_registry, 0)]`；`inputs.seasonality_sources` = `{fruit: live, vegetable: live}`；`inputs.category_registry_hash` = `sha256:ed8e9fef8021c6f622bc9b9ee51dc6335c58b9e329415284a360caaf5211c77a`；`inputs.seasonality_source_status` 已不存在；`counties` 區塊與重建前位元相同；`seasonality_snapshot_hash` 不變（無 extension 檔存在，merge 為 no-op）。
@@ -33,10 +33,19 @@ Hash-pinned inputs are unchanged by this release:
 - SPEC.md: `2be4f623cf882eca7302d41702ecf53a23564e8f82753a7f82d404f617858ff6`
 - reference HTML: `bd2ddaeb4a1ce1431d27ad5901310e0abd1a30a9cd8d8f4725f60f78a1b2e7dd`
 
+### Remote evidence
+
+Merge `2963922` 後由 GitHub Actions 產生，全部經 API 逐一查證（非引用他處摘要）：
+
+- [`Fixture CI` #299](https://github.com/trionnemesis/tw-agri-copilot/actions/runs/33905991927) — success（attempt 1）。
+- [`Deploy Pages` #26](https://github.com/trionnemesis/tw-agri-copilot/actions/runs/33905991892) — success（attempt 1）。
+- [`Daily market update` #58](https://github.com/trionnemesis/tw-agri-copilot/actions/runs/33905992037) — success。**該 run 目前為 attempt 2**：`Fetch bounded rolling windows` 與 `Refresh seasonality and 7556 registry` 皆為 `success` 而非 skipped，`Refresh H44` skipped，即 README 記載的 morning-recovery 路徑。gate 逐項結果：測試套件 gate success；browser suite `33 passed`／`1 skipped`；size guard success；`Produce icon coverage: 39/39.`；commit 步驟輸出 `[main dba7746] data: daily market update`、`30 files changed`，並推送 `2963922..dba7746`。`deploy` job Pages 部署成功。
+
+`2963922` 之後 `main` 上僅有 `dba7746` 一個 daily commit，時間戳與 attempt 2 的 log 一致，因此 attempt 1 未提交內容。
+
 ### Unverified for this release
 
 - Work order §13 列出的全部候選來源：無 S 級證據；所有 `*.gov.tw` egress 封鎖（見 `DISCOVERY.md` 的 Part B 續篇）。
-- Remote runs：`ci.yml`、`daily-update.yml`、GitHub Pages 部署 — 留待 merge 後補記。
 - 畜產與養殖水產未新增任何 live season 或行情 adapter；兩者在每個縣市矩陣格子中維持 `unknown`。
 
 ### Explicit limits
@@ -138,8 +147,11 @@ publication untouched`) and of the committed-publication validation that now run
 
 - No live 8066, seasonality, 7556 or H44 fetch was performed anywhere in this release. Run #54 was
   a `push` event, so its refresh steps were skipped by design and the gates ran against a build
-  from committed normalized history; they have not yet been exercised on a scheduled run that
-  fetches upstream first.
+  from committed normalized history. *(Superseded after this release: scheduled runs
+  [#56](https://github.com/trionnemesis/tw-agri-copilot/actions/runs/33842043784) and
+  [#57](https://github.com/trionnemesis/tw-agri-copilot/actions/runs/33883459760), both on
+  `a87a722`, did fetch upstream first — `Fetch bounded rolling windows`, `Refresh seasonality and
+  7556 registry` and, on #57, `Refresh H44` all ran — and every gate passed.)*
 - The `ci.yml` schedule (`cron: '40 22 * * *'`) has not fired yet; only its push and pull_request
   paths have remote runtime evidence.
 - The content-hash guard's *negative* case has local evidence only. Run #278 shows it passing on

@@ -231,7 +231,7 @@ VERIFICATION.md         本地與遠端 acceptance evidence
 ## 狀態
 
 - Release v1.0.0／v1.1.0：Issue #44 Part A 的 D-1（圖示 registry 綁定輪替中的上游清單）、D-2（每日資料 commit 沒有 CI 覆蓋）、D-3（測試污染已發布內容）均已修正，並各自留下回歸保護；v1.1.0 交付 Issue #44 Part B 的多類別產季語意契約（見下一行）。變更紀錄見 [`CHANGELOG.md`](CHANGELOG.md)。
-- Issue #44 Part B：類別 registry（水果／蔬菜／畜產／養殖水產）、季節地圖 payload 1.1（每類別來源狀態、`categories` 軸）、extension catalog slot、22 縣市矩陣對畜產／養殖水產每一格明示 `unknown`，以及對應的當季頁／地圖／方法頁文案與 registry 驅動的 hard gate 已實作並完成本地測試（見 `VERIFICATION.md` `v1.1.0` 段落）。畜產／養殖水產的 live season／行情 adapter 待有 `*.gov.tw` egress 的環境完成 discovery（見 `DISCOVERY.md` 續篇）；remote CI／daily-update／Pages 執行結果留待 merge 後補記。
+- Issue #44 Part B：類別 registry（水果／蔬菜／畜產／養殖水產）、季節地圖 payload 1.1（每類別來源狀態、`categories` 軸）、extension catalog slot、22 縣市矩陣對畜產／養殖水產每一格明示 `unknown`，以及對應的當季頁／地圖／方法頁文案與 registry 驅動的 hard gate 已實作並完成本地測試（見 `VERIFICATION.md` `v1.1.0` 段落）。畜產／養殖水產的 live season／行情 adapter 待有 `*.gov.tw` egress 的環境完成 discovery（見 `DISCOVERY.md` 續篇）。Remote CI、daily-update 與 Pages 的執行結果已逐一查證並記入 `VERIFICATION.md` 的 Remote evidence。
 - Prototype fixture：可重建、可測試、可部署。
 - Live market adapter：已實作 bounded fetch path；本版未進行 live 120-day release 驗證。
 - Quantitative price trends：`data/series/*.json` 已保存 7／30／90D range stats；20 個品項頁以 build-time static SVG 顯示價格／日期刻度、最新價、7D／30D 參考均價、30D high／low、coverage 與 7D CV。fixture rebuild、`verify-site`、unit/integration 及桌機／手機 Playwright 都納入 CI；不做預測、不改 scoring。
