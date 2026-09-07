@@ -4,12 +4,14 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "daily-update.yml"
+RECOVERY_DOC = ROOT / "docs" / "EXTERNAL_RECOVERY.md"
 
 
 class ExternalRerunRecoveryContractTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
+        cls.recovery_doc = RECOVERY_DOC.read_text(encoding="utf-8")
 
     def test_push_attempt_one_remains_committed_evidence_only(self):
         self.assertIn("RUN_ATTEMPT: ${{ github.run_attempt }}", self.workflow)
@@ -36,6 +38,21 @@ class ExternalRerunRecoveryContractTest(unittest.TestCase):
             self.workflow,
         )
         self.assertIn("effective_slot='evening-recovery'", self.workflow)
+
+    def test_external_recovery_document_matches_slot_specific_freshness(self):
+        self.assertIn("10:30", self.recovery_doc)
+        self.assertIn("22:30", self.recovery_doc)
+        self.assertIn("10:00–13:59", self.recovery_doc)
+        self.assertIn("19:00–23:29", self.recovery_doc)
+        self.assertIn(
+            "H44 execution freshness is independent of market publication freshness",
+            self.recovery_doc,
+        )
+        self.assertIn(
+            "data/traceability/market-events/execution/current.json",
+            self.recovery_doc,
+        )
+        self.assertIn("must not use `workflow_dispatch`", self.recovery_doc)
 
     def test_market_and_7556_refresh_only_on_non_push_or_explicit_rerun_recovery(self):
         condition = "if: github.event_name != 'push' || steps.dates.outputs.external_recovery == 'true'"
