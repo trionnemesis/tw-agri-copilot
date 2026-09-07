@@ -1,7 +1,7 @@
 name: Daily market update
 run-name: ${{ inputs.schedule_slot && format('Daily market update · {0}', inputs.schedule_slot) || github.event.head_commit.message || 'Daily market update' }}
 # Market data is checked twice daily. Daily traceability context uses source-specific refresh cadence.
-# A stale push-run rerun may act as an out-of-band recovery after both cron layers miss;
+# A recovery-capable push-run rerun may act as an out-of-band recovery after both cron layers miss;
 # GitHub Actions still owns every source fetch, build, validation, commit, and Pages deployment.
 on:
   schedule:
@@ -63,20 +63,34 @@ jobs:
           if [ "$EVENT_NAME" = 'push' ]; then
             requested="$(python3 -c 'import json, pathlib; d=json.loads(pathlib.Path("site/data/current.json").read_text(encoding="utf-8")); print(d["as_of_date"])')"
             committed_requested="$(python3 -c 'import json, pathlib; d=json.loads(pathlib.Path("site/data/current.json").read_text(encoding="utf-8")); print((d.get("publication_status") or {}).get("requested_date") or d["as_of_date"])')"
+            h44_attempted_date="$(python3 - <<'PY'
+          import json, pathlib, re
+          path = pathlib.Path("data/traceability/market-events/execution/current.json")
+          value = "0000-00-00"
+          if path.exists():
+              try:
+                  payload = json.loads(path.read_text(encoding="utf-8"))
+              except (OSError, json.JSONDecodeError) as exc:
+                  raise SystemExit("H44 execution freshness evidence is unreadable") from exc
+              candidate = payload.get("attempted_date")
+              if not isinstance(candidate, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", candidate):
+                  raise SystemExit("H44 execution freshness evidence has an invalid attempted_date")
+              value = candidate
+          print(value)
+          PY
+            )"
             if [ "${RUN_ATTEMPT:-1}" -gt 1 ]; then
               today="$(TZ=Asia/Taipei date +%F)"
-              local_hour="$(TZ=Asia/Taipei date +%H)"
-              if [[ "$committed_requested" < "$today" ]]; then
-                if [ "$local_hour" -ge 10 ] && [ "$local_hour" -lt 14 ]; then
-                  effective_slot='morning-recovery'
-                elif [ "$local_hour" -ge 19 ] && [ "$local_hour" -lt 23 ]; then
-                  effective_slot='evening-recovery'
-                fi
-                if [ "$effective_slot" = 'morning-recovery' ] || [ "$effective_slot" = 'evening-recovery' ]; then
-                  requested="$today"
-                  allow_fallback=true
-                  external_recovery=true
-                fi
+              local_clock="$(TZ=Asia/Taipei date +%H%M)"
+              if [[ "$committed_requested" < "$today" ]] && [ "$local_clock" -ge 1000 ] && [ "$local_clock" -lt 1400 ]; then
+                effective_slot='morning-recovery'
+              elif [[ "$h44_attempted_date" < "$today" ]] && [ "$local_clock" -ge 1900 ] && [ "$local_clock" -lt 2330 ]; then
+                effective_slot='evening-recovery'
+              fi
+              if [ "$effective_slot" = 'morning-recovery' ] || [ "$effective_slot" = 'evening-recovery' ]; then
+                requested="$today"
+                allow_fallback=true
+                external_recovery=true
               fi
             fi
           else
@@ -101,9 +115,9 @@ jobs:
             echo "Invocation slot: ${SCHEDULE_SLOT:-manual}" >> "$GITHUB_STEP_SUMMARY"
           elif [ "$external_recovery" = 'true' ]; then
             echo "Invocation slot: $effective_slot (out-of-band rerun recovery, attempt ${RUN_ATTEMPT})" >> "$GITHUB_STEP_SUMMARY"
-            echo "::notice::A stale push-run rerun is executing GitHub-owned recovery for $requested."
+            echo "::notice::A bounded push-run rerun is executing GitHub-owned recovery for $requested."
           elif [ "$EVENT_NAME" = 'push' ] && [ "${RUN_ATTEMPT:-1}" -gt 1 ]; then
-            echo "Push rerun recovery skipped: publication is current or this attempt is outside the bounded verifier window." >> "$GITHUB_STEP_SUMMARY"
+            echo "Push rerun recovery skipped: slot-specific freshness is current or this attempt is outside the bounded verifier window." >> "$GITHUB_STEP_SUMMARY"
           fi
       - id: market_refresh
         name: Fetch bounded rolling windows
@@ -193,22 +207,85 @@ jobs:
         if: (github.event_name == 'workflow_dispatch' && inputs.schedule_slot != 'morning-recovery') || (github.event_name == 'schedule' && github.event.schedule == '17 18 * * *') || (github.event_name == 'push' && steps.dates.outputs.external_recovery == 'true' && steps.dates.outputs.effective_slot == 'evening-recovery')
         env:
           AS_OF_DATE: ${{ steps.dates.outputs.requested }}
+          EFFECTIVE_SLOT: ${{ steps.dates.outputs.effective_slot }}
+          WORKFLOW_RUN_ID: ${{ github.run_id }}
+          WORKFLOW_RUN_ATTEMPT: ${{ github.run_attempt }}
+          WORKFLOW_EVENT: ${{ github.event_name }}
         run: |
           set +e
           traceability_event_output="$(PYTHONPATH=src python3 -m tpw fetch-traceability-events --as-of "$AS_OF_DATE" 2>&1)"
           traceability_event_status=$?
           set -e
           printf '%s\n' "$traceability_event_output"
+          execution_status=''
+          source_status=''
           if [ "$traceability_event_status" -eq 0 ]; then
-            echo "H44 refresh: success." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
-          fi
-          if grep -q 'traceability market events have no explicitly mapped records' <<<"$traceability_event_output"; then
+            source_status="$(TRACEABILITY_EVENT_OUTPUT="$traceability_event_output" python3 - <<'PY'
+          import json, os
+          prefix = "traceability market event refresh:"
+          line = next(
+              (line for line in os.environ["TRACEABILITY_EVENT_OUTPUT"].splitlines() if line.startswith(prefix)),
+              None,
+          )
+          if line is None:
+              raise SystemExit("H44 refresh output did not contain structured source status")
+          payload = json.loads(line[len(prefix):].strip())
+          source_status = payload.get("source_status")
+          if source_status not in {"live", "stale", "fixture", "unavailable"}:
+              raise SystemExit("H44 refresh output contained an invalid source status")
+          print(source_status)
+          PY
+            )"
+            if [ "$source_status" = 'unavailable' ]; then
+              execution_status='source_unavailable'
+              echo "::warning::H44 refresh attempted but the source was unavailable; preserving verified context."
+              echo "H44 refresh: source unavailable; execution freshness recorded." >> "$GITHUB_STEP_SUMMARY"
+            else
+              execution_status='completed'
+              echo "H44 refresh: success ($source_status)." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          elif grep -q 'traceability market events have no explicitly mapped records' <<<"$traceability_event_output"; then
+            execution_status='no_mapped_records'
+            source_status='live'
             echo "::warning::H44 returned valid rows but none map to the configured watchlist; preserving exact-date fixture/LKG context."
-            echo "H44 refresh: no explicitly mapped watchlist records; preserving exact-date fixture/LKG context." >> "$GITHUB_STEP_SUMMARY"
-            exit 0
+            echo "H44 refresh: no explicitly mapped watchlist records; execution freshness recorded." >> "$GITHUB_STEP_SUMMARY"
+          else
+            exit "$traceability_event_status"
           fi
-          exit "$traceability_event_status"
+          H44_EXECUTION_STATUS="$execution_status" H44_SOURCE_STATUS="$source_status" python3 - <<'PY'
+          import datetime as dt
+          import json
+          import os
+          import pathlib
+
+          requested_date = os.environ["AS_OF_DATE"]
+          execution_status = os.environ["H44_EXECUTION_STATUS"]
+          source_status = os.environ["H44_SOURCE_STATUS"]
+          if execution_status not in {"completed", "source_unavailable", "no_mapped_records"}:
+              raise SystemExit("invalid H44 execution status")
+          if source_status not in {"live", "stale", "fixture", "unavailable"}:
+              raise SystemExit("invalid H44 source status")
+          payload = {
+              "schema_version": "1.0",
+              "record_type": "h44_refresh_execution",
+              "attempted_date": requested_date,
+              "attempted_at": dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+              "execution_status": execution_status,
+              "source_status": source_status,
+              "workflow_run_id": int(os.environ["WORKFLOW_RUN_ID"]),
+              "workflow_run_attempt": int(os.environ["WORKFLOW_RUN_ATTEMPT"]),
+              "workflow_event": os.environ["WORKFLOW_EVENT"],
+              "effective_slot": os.environ["EFFECTIVE_SLOT"],
+              "eligible_for_market_aggregate": False,
+              "affects_buy_score": False,
+          }
+          encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+          base = pathlib.Path("data/traceability/market-events/execution")
+          dated = base / requested_date[:4] / requested_date[5:7] / f"{requested_date}.json"
+          dated.parent.mkdir(parents=True, exist_ok=True)
+          dated.write_text(encoded, encoding="utf-8")
+          (base / "current.json").write_text(encoded, encoding="utf-8")
+          PY
       - name: Build, normalize, and validate
         env:
           AS_OF_DATE: ${{ steps.resolved.outputs.date }}
