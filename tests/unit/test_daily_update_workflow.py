@@ -19,6 +19,31 @@ class DailyUpdateWorkflowTest(unittest.TestCase):
         self.assertIn("[ \"$SCHEDULE_SLOT\" = 'evening-recovery' ]", workflow)
         self.assertIn("python3 -m tpw.traceability_snapshot --as-of", workflow)
 
+    def test_external_recovery_uses_slot_specific_freshness_and_records_h44_execution(self):
+        workflow = (ROOT / ".github/workflows/daily-update.yml").read_text()
+        self.assertIn(
+            'if [[ "$committed_requested" < "$today" ]] && [ "$local_clock" -ge 1000 ]',
+            workflow,
+        )
+        self.assertIn(
+            'elif [[ "$h44_attempted_date" < "$today" ]] && [ "$local_clock" -ge 1900 ]',
+            workflow,
+        )
+        self.assertIn('[ "$local_clock" -lt 2330 ]', workflow)
+        self.assertIn(
+            "data/traceability/market-events/execution/current.json",
+            workflow,
+        )
+        self.assertIn('"record_type": "h44_refresh_execution"', workflow)
+        self.assertIn('"execution_status": execution_status', workflow)
+        self.assertIn('"source_status": source_status', workflow)
+        self.assertIn('"eligible_for_market_aggregate": False', workflow)
+        self.assertIn('"affects_buy_score": False', workflow)
+        self.assertIn(
+            "H44 refresh: no explicitly mapped watchlist records; execution freshness recorded.",
+            workflow,
+        )
+
     def test_recovery_guard_is_staggered_and_has_minimal_dispatch_permission(self):
         guard = (
             ROOT / ".github/workflows/daily-update-scheduler-guard.yml"

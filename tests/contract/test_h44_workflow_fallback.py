@@ -20,7 +20,9 @@ class H44WorkflowFallbackContractTest(unittest.TestCase):
             "traceability market events have no explicitly mapped records", step
         )
         self.assertIn("preserving exact-date fixture/LKG context", step)
-        self.assertIn("exit 0", step)
+        self.assertIn("execution_status='no_mapped_records'", step)
+        self.assertIn("execution freshness recorded", step)
+        self.assertIn('"record_type": "h44_refresh_execution"', step)
 
     def test_other_h44_failures_still_fail_closed(self):
         step = self.h44_step()

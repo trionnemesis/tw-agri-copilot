@@ -4,30 +4,55 @@ import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 WORKFLOW = ROOT / ".github" / "workflows" / "daily-update.yml"
+RECOVERY_DOC = ROOT / "docs" / "EXTERNAL_RECOVERY.md"
 
 
 class ExternalRerunRecoveryContractTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
+        cls.recovery_doc = RECOVERY_DOC.read_text(encoding="utf-8")
 
     def test_push_attempt_one_remains_committed_evidence_only(self):
         self.assertIn("RUN_ATTEMPT: ${{ github.run_attempt }}", self.workflow)
         self.assertIn("if [ \"${RUN_ATTEMPT:-1}\" -gt 1 ]; then", self.workflow)
         self.assertIn("external_recovery=false", self.workflow)
 
-    def test_stale_rerun_recomputes_requested_date_in_taipei(self):
+    def test_rerun_recomputes_requested_date_in_taipei(self):
         self.assertIn('today="$(TZ=Asia/Taipei date +%F)"', self.workflow)
         self.assertIn('committed_requested=', self.workflow)
+        self.assertIn('h44_attempted_date=', self.workflow)
         self.assertIn('requested="$today"', self.workflow)
         self.assertIn('allow_fallback=true', self.workflow)
         self.assertIn('external_recovery=true', self.workflow)
 
-    def test_recovery_is_bounded_to_verifier_windows(self):
-        self.assertIn('[ "$local_hour" -ge 10 ] && [ "$local_hour" -lt 14 ]', self.workflow)
+    def test_recovery_is_bounded_to_slot_specific_verifier_windows(self):
+        self.assertIn('local_clock="$(TZ=Asia/Taipei date +%H%M)"', self.workflow)
+        self.assertIn(
+            '[[ "$committed_requested" < "$today" ]] && [ "$local_clock" -ge 1000 ] && [ "$local_clock" -lt 1400 ]',
+            self.workflow,
+        )
         self.assertIn("effective_slot='morning-recovery'", self.workflow)
-        self.assertIn('[ "$local_hour" -ge 19 ] && [ "$local_hour" -lt 23 ]', self.workflow)
+        self.assertIn(
+            '[[ "$h44_attempted_date" < "$today" ]] && [ "$local_clock" -ge 1900 ] && [ "$local_clock" -lt 2330 ]',
+            self.workflow,
+        )
         self.assertIn("effective_slot='evening-recovery'", self.workflow)
+
+    def test_external_recovery_document_matches_slot_specific_freshness(self):
+        self.assertIn("10:30", self.recovery_doc)
+        self.assertIn("22:30", self.recovery_doc)
+        self.assertIn("10:00–13:59", self.recovery_doc)
+        self.assertIn("19:00–23:29", self.recovery_doc)
+        self.assertIn(
+            "H44 execution freshness is independent of market publication freshness",
+            self.recovery_doc,
+        )
+        self.assertIn(
+            "data/traceability/market-events/execution/current.json",
+            self.recovery_doc,
+        )
+        self.assertIn("must not use `workflow_dispatch`", self.recovery_doc)
 
     def test_market_and_7556_refresh_only_on_non_push_or_explicit_rerun_recovery(self):
         condition = "if: github.event_name != 'push' || steps.dates.outputs.external_recovery == 'true'"
@@ -47,6 +72,16 @@ class ExternalRerunRecoveryContractTest(unittest.TestCase):
             "github.event_name == 'push' && steps.dates.outputs.external_recovery == 'true' && steps.dates.outputs.effective_slot == 'evening-recovery'",
             self.workflow,
         )
+
+    def test_h44_execution_freshness_is_machine_readable_and_non_scoring(self):
+        self.assertIn(
+            "data/traceability/market-events/execution/current.json", self.workflow
+        )
+        self.assertIn('"record_type": "h44_refresh_execution"', self.workflow)
+        self.assertIn('"attempted_date": requested_date', self.workflow)
+        self.assertIn('"execution_status": execution_status', self.workflow)
+        self.assertIn('"eligible_for_market_aggregate": False', self.workflow)
+        self.assertIn('"affects_buy_score": False', self.workflow)
 
     def test_publication_rebases_only_when_newer_main_has_no_publication_changes(self):
         self.assertIn('base_before_update="$(git rev-parse HEAD^)"', self.workflow)
