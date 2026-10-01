@@ -389,22 +389,22 @@ test('print layout keeps icons visible and hides interactive controls', async ({
     ),
   ).toBe(true);
   await expect.poll(() =>
-    page.locator(`${produceIcons} use`).evaluateAll((uses) =>
-      uses.length === cardCount && uses.every((use) => {
+    page.locator(`${produceIcons} use`).evaluateAll((uses, expectedCount) =>
+      uses.length === expectedCount && uses.every((use) => {
         const box = use.getBBox();
         return box.width > 0 && box.height > 0;
-      }),
+      }), cardCount,
     ),
   ).toBe(true);
   expect(
-    await page.locator(produceIcons).evaluateAll((icons) =>
-      icons.length === cardCount &&
+    await page.locator(produceIcons).evaluateAll((icons, expectedCount) =>
+      icons.length === expectedCount &&
       icons.every((icon) => {
         const box = icon.getBoundingClientRect();
         const useBox = icon.querySelector('use')?.getBBox();
         const style = getComputedStyle(icon);
         return box.width > 0 && box.height > 0 && (useBox?.width || 0) > 0 && (useBox?.height || 0) > 0 && style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
-      }),
+      }), cardCount,
     ),
   ).toBe(true);
   expect(browserErrors).toEqual([]);
