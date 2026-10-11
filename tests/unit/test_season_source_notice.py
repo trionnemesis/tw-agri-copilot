@@ -2,7 +2,7 @@ import json
 import pathlib
 import unittest
 
-from tpw.categories import validate_category_registry
+from tpw.categories import CategoryRegistryError, validate_category_registry
 from tpw.render import _season_source_notice
 
 
@@ -99,6 +99,64 @@ class SeasonSourceNoticeTest(unittest.TestCase):
         ]
         backward = list(reversed(forward))
         self.assertEqual(_season_source_notice(forward, registry), _season_source_notice(backward, registry))
+
+    def test_multiple_source_groups_reject_unregistered_categories(self):
+        # Issue #44 follow-up: neither a separate source group nor membership in an
+        # otherwise valid group may silently turn an unknown category into a label.
+        for registry in (None, _registry_with_test_fishery()):
+            for distinct_source in (
+                {"source_status": "stale", "source_url": AFA_URL},
+                {"source_status": "live", "source_url": "https://example.test/season"},
+            ):
+                for shares_known_group in (False, True):
+                    rows = [
+                        {"category": "fruit", "source_status": "live", "source_url": AFA_URL},
+                        {"category": "unregistered", **distinct_source},
+                    ]
+                    if shares_known_group:
+                        rows.append({"category": "vegetable", **distinct_source})
+                    for reverse in (False, True):
+                        with self.subTest(
+                            explicit_registry=registry is not None,
+                            distinct_source=distinct_source,
+                            shares_known_group=shares_known_group,
+                            reverse=reverse,
+                        ):
+                            ordered = list(reversed(rows)) if reverse else rows
+                            with self.assertRaisesRegex(
+                                CategoryRegistryError, "unknown produce category: 'unregistered'"
+                            ):
+                                _season_source_notice(ordered, registry)
+
+    def test_multiple_source_groups_reject_missing_categories(self):
+        for registry in (None, _registry_with_test_fishery()):
+            for category_fields in ({}, {"category": None}):
+                rows = [
+                    {"category": "fruit", "source_status": "live", "source_url": AFA_URL},
+                    {**category_fields, "source_status": "stale", "source_url": AFA_URL},
+                ]
+                for reverse in (False, True):
+                    with self.subTest(
+                        explicit_registry=registry is not None,
+                        category_fields=category_fields,
+                        reverse=reverse,
+                    ):
+                        ordered = list(reversed(rows)) if reverse else rows
+                        with self.assertRaisesRegex(
+                            CategoryRegistryError, "unknown produce category: None"
+                        ):
+                            _season_source_notice(ordered, registry)
+
+    def test_multiple_source_groups_use_the_supplied_registry_for_category_lookup(self):
+        rows = [
+            {"category": "fruit", "source_status": "live", "source_url": AFA_URL},
+            {"category": "test_fishery", "source_status": "stale", "source_url": "https://example.test/season"},
+        ]
+        with self.assertRaisesRegex(CategoryRegistryError, "unknown produce category: 'test_fishery'"):
+            _season_source_notice(rows)
+        rendered = _season_source_notice(rows, _registry_with_test_fishery())
+        self.assertIn("data-season-source-categories='test_fishery'", rendered)
+        self.assertIn("測試漁產：本次官方查詢暫時無法取得", rendered)
 
     def test_unknown_category_only_matters_once_more_than_one_group_exists(self):
         # A single-group catalog never looks up a category label, so a row missing a category
