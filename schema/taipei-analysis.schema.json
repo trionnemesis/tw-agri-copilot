@@ -1,0 +1,277 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trionnemesis.github.io/tw-agri-copilot/schema/taipei-analysis.schema.json",
+  "title": "Taiwan Produce Watch Taipei-city wholesale descriptive statistics",
+  "description": "site/data/taipei/current.json. Rows are filtered to the verified Taipei 8066 markets before aggregation; no nationwide fallback, no Buy Score, no origin claim. A failed Taipei scope is published as analysis_status=failed with its reason and no statistics, without blocking the nationwide build. tpw.taipei_analysis.validate_taipei_analysis enforces the same contract plus cross-field consistency.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scope_id", "scope_label", "market_level", "frequency", "analysis_status", "failure_reason", "as_of_date", "requested_date", "publication_status", "source", "filter_policy", "national_fallback", "snapshot_hash", "expected_market_count", "observed_market_count", "scope_status", "method", "markets", "market_days", "items", "observations"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "scope_id": {"const": "taipei-city"},
+    "scope_label": {"const": "臺北市"},
+    "market_level": {"const": "wholesale"},
+    "frequency": {"const": "daily"},
+    "analysis_status": {
+      "enum": ["published", "failed"]
+    },
+    "failure_reason": {
+      "type": ["string", "null"]
+    },
+    "as_of_date": {"type": "string", "format": "date"},
+    "requested_date": {"type": "string", "format": "date"},
+    "publication_status": {
+      "enum": ["complete", "market_closed", "incomplete", "pending", "source_unavailable", "calendar_feed_discrepancy"]
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source_id", "dataset_id", "dataset_url", "source_url", "source_status", "retrieved_at"],
+      "properties": {
+        "source_id": {"const": "moa_market_8066"},
+        "dataset_id": {"const": "8066"},
+        "dataset_url": {"const": "https://data.gov.tw/dataset/8066"},
+        "source_url": {"const": "https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx"},
+        "source_status": {"type": "string", "minLength": 1},
+        "retrieved_at": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "filter_policy": {"const": "verified-taipei-8066-markets-v1"},
+    "national_fallback": {"const": false},
+    "snapshot_hash": {
+      "type": ["string", "null"],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "expected_market_count": {"type": "integer", "minimum": 0},
+    "observed_market_count": {"type": "integer", "minimum": 0},
+    "scope_status": {
+      "enum": ["all_markets_observed", "partial_markets_observed", "no_taipei_observation", "analysis_failed"]
+    },
+    "method": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["price_formula", "windows", "minimum_market_count", "buy_score"],
+      "properties": {
+        "price_formula": {"const": "sum(price_twd_per_kg*volume_kg)/sum(volume_kg)"},
+        "windows": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["7d", "30d", "90d"],
+          "properties": {
+            "7d": {"$ref": "#/$defs/windowSpec"},
+            "30d": {"$ref": "#/$defs/windowSpec"},
+            "90d": {"$ref": "#/$defs/windowSpec"}
+          }
+        },
+        "minimum_market_count": {"const": 2},
+        "buy_score": {"const": "not_evaluated"}
+      }
+    },
+    "markets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["market_code", "feed_market_name", "official_name", "geography_role", "evidence_url", "as_of_day_status", "as_of_valid_row_count"],
+        "properties": {
+          "market_code": {"type": "string", "pattern": "^[0-9]{3}$"},
+          "feed_market_name": {"type": "string", "minLength": 1},
+          "official_name": {"type": "string", "minLength": 1},
+          "geography_role": {"const": "market_location"},
+          "evidence_url": {"type": "string", "pattern": "^https://"},
+          "as_of_day_status": {"$ref": "#/$defs/dayStatus"},
+          "as_of_valid_row_count": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "market_days": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["date", "market_code", "day_status", "schedule_status", "schedule_reason", "row_count", "valid_row_count"],
+        "properties": {
+          "date": {"type": "string", "format": "date"},
+          "market_code": {"type": "string", "pattern": "^[0-9]{3}$"},
+          "day_status": {"$ref": "#/$defs/dayStatus"},
+          "schedule_status": {
+            "enum": ["expected_open", "exceptional_open", "scheduled_closed", "unknown"]
+          },
+          "schedule_reason": {"type": "string", "minLength": 1},
+          "row_count": {"type": "integer", "minimum": 0},
+          "valid_row_count": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["canonical_id", "display_name", "commodity_family", "product_namespace", "products_raw", "status", "production_method", "origin_status", "today", "previous_trading_day", "windows", "range_stats", "volatility_7d_cv", "volatility_7d_status", "recommendation_gate"],
+        "properties": {
+          "canonical_id": {"type": "string", "minLength": 1},
+          "display_name": {"type": "string", "minLength": 1},
+          "commodity_family": {
+            "enum": ["fruit", "vegetable"]
+          },
+          "product_namespace": {"const": "moa_market_8066_crop"},
+          "products_raw": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["product_code_raw", "product_name_raw"],
+              "properties": {
+                "product_code_raw": {"type": "string", "minLength": 1},
+                "product_name_raw": {"type": "string"}
+              }
+            }
+          },
+          "status": {
+            "enum": ["observed", "no_valid_trade", "no_taipei_observation"]
+          },
+          "production_method": {"const": "unknown"},
+          "origin_status": {"const": "unknown"},
+          "today": {
+            "type": ["object", "null"]
+          },
+          "previous_trading_day": {
+            "type": ["object", "null"]
+          },
+          "windows": {
+            "type": ["object", "null"]
+          },
+          "range_stats": {
+            "type": ["object", "null"]
+          },
+          "volatility_7d_cv": {
+            "type": ["number", "null"]
+          },
+          "volatility_7d_status": {
+            "enum": ["valid", "insufficient"]
+          },
+          "recommendation_gate": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "reason_codes"],
+            "properties": {
+              "status": {
+                "enum": ["insufficient", "not_evaluated"]
+              },
+              "reason_codes": {
+                "type": "array",
+                "minItems": 1,
+                "items": {
+                  "enum": ["NO_TAIPEI_OBSERVATION", "NO_VALID_TRADE", "COVERAGE_INSUFFICIENT", "MARKET_COUNT_INSUFFICIENT", "DATA_QUALITY_WARNING", "TAIPEI_BUY_SCORE_NOT_DEFINED"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["observation_period", "frequency", "scope_id", "market_namespace", "market_code", "market_name_raw", "geography_role", "source_id", "dataset_id", "source_url", "commodity_family", "product_namespace", "product_code_raw", "product_name_raw", "canonical_id", "variant", "grade", "cut", "production_method", "market_level", "price_raw", "price_unit_raw", "price_twd_per_kg", "quantity_raw", "quantity_unit", "value_status", "origin_status", "origin_evidence_type", "origin_value", "origin_granularity", "evidence_ref", "join_key_type", "join_key_value", "row_hash", "retrieved_at"],
+        "properties": {
+          "observation_period": {"type": "string", "format": "date"},
+          "frequency": {"const": "daily"},
+          "scope_id": {"const": "taipei-city"},
+          "market_namespace": {"const": "moa_market_8066"},
+          "market_code": {"type": "string", "pattern": "^[0-9]{3}$"},
+          "market_name_raw": {"type": "string", "minLength": 1},
+          "geography_role": {"const": "market_location"},
+          "source_id": {"const": "moa_market_8066"},
+          "dataset_id": {"const": "8066"},
+          "source_url": {"const": "https://data.moa.gov.tw/Service/OpenData/FromM/FarmTransData.aspx"},
+          "commodity_family": {
+            "enum": ["fruit", "vegetable"]
+          },
+          "product_namespace": {"const": "moa_market_8066_crop"},
+          "product_code_raw": {"type": "string", "minLength": 1},
+          "product_name_raw": {"type": "string"},
+          "canonical_id": {"type": "string", "minLength": 1},
+          "variant": {"type": "null"},
+          "grade": {"type": "null"},
+          "cut": {"type": "null"},
+          "production_method": {"const": "unknown"},
+          "market_level": {"const": "wholesale"},
+          "price_raw": {"type": "number", "minimum": 0},
+          "price_unit_raw": {"const": "元/公斤"},
+          "price_twd_per_kg": {"type": "number", "minimum": 0},
+          "quantity_raw": {"type": "number", "minimum": 0},
+          "quantity_unit": {"const": "公斤"},
+          "value_status": {
+            "enum": ["valid", "excluded_zero_price_or_volume"]
+          },
+          "origin_status": {"const": "unknown"},
+          "origin_evidence_type": {"type": "null"},
+          "origin_value": {"type": "null"},
+          "origin_granularity": {"type": "null"},
+          "evidence_ref": {"type": "null"},
+          "join_key_type": {"type": "null"},
+          "join_key_value": {"type": "null"},
+          "row_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+          "retrieved_at": {
+            "type": ["string", "null"]
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "analysis_status": {"const": "failed"}
+        }
+      },
+      "then": {
+        "properties": {
+          "failure_reason": {"type": "string", "minLength": 1},
+          "snapshot_hash": {"type": "null"},
+          "expected_market_count": {"const": 0},
+          "observed_market_count": {"const": 0},
+          "scope_status": {"const": "analysis_failed"},
+          "markets": {"maxItems": 0},
+          "market_days": {"maxItems": 0},
+          "items": {"maxItems": 0},
+          "observations": {"maxItems": 0}
+        }
+      },
+      "else": {
+        "properties": {
+          "failure_reason": {"type": "null"},
+          "snapshot_hash": {"type": "string"},
+          "expected_market_count": {"minimum": 1},
+          "scope_status": {
+            "enum": ["all_markets_observed", "partial_markets_observed", "no_taipei_observation"]
+          },
+          "markets": {"minItems": 1},
+          "market_days": {"minItems": 1},
+          "items": {"minItems": 1}
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "windowSpec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["days", "minimum_days"],
+      "properties": {
+        "days": {"type": "integer", "minimum": 1},
+        "minimum_days": {"type": "integer", "minimum": 1}
+      }
+    },
+    "dayStatus": {
+      "enum": ["traded", "no_valid_trade", "scheduled_closed", "missing", "calendar_feed_discrepancy"]
+    }
+  }
+}

@@ -417,3 +417,40 @@ Live screenshots:
 - No external AI provider was enabled.
 - Twice-daily scheduled publication remains lightly observed; the separate push rebuild path now has successful remote runtime evidence and does not contact the upstream market service.
 - Fixture/fallback status and wholesale/non-retail wording are intentionally visible on the public prototype.
+
+## Issue #51 PR 1 — Taipei scope (local evidence, unreleased)
+
+Base: `05125d5e54363e1b1675df3bb2c295f9155b4518` (`main`, `data: daily market update`). Status ladder for this slice: **fixture passed** and **local rebuild of committed live rows passed**; no live fetch, no full ingestion, not merged, not deployed. Remote CI and Pages evidence belong in the PR, not here, until they exist.
+
+### Commands replayed locally in a throwaway copy
+
+The `ci.yml` step order was replayed verbatim under Python 3.13 and again under Python 3.11 (the version CI pins); both produced the same `site/data/taipei/current.json` SHA-256 (`cedc1fe8…`): `compileall`, `validate-config`, `validate-market-calendar --year 2026`, `validate-agent-run`, `verify-site` + `validate-data` on the committed publication (no Taipei files yet — both pass, the dated-only requirement keeps them compatible), `seed-prototype --as-of 2026-08-25`, `validate-source-run`, the full unittest suite under the publication-signature guard, fixture rebuild, `tpw.presentation`, `validate-traceability`, `validate-traceability-events`, `validate-data --as-of 2026-08-25`, `verify-site --as-of 2026-08-25`, Playwright, the 900 MB size gates and the secret scan.
+
+| Check | Result |
+|---|---|
+| unittest discover (281 tests, 14 new unit + 3 new integration) | OK; publication signature unchanged |
+| Playwright (desktop + 390×844 mobile, incl. JS-disabled Taipei test) | 39 passed, 1 skipped (pre-existing touch skip) |
+| Mutation: drop the Taipei filter in `filter_taipei_rows` | 3 tests fail (no-fallback, non-Taipei invariance, same-history-filter) |
+
+### Nationwide output unchanged
+
+`tpw build --as-of 2026-10-16` + `tpw.presentation` on the committed live rows, once at the base commit and once with this change: `data/` and `reports/` are byte-identical, and so is `site/data/current.json`. `site/` differs only by additions: `site/taipei/`, `site/data/taipei/`, one homepage section, one methodology section, and two CSS rules appended to `assets/css/app.css`.
+
+### Taipei outputs
+
+| Input | `snapshot_hash` | Result |
+|---|---|---|
+| fixture 2026-08-25 | `sha256:887f00c4c1aac05d268f9217a5e0b66971450dca80ef6c68b76666abf4eed40e` | `all_markets_observed`; 63 Taipei rows (fixture rows upserted over committed live rows) |
+| committed live rows, as of 2026-10-16, requested 2026-10-18 | `sha256:38b08779931bcaf7c2773e0b7063cb98a88a4d385bd1309d076f384e3bd37695` | `all_markets_observed`; 55 Taipei rows; 19 items `not_evaluated`, mango `insufficient` (only market 104 traded); market days 12 `traded`, 2 `scheduled_closed` (2026-10-12), 4 `missing` (2026-10-17／18, calendar `expected_open`) |
+
+Rebuilding the same snapshot twice produced identical SHA-256 for `site/taipei/index.html` and all three `site/data/taipei/*` files.
+
+### Taipei failure isolation
+
+Requested in review on PR #52: a Taipei failure must not block the nationwide publication. `tests/integration/test_taipei_build.py::test_taipei_failure_is_isolated_from_the_nationwide_publication` drifts one stored 104 row to `台中市`, rebuilds through the CLI and asserts: the build succeeds and prints the `::warning::` annotation; `site/data/current.json`, the 2026-08-25 aggregate, advice, quality JSON and daily Markdown keep the same SHA-256 as the undrifted build; `validate-data` and `verify-site --as-of` pass; the Taipei JSON is `analysis_status=failed` with empty items and observations; the Taipei page carries no price.
+
+### Not verified in this slice
+
+- No new upstream was fetched; Taipei statistics only re-cut rows already stored from 8066.
+- The 104/109 identity relies on the existing `config/official-produce-markets.json` evidence (checked 2026-08-30); the 台／臺 alias is the only name normalization.
+- Data sets listed in Issue #51 for PR 2–4 (Taipei retail monthly prices, food supply-and-sales, annual source-region shares, 7299 fish market, 7296 hogs) are untouched.
