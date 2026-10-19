@@ -3,6 +3,23 @@
 本檔案記錄對外可見的行為變更。格式參考 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.1.0/)，
 版本號採 [Semantic Versioning](https://semver.org/lang/zh-TW/)。
 
+## [Unreleased]
+
+Issue #51 PR 1：臺北市蔬果批發描述統計。只取已驗證的臺北一（109）、臺北二（104）8066 成交列，當日與全部歷史使用同一政策先過濾再聚合，由既有 `tpw build` 產出；全臺 aggregate、series、Buy Score、`data/`、`reports/` 與 `site/data/current.json` 位元不變。
+
+### Added
+
+- `src/tpw/taipei_analysis.py` 與 `schema/taipei-analysis.schema.json`：版本化 Taipei analysis 契約（`schema_version 1.0`），含 scope／market／source lineage、`snapshot_hash`、量加權日價與 7／30／90D、逐日 `traded`／`scheduled_closed`／`missing`／`no_valid_trade`／`calendar_feed_discrepancy` 狀態，以及 row-level observations（原始作物代碼／名稱、原價與原單位、`row_hash`、`origin_status=unknown`）。
+- 新公開輸出：`site/taipei/index.html`、`site/data/taipei/current.json`、`site/data/taipei/items.csv`、`site/data/taipei/observations.csv`。頁面純靜態，停用 JavaScript 與 390px 手機寬度皆可讀。
+- 首頁新增「臺北市批發行情」入口 section，方法頁新增「臺北市範圍」section；`assets/css/app.css` 追加臺北表格樣式。
+- `verify-site` 驗證臺北 JSON 契約、依 JSON 重產 CSV 比對、頁面日期／品項與 JSON 一致；帶 `--as-of` 時要求臺北輸出存在且與 publication 一致。`validate-data` 依 `data/market/daily/` 重算臺北 JSON 並比對。`verify-site` 的 secret scan 也涵蓋 `.csv`。
+
+### Unchanged
+
+- Buy Score、eligibility 與 `config/scoring.yml` 未變動；臺北範圍不計算分數，推薦資格只會是 `insufficient` 或 `not_evaluated`。
+- 臺北沒有成交時不回退全臺價格、不補 0；市場所在地不作為產地。
+- 未新增任何 live 來源或 workflow 變更；`SPEC.md` 未修改。
+
 ## [1.1.0] — 2026-09-04
 
 Issue #44 Part B：多類別產季語意契約與畜產／養殖水產 22 縣市矩陣映射。新增 config-driven 產品類別 registry、季節地圖 payload `schema_version 1.1` 與受契約約束的 extension catalog slot，把畜產、養殖水產的每一個 (類別 × 縣市) 矩陣格子明示為 `unknown`，而不是靜默省略或誤判為非當季。

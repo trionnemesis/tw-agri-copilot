@@ -5,11 +5,48 @@ from . import __version__
 from .categories import category_label, default_category_registry
 from .produce_icons import read_produce_icon_sprite, resolve_produce_icon
 from .publication import validate_market_status
+from .taipei_analysis import taipei_csv_documents
 
 
 DISCLAIM = "批發市場平均行情，非實際零售通路售價。"
 TRACE_WARNING = "此為同品項的公開產銷履歷紀錄，非本日市場成交來源證明。"
 EVENT_WARNING = "H44 市場事件與 7556 履歷批次、8066 批發行情是不同資料集；只作來源情境，不納入行情彙總或 Buy Score。"
+TAIPEI_WARNING = "臺北一、臺北二是市場所在地，不是產地；成交品項不代表產自臺北市，本頁也不揭露產地。"
+MARKET_STATUS_LABELS = {
+    "complete": "行情完整",
+    "market_closed": "今日休市",
+    "incomplete": "行情尚未完整",
+    "pending": "尚無完整行情",
+    "source_unavailable": "官方資料暫時無法取得",
+    "calendar_feed_discrepancy": "日曆與行情來源不一致",
+}
+TAIPEI_DAY_LABELS = {
+    "traded": "有成交",
+    "no_valid_trade": "有資料列但無有效成交",
+    "scheduled_closed": "官方公告休市",
+    "missing": "缺資料（非休市）",
+    "calendar_feed_discrepancy": "日曆休市但有成交",
+}
+TAIPEI_SCHEDULE_LABELS = {
+    "expected_open": "預期開市",
+    "exceptional_open": "特殊開市",
+    "scheduled_closed": "公告休市",
+    "unknown": "日曆未知",
+}
+TAIPEI_ITEM_LABELS = {
+    "observed": "有成交",
+    "no_valid_trade": "無有效成交",
+    "no_taipei_observation": "臺北無成交資料",
+}
+TAIPEI_GATE_LABELS = {"insufficient": "資料不足", "not_evaluated": "未評分"}
+TAIPEI_REASON_LABELS = {
+    "NO_TAIPEI_OBSERVATION": "臺北無成交",
+    "NO_VALID_TRADE": "無有效成交",
+    "COVERAGE_INSUFFICIENT": "覆蓋日數不足",
+    "MARKET_COUNT_INSUFFICIENT": "臺北市場數不足",
+    "DATA_QUALITY_WARNING": "資料品質警示",
+    "TAIPEI_BUY_SCORE_NOT_DEFINED": "臺北 Buy Score 尚未定義",
+}
 
 
 def _escape(value):
@@ -621,7 +658,7 @@ def _sparkline(points):
     )
 
 
-def _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map=False, registry=None):
+def _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map=False, registry=None, taipei=None):
     registry = registry or default_category_registry()
     item_map = {item["canonical_id"]: item for item in items}
     series_map = {row["canonical_id"]: row for row in series}
@@ -681,6 +718,13 @@ def _home(items, scores, series, seasonality, advice, traceability, traceability
         + f"<div class='grid grid-3'><div class='note'><strong>當季主要產地</strong><p>{len(in_season)} 項行情觀察品項具當季資料；產地只作季節背景，不代表當日成交來源。</p><a href='season/current.html'>查看當季與產地 →</a></div>"
         + f"<div class='note warn'><strong>7556 相關產銷履歷</strong><p>{traceability_status.get('active_record_count', 0)} 筆有效履歷批次、{traceability_status.get('operator_count', 0)} 個驗證經營者。{TRACE_WARNING}</p><a href='traceability/index.html'>查看履歷邊界 →</a></div>"
         + f"<div class='note warn'><strong>H44 市場事件</strong><p>{len(traceability_events)} 筆獨立市場事件、{traceability_event_status.get('market_count', 0)} 個市場。{EVENT_WARNING}</p><a href='traceability/market-events.html'>查看事件證據 →</a></div></div></section>"
+        + (
+            "<section class='section' id='taipei'><div class='section-heading'><div><div class='eyebrow ink'>TAIPEI CITY SCOPE</div><h2>臺北市批發行情</h2></div>"
+            f"<span class='badge info'>{taipei['observed_market_count']}／{taipei['expected_market_count']} 個臺北市場有成交</span></div>"
+            "<p>只取臺北一、臺北二的成交列再聚合，與全臺行情分開計算；不是零售價，也不是產地。</p>"
+            "<a href='taipei/index.html'>查看臺北市描述統計 →</a></section>"
+            if taipei is not None else ""
+        )
         + "<section class='section' id='history'><h2>歷史紀錄</h2><p>每日 HTML、Markdown 與 machine-readable JSON 都保留在 repo 中。</p><a href='archive/index.html'>開啟日期封存 →</a></section>"
         + "<section class='section sources' id='sources'><h2>資料來源、方法與限制</h2>"
         + f"<p class='disclaimer'>{DISCLAIM}</p><p>行情以各市場交易量加權；推薦由 deterministic Buy Score 產生，AI 只能解釋，不能改變數值或 verdict。</p>"
@@ -769,18 +813,10 @@ def _category_semantics_row(category):
     )
 
 
-def _methodology(source_status, quality, publication_status, include_season_map=False, registry=None):
+def _methodology(source_status, quality, publication_status, include_season_map=False, registry=None, taipei=None):
     registry = registry or default_category_registry()
     warnings = "".join(f"<li>{_escape(value)}</li>" for value in quality["warnings"]) or "<li>無</li>"
-    status_labels = {
-        "complete": "行情完整",
-        "market_closed": "今日休市",
-        "incomplete": "行情尚未完整",
-        "pending": "尚無完整行情",
-        "source_unavailable": "官方資料暫時無法取得",
-        "calendar_feed_discrepancy": "日曆與行情來源不一致",
-    }
-    status_label = status_labels[publication_status["status"]]
+    status_label = MARKET_STATUS_LABELS[publication_status["status"]]
     calendar = publication_status.get("calendar") or {}
     if not calendar or calendar.get("schedule_status") == "unknown":
         calendar_line = "<p>市場日曆：unknown（不宣稱官方休市）</p>"
@@ -818,11 +854,128 @@ def _methodology(source_status, quality, publication_status, include_season_map=
         + "<section class='section'><h2>Buy Score</h2><p>產季、7D／30D 相對價、交易量、資料品質與 7D 波動度皆為 deterministic component。7556 產銷履歷與 H44 市場事件都不加分，AI 不改變 score 或 verdict。</p><p>H44 的交易金額與交易量只保留在獨立事件層，不與 8066 行情合併，也不由溯源代號推論 7556 履歷批次。</p></section>"
         + f"<section class='section'><h2>資料狀態</h2><p>行情來源：{_escape(source_status)}</p><p>每日檢查：{_escape(publication_status['requested_date'])} · 最近完整交易日：{_escape(publication_status['resolved_date'])} · 狀態：{_escape(status_label)} · 全體 feed：{_escape(publication_status.get('feed_status', 'not_checked'))} · 日曆市場 feed：{_escape(publication_status.get('calendar_feed_status', 'not_checked'))}</p>{calendar_line}<ul>{warnings}</ul><p class='note warn'>各資料集會分別標示官方更新、最近驗證資料或內建參考資料，不得把 fallback 解讀為即時官方快照。</p></section>"
         + category_section
-        + map_section + "</main>"
+        + map_section
+        + (
+            "<section class='section' id='taipei-scope'><h2>臺北市範圍</h2>"
+            "<p>臺北市描述統計只取 verified-entries-only registry 中臺北市的 8066 市場成交列，<strong>先過濾當日與全部歷史，再聚合</strong>；"
+            "公式與 7／30／90D window 和全臺相同，全臺行情與 Buy Score 不受影響。臺北沒有成交時不改用全臺價格，也不補 0。</p>"
+            f"<p class='note warn'>{TAIPEI_WARNING}臺北尚無 versioned Buy Score，推薦資格只會是資料不足或未評分。</p>"
+            "<a href='taipei/index.html'>查看臺北市描述統計 →</a></section>"
+            if taipei is not None else ""
+        )
+        + "</main>"
     )
 
 
-def build_site(rows, as_of, root, source_status="validated", *, series=None, scores=None, seasonality=None, season_catalog=None, advice=None, traceability=None, traceability_status=None, traceability_events=None, traceability_event_status=None, quality=None, publication_status=None, season_map_payload=None, county_svg=None, category_registry=None):
+def _taipei_window_cell(window):
+    if window is None:
+        return "<td class='num'>—</td>"
+    coverage = "足夠" if window["status"] == "valid" else "不足"
+    return (
+        f"<td class='num' data-window-status='{_escape(window['status'])}'>{_price(window['price_twd_per_kg'])}"
+        f"<br><span class='small'>{window['coverage_days']}／{window['minimum_days']} 日 · {coverage}</span></td>"
+    )
+
+
+def _taipei_item_row(item):
+    today = item["today"] or {}
+    windows = item["windows"] or {}
+    gate = item["recommendation_gate"]
+    products = "<br>".join(
+        f"<code>{_escape(product['product_code_raw'])}</code> {_escape(product['product_name_raw'])}"
+        for product in item["products_raw"]
+    ) or "—"
+    reasons = "、".join(TAIPEI_REASON_LABELS[code] for code in gate["reason_codes"])
+    return (
+        f"<tr data-taipei-item='{_escape(item['canonical_id'])}' data-taipei-item-status='{_escape(item['status'])}' "
+        f"data-recommendation-status='{_escape(gate['status'])}'>"
+        f"<th scope='row'>{_escape(item['display_name'])}</th><td>{products}</td>"
+        f"<td>{_escape(TAIPEI_ITEM_LABELS[item['status']])}</td>"
+        f"<td class='num'>{_price(today.get('price_twd_per_kg'))}</td>"
+        f"<td class='num'>{_number(today.get('volume_kg'), 0)} kg</td>"
+        f"<td class='num'>{_escape('、'.join(today['market_codes'])) if today else '—'}</td>"
+        + "".join(_taipei_window_cell(windows.get(name)) for name in ("7d", "30d", "90d"))
+        + f"<td>{_escape(TAIPEI_GATE_LABELS[gate['status']])}<br><span class='small'>{_escape(reasons)}</span></td></tr>"
+    )
+
+
+def _taipei_page(taipei, include_season_map=False):
+    markets = {market["market_code"]: market for market in taipei["markets"]}
+    market_label = "、".join(f"{market['feed_market_name']}（{code}）" for code, market in markets.items())
+    as_of = taipei["as_of_date"]
+    requested = taipei["requested_date"]
+    notes = []
+    if requested != as_of:
+        notes.append(
+            f"請求日 {requested} 的行情發布狀態為「{MARKET_STATUS_LABELS[taipei['publication_status']]}」；"
+            f"本頁統計截至 {as_of}，不代表請求日當日現價。"
+        )
+    if taipei["scope_status"] == "no_taipei_observation":
+        notes.append(f"臺北市場於 {as_of} 沒有成交資料；本頁不改用全臺價格，也不補 0。")
+    elif taipei["scope_status"] == "partial_markets_observed":
+        traded = "、".join(market["feed_market_name"] for market in taipei["markets"] if market["as_of_valid_row_count"])
+        notes.append(f"{as_of} 只有{traded}有成交；單一市場品項只顯示描述統計，推薦資格為資料不足。")
+    status_notes = "".join(f"<p class='note warn'>{_escape(note)}</p>" for note in notes)
+    source = taipei["source"]
+    market_rows = "".join(
+        f"<tr><th scope='row'>{_escape(market['feed_market_name'])}（{_escape(market['market_code'])}）</th>"
+        f"<td>{_escape(market['official_name'])}</td><td>市場所在地（非產地）</td>"
+        f"<td data-day-status='{_escape(market['as_of_day_status'])}'>{_escape(TAIPEI_DAY_LABELS[market['as_of_day_status']])}</td>"
+        f"<td class='num'>{market['as_of_valid_row_count']}</td>"
+        f"<td><a href='{_escape(market['evidence_url'])}' rel='noopener noreferrer'>官方證據</a></td></tr>"
+        for market in taipei["markets"]
+    )
+    day_rows = "".join(
+        f"<tr data-market-day='{_escape(day['date'])}:{_escape(day['market_code'])}'><th scope='row'>{_escape(day['date'])}</th>"
+        f"<td>{_escape(markets[day['market_code']]['feed_market_name'])}</td>"
+        f"<td data-day-status='{_escape(day['day_status'])}'>{_escape(TAIPEI_DAY_LABELS[day['day_status']])}</td>"
+        f"<td>{_escape(TAIPEI_SCHEDULE_LABELS[day['schedule_status']])}<br><span class='small'>{_escape(day['schedule_reason'])}</span></td>"
+        f"<td class='num'>{day['valid_row_count']}／{day['row_count']}</td></tr>"
+        for day in taipei["market_days"]
+    )
+    observation_rows = "".join(
+        f"<tr><th scope='row'>{_escape(row['market_name_raw'])}（{_escape(row['market_code'])}）</th>"
+        f"<td><code>{_escape(row['product_code_raw'])}</code></td><td>{_escape(row['product_name_raw'])}</td>"
+        f"<td class='num'>{_price(row['price_twd_per_kg'])}</td><td class='num'>{_number(row['quantity_raw'], 0)} kg</td>"
+        f"<td>{'有效' if row['value_status'] == 'valid' else '零價或零量，已排除'}</td></tr>"
+        for row in taipei["observations"]
+    ) or "<tr><td colspan='6'>當日沒有臺北成交列。</td></tr>"
+    return (
+        "<header class='page-hero'><div class='wrap'><div class='eyebrow'>TAIPEI CITY · WHOLESALE</div>"
+        f"<h1>臺北市蔬果批發行情</h1><p>{_escape(market_label)}果菜批發市場的量加權描述統計</p></div></header>"
+        + _toolbar("../", include_season_map)
+        + "<main id='main' class='wrap'>"
+        + f"<section class='section' id='taipei-status' data-taipei-as-of='{_escape(as_of)}' data-taipei-requested='{_escape(requested)}' "
+        + f"data-taipei-scope-status='{_escape(taipei['scope_status'])}' data-taipei-observed-markets='{taipei['observed_market_count']}'>"
+        + "<h2>資料狀態</h2><div class='grid grid-4'>"
+        + f"<div class='card'><div class='label'>資料截至日</div><div class='value'>{_escape(as_of)}</div></div>"
+        + f"<div class='card'><div class='label'>請求日</div><div class='value'>{_escape(requested)}</div></div>"
+        + f"<div class='card'><div class='label'>有成交的臺北市場</div><div class='value'>{taipei['observed_market_count']}／{taipei['expected_market_count']}</div></div>"
+        + f"<div class='card'><div class='label'>行情發布狀態</div><div class='value'>{_escape(MARKET_STATUS_LABELS[taipei['publication_status']])}</div></div></div>"
+        + status_notes
+        + f"<p class='small'>資料來源：<a href='{_escape(source['dataset_url'])}' rel='noopener noreferrer'>農業部農產品交易行情（Dataset {_escape(source['dataset_id'])}）</a>"
+        + f" · 來源狀態：{_escape(source['source_status'])} · 擷取：{_escape(source['retrieved_at'] or '—')} · snapshot：<code>{_escape(taipei['snapshot_hash'])}</code></p></section>"
+        + "<section class='section' id='taipei-items'><h2>品項描述統計</h2>"
+        + f"<p class='disclaimer'>{DISCLAIM}</p><p class='note warn'>{TAIPEI_WARNING}</p>"
+        + "<p>量加權價 <code>sum(price × volume) / sum(volume)</code>；7／30／90D 依日曆日回看，有效日數未達下限即標示不足。臺北尚無 versioned Buy Score，推薦資格只會是資料不足或未評分。</p>"
+        + "<div class='table-wrap'><table class='taipei-table'><thead><tr><th>品項</th><th>原始代碼／名稱</th><th>狀態</th><th class='num'>量加權價</th><th class='num'>交易量</th><th class='num'>市場</th>"
+        + "<th class='num'>7D</th><th class='num'>30D</th><th class='num'>90D</th><th>推薦資格</th></tr></thead>"
+        + f"<tbody>{''.join(_taipei_item_row(item) for item in taipei['items'])}</tbody></table></div></section>"
+        + "<section class='section' id='taipei-markets'><h2>市場與交易日狀態</h2>"
+        + "<p>缺資料、官方休市、無有效成交與零價格分開標示，不互相代替。</p>"
+        + "<div class='table-wrap'><table><thead><tr><th>市場</th><th>官方名稱</th><th>地理角色</th><th>截至日狀態</th><th class='num'>有效筆數</th><th>來源</th></tr></thead>"
+        + f"<tbody>{market_rows}</tbody></table></div>"
+        + "<h3>近 7 日至請求日</h3><div class='table-wrap'><table><thead><tr><th>日期</th><th>市場</th><th>狀態</th><th>官方日曆</th><th class='num'>有效／全部筆數</th></tr></thead>"
+        + f"<tbody>{day_rows}</tbody></table></div></section>"
+        + "<section class='section' id='taipei-observations'><h2>截至日原始成交列</h2>"
+        + f"<details><summary>展開 {len(taipei['observations'])} 筆臺北成交列</summary><div class='table-wrap'><table><thead><tr><th>市場</th><th>原始代碼</th><th>原始名稱</th><th class='num'>平均價</th><th class='num'>交易量</th><th>狀態</th></tr></thead>"
+        + f"<tbody>{observation_rows}</tbody></table></div></details>"
+        + "<p>下載：<a href='../data/taipei/current.json'>JSON</a> · <a href='../data/taipei/items.csv'>品項 CSV</a> · <a href='../data/taipei/observations.csv'>成交列 CSV</a>（每列保留 row_hash 與來源）</p></section>"
+        + "</main>"
+    )
+
+
+def build_site(rows, as_of, root, source_status="validated", *, series=None, scores=None, seasonality=None, season_catalog=None, advice=None, traceability=None, traceability_status=None, traceability_events=None, traceability_event_status=None, quality=None, publication_status=None, season_map_payload=None, county_svg=None, category_registry=None, taipei_analysis=None):
     if not rows:
         raise ValueError("requested as-of date has no valid mapped aggregates")
     # tpw.cli always passes an explicit category_registry (loaded once per command from its
@@ -904,7 +1057,7 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
     complete = bool(series and scores and seasonality)
     include_season_map = season_map_payload is not None
     if complete:
-        home = _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map, registry)
+        home = _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map, registry, taipei_analysis)
     else:
         home = _hero(as_of, source_status, 0, 0, publication_status) + _market_status_notice(publication_status) + "<nav class='toolbar' aria-label='主要導覽'><div class='inner'><a href='archive/index.html'>歷史</a><a href='methodology.html'>方法</a></div></nav>" + "<main id='main' class='wrap'><section class='section' id='recommendations'><h2>今日推薦採買</h2><p>資料不足，暫不判定。</p></section>" + _market_table(rows, "fruit", registry=registry) + _market_table(rows, "vegetable", registry=registry) + "</main>"
     (root / "index.html").write_text(_document("Taiwan Produce Watch", home, "assets/css/app.css", "assets/js/app.js"), encoding="utf-8")
@@ -964,7 +1117,16 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
             related_events = event_grouped.get(item["canonical_id"], [])
             trace_body = f"<header class='page-hero'><div class='wrap'><div class='eyebrow'>TRACEABILITY DETAIL</div><h1>{_escape(item['display_name'])}</h1></div></header>" + _toolbar("../", include_season_map) + f"<main id='main' class='wrap'><section class='section'><h2>7556 履歷批次</h2><p class='note warn'>{TRACE_WARNING}</p>{_traceability_source_notice(traceability_status)}<div class='table-wrap'><table><thead><tr><th>履歷代碼</th><th>組織</th><th>縣市</th><th>包裝日</th><th>驗證機構</th><th>有效至</th><th>狀態</th></tr></thead><tbody>{table_rows}</tbody></table></div></section><section class='section'><h2>H44 市場事件</h2><p class='note warn'>{EVENT_WARNING}</p><p class='disclaimer'>{DISCLAIM}</p>{_traceability_event_source_notice(traceability_event_status)}{_traceability_event_table(related_events)}</section></main>"
             (root / "traceability" / f"{item['canonical_id']}.html").write_text(_document(f"{item['display_name']}相關履歷", trace_body, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
-    (root / "methodology.html").write_text(_document("方法說明", _methodology(source_status, quality, publication_status, include_season_map, registry), "assets/css/app.css", "assets/js/app.js"), encoding="utf-8")
+    (root / "methodology.html").write_text(_document("方法說明", _methodology(source_status, quality, publication_status, include_season_map, registry, taipei_analysis), "assets/css/app.css", "assets/js/app.js"), encoding="utf-8")
+    if taipei_analysis is not None:
+        if taipei_analysis["as_of_date"] != as_of or taipei_analysis["requested_date"] != publication_status["requested_date"]:
+            raise ValueError("Taipei analysis dates must match the site publication")
+        (root / "taipei").mkdir(exist_ok=True)
+        (root / "taipei/index.html").write_text(_document("臺北市蔬果批發行情", _taipei_page(taipei_analysis, include_season_map), "../assets/css/app.css", "../assets/js/app.js", "臺北一、臺北二果菜批發市場的量加權描述統計；非零售價，也不是產地。"), encoding="utf-8")
+        (root / "data/taipei").mkdir(parents=True, exist_ok=True)
+        (root / "data/taipei/current.json").write_text(json.dumps(taipei_analysis, ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+        for name, text in taipei_csv_documents(taipei_analysis).items():
+            (root / "data/taipei" / name).write_text(text, encoding="utf-8")
     links = "".join(f"<li><a href='../daily/{path.parent.parent.name}/{path.parent.name}/{path.stem}.html'>{path.stem}</a></li>" for path in sorted((root / "daily").rglob("*.html"), reverse=True))
     archive_body = "<header class='page-hero'><div class='wrap'><div class='eyebrow'>ARCHIVE</div><h1>歷史日期</h1></div></header>" + _toolbar("../", include_season_map) + f"<main id='main' class='wrap'><section class='section'><ul class='archive-list'>{links}</ul></section></main>"
     (root / "archive/index.html").write_text(_document("歷史封存", archive_body, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
