@@ -43,6 +43,15 @@ class TaipeiMonthlyBuildTest(unittest.TestCase):
   self.command('validate-data','--as-of','2026-08-25');self.command('verify-site','--as-of','2026-08-25')
   monthly=self.monthly();self.assertEqual((monthly['analysis_status'],monthly['retail_items'],monthly['supply_categories']),('failed',[],[]))
   self.assertIn("data-monthly-analysis-status='failed'",(self.root/'site/taipei/monthly.html').read_text())
+ def test_forged_live_snapshot_failure_is_isolated_from_other_publications(self):
+  self.command('seed-prototype','--as-of','2026-08-25');self.command('build','--as-of','2026-08-25');before=self.digest(UNRELATED_OUTPUTS)
+  path=self.root/'data/taipei-monthly/retail/2025-12.json';snapshot=json.loads(path.read_text());snapshot['revisions'][0]['source_status']='live';snapshot['revisions'][0]['contract_status']='verified_authoritative';path.write_text(json.dumps(snapshot,ensure_ascii=False))
+  result=self.command('build','--as-of','2026-08-25')
+  self.assertIn('::warning title=Taipei monthly analysis not published::TaipeiMonthlyError: retail registry contract is not verified authoritative for live snapshots',result.stdout)
+  self.assertEqual(before,self.digest(UNRELATED_OUTPUTS))
+  self.command('validate-data','--as-of','2026-08-25');self.command('verify-site','--as-of','2026-08-25')
+  monthly=self.monthly();self.assertEqual((monthly['analysis_status'],monthly['retail_items'],monthly['supply_categories']),('failed',[],[]))
+  self.assertIn("data-monthly-analysis-status='failed'",(self.root/'site/taipei/monthly.html').read_text())
  def test_hand_edited_monthly_outputs_fail_closed(self):
   self.command('seed-prototype','--as-of','2026-08-25');self.command('build','--as-of','2026-08-25')
   retail=self.root/'site/data/taipei/monthly-retail.csv';original=retail.read_text();retail.write_text(original.replace('fixture','live',1))

@@ -31,6 +31,7 @@ JIN_IN_KG = 0.6
 TAIPEI_NAMES = frozenset({"臺北市", "台北市"})
 BLANK_TOKENS = frozenset({"", "-", "—", "－", "–"})
 SOURCE_STATUSES = frozenset({"live", "manual", "fixture"})
+VERIFIED_AUTHORITATIVE_CONTRACT_STATUS = "verified_authoritative"
 COMMODITY_FAMILIES = frozenset({"fruit", "vegetable", "livestock", "aquaculture"})
 SUPPLY_CATEGORIES = ("雞", "鴨", "魚", "蔬菜", "水果")
 MIN_MONTHS_MEDIAN = 3
@@ -92,6 +93,19 @@ class TaipeiMonthlyError(ValueError):
 def _require(condition, message):
     if not condition:
         raise TaipeiMonthlyError(message)
+
+
+def _require_live_contract(source, source_status, stored_contract_status):
+    if source_status != "live":
+        return
+    _require(
+        SOURCES[source]["contract_status"] == VERIFIED_AUTHORITATIVE_CONTRACT_STATUS,
+        source + " registry contract is not verified authoritative for live snapshots",
+    )
+    _require(
+        stored_contract_status == VERIFIED_AUTHORITATIVE_CONTRACT_STATUS,
+        source + " stored contract is not verified authoritative for live snapshots",
+    )
 
 
 def _period(value):
@@ -200,6 +214,8 @@ def ingest_snapshot(data_root, source, raw_bytes, *, period, resource_id, resour
     _iso_datetime(retrieved_at, "retrieved_at")
     evidence = _period_evidence(period, resource_name)
     contract, rows = parse_snapshot(source, raw_bytes)
+    contract_status = SOURCES[source]["contract_status"]
+    _require_live_contract(source, source_status, contract_status)
     raw_hash = "sha256:" + hashlib.sha256(raw_bytes).hexdigest()
     path = snapshot_path(data_root, source, period)
     document = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {
@@ -214,7 +230,7 @@ def ingest_snapshot(data_root, source, raw_bytes, *, period, resource_id, resour
     document["revisions"].append({
         "revision": revision, "resource_id": resource_id, "resource_name": resource_name, "resource_url": resource_url,
         "retrieved_at": retrieved_at, "known_at": retrieved_at, "license": license, "source_status": source_status,
-        "period_evidence": evidence, "contract": contract, "contract_status": SOURCES[source]["contract_status"],
+        "period_evidence": evidence, "contract": contract, "contract_status": contract_status,
         "raw_hash": raw_hash, "row_count": len(rows), "raw_text": raw_bytes.decode("utf-8-sig"),
     })
     validate_snapshot_document(document, source, period)
@@ -243,6 +259,7 @@ def validate_snapshot_document(document, source, period):
     for index, revision in enumerate(document["revisions"], start=1):
         _require(isinstance(revision, dict) and set(revision) == REVISION_FIELDS and revision["revision"] == index, "Taipei monthly revision fields or numbering are invalid")
         _require(revision["source_status"] in SOURCE_STATUSES and revision["contract"] in SOURCES[source]["headers"], "Taipei monthly revision status or contract is invalid")
+        _require_live_contract(source, revision["source_status"], revision["contract_status"])
         raw_bytes = revision["raw_text"].encode("utf-8")
         contract, rows = parse_snapshot(source, raw_bytes)
         _require(contract == revision["contract"] and len(rows) == revision["row_count"], "Taipei monthly revision does not re-parse to its recorded contract")
