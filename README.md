@@ -35,6 +35,7 @@
 | Issue #3 · Official calendar | 臺北農產 115 年休市日曆、臺北一／臺北二 market registry、calendar／feed 分離與 discrepancy 狀態 | 日曆不加入行情 aggregate 或 Buy Score；未知年度不宣稱官方休市 |
 | Issue #3 · Source contract 2A | 通用 `SourceAdapter`／`RawBatch`、四種交易來源角色、run lineage 與 economic-observation dedup | 目前只有 8066 是 production `authoritative_final`；第二 adapter 僅為離線 fixture，TAPMC parity 等後續市場來源切片尚未啟用 |
 | Issue #51 PR 1 · 臺北市範圍 | 只取 verified registry 中臺北一 `109`／臺北二 `104` 的 8066 成交列，當日與全部歷史用同一政策**先過濾再聚合**；量加權日價、7／30／90D、coverage、逐日休市／缺資料狀態、原始作物代碼／名稱與 row-level lineage，由既有 `tpw build` 產出 `site/taipei/`、JSON 與兩份 CSV | 只是批發描述統計：不算 Buy Score（推薦資格只會是「資料不足」或「未評分」）、臺北無成交時不回退全臺價格或補 0、市場所在地不等於產地；全臺 aggregate 與 Buy Score 位元不變 |
+| Issue #51 PR 2 · 臺北市月資料（fixture） | 公有零售市場月均價（品項，元/台斤）與食物供銷（雞／鴨／魚／蔬菜／水果大類）分開匯入；固定 header 契約、revision 與 lineage、`known_at` 歷史截斷；有效月數、中位數、四分位、月增、年增與供銷量價趨勢；`/taipei/monthly.html`、JSON 與兩份 CSV | 上游欄位尚未以實際 CSV 驗證，目前只有 fixture；不計算 Buy Score、不宣稱今日最便宜、不建立信賴區間、不與批發日均價加總；未審查項目一律 `unknown` |
 | Issue #44 Part B · 多類別產季語意 | config-driven 類別 registry（水果／蔬菜／畜產／養殖水產）、season-map payload 1.1 每類別來源狀態、extension slot、畜產／養殖水產在 22 縣市矩陣以明示 `unknown` 呈現 | 官方無產地產期登錄 → 不判定當季或非當季（SPEC §6.2.6）；不進 watchlist、不進 Buy Score；live adapter 待有 `*.gov.tw` egress 的 discovery |
 
 首頁核心內容、當季圖示與 22 縣市地圖 detail sections 不依賴 JavaScript；JS 只提供當季搜尋／篩選、地圖選取、URL 狀態同步、焦點移動與列印。地圖另提供 visible `<select>`，桌機、手機 touch 與鍵盤操作共用同一 county slug；停用 JS 時仍可用 SVG anchor 閱讀全部縣市。品項價格圖同樣在 build-time 產生靜態 HTML／SVG，不需要 browser-side fetch 或 chart CDN。桌機／平板／手機採 responsive cards。
@@ -147,6 +148,7 @@ python3 -m http.server 8000 --directory site
 | `validate-traceability` | 驗證公開 registry、source profile、唯一追溯碼、有效狀態與禁止欄位 |
 | `fetch-traceability-events --as-of DATE` | 受控更新農業部 H44 單日市場事件；只有同 requested date 的 LKG 可 stale，跨日期失敗不搬用舊事件 |
 | `validate-traceability-events` | 驗證 H44 事件、source profile、event identity 與 aggregate／Buy Score 排除旗標 |
+| `ingest-taipei-monthly --source retail\|supply --file PATH --period YYYY-MM ...` | 從本機檔案匯入臺北零售月均價或食物供銷單月 snapshot；header 漂移 fail closed，相同內容不變更，內容不同則新增 revision |
 | `backfill --days N --end DATE` | 以最多 4 日的 bounded windows 抓取市場資料 |
 | `build --as-of DATE` | 從 retained normalized history 重建所有衍生資料、range statistics、量化價格 SVG 與網站 |
 | `validate-data --as-of DATE` | 驗證 normalized 與 PR2–PR5 衍生資料樹 |
@@ -168,6 +170,7 @@ python3 -m http.server 8000 --directory site
 | `/traceability/<canonical-id>.html` | 20 個品項的履歷批次明細；僅部分由索引頁連出，其餘為 URL-only |
 | `/traceability/market-events.html` | H44 日期／市場事件、來源狀態、溯源代號原值與 no-aggregate／no-score 警示 |
 | `/taipei/index.html` | 臺北一／臺北二批發描述統計：資料截至日、請求日、有成交市場數、逐品項量加權價與 7／30／90D、原始作物代碼／名稱、近 7 日至請求日的休市／缺資料狀態、截至日原始成交列；`/data/taipei/current.json`（`schema/taipei-analysis.schema.json`）、`items.csv`、`observations.csv` |
+| `/taipei/monthly.html` | 臺北市公有零售市場月均價（原始項目、元/台斤與換算元/公斤、有效月數、中位數、四分位、月增、年增、歷史參考位置）與食物供銷大類月統計（交易量、均價、量價趨勢）；來源 revision 與 lineage；`/data/taipei/monthly.json`（`schema/taipei-monthly.schema.json`）、`monthly-retail.csv`、`monthly-supply.csv` |
 | `/daily/YYYY/MM/YYYY-MM-DD.html` | 每日靜態快照 |
 | `/archive/index.html` | retained history |
 | `/methodology.html` | 算法、coverage、fallback 與限制、產季語意與類別 |
@@ -194,6 +197,7 @@ python3 -m http.server 8000 --directory site
 - **「產地產期」與「批發市場成交」是不同資料語意。市場位於該縣市，不代表成交品項產自該縣市；地圖品項數不是產量、面積或市場供應量。**
 - 臺北市範圍（`src/tpw/taipei_analysis.py`）只接受 `county_slug=taipei-city` 且 `feed_source_id=moa_market_8066` 的 registry 市場；feed 市場名稱只容許「台／臺」一個 alias，代碼相同但名稱不符時臺北範圍 fail closed。臺北範圍的任何失敗都與全臺發布隔離：全臺行情、Buy Score 與其他頁面照常發布，臺北改發布 `analysis_status=failed` 與失敗原因（不沿用舊臺北數字、不改用全臺價格），首頁標示「臺北統計未發布」，`tpw build` 同時輸出 GitHub Actions `::warning::` annotation。當日與歷史使用同一過濾，非臺北市場的任何數值都不影響臺北統計。`site/data/taipei/current.json` 由 `validate-data` 依 `data/market/daily/` 重算比對，CSV 由 `verify-site` 依 JSON 重新產生比對；手改任一檔都會失敗。
 - 臺北市範圍沒有 versioned Buy Score：通過市場數（≥2）、7D／30D coverage 與品質門檻的品項只標示 `not_evaluated`，未通過者標示 `insufficient`，不產生推薦。缺資料（`missing`）、官方休市（`scheduled_closed`）、無有效成交（`no_valid_trade`）與日曆休市但有成交（`calendar_feed_discrepancy`）分開標示；`geography_role` 固定為 `market_location`，`origin_status`／`production_method` 固定為 `unknown`。
+- 臺北月資料（`src/tpw/taipei_monthly.py`）只經 `ingest-taipei-monthly` 進入 `data/taipei-monthly/<source>/<YYYY-MM>.json`，每個 revision 保存原文、raw hash、resource 與授權；build 時重新解析，header 不符 pinned 契約即 fail closed。零售 header 來自未驗證的搜尋摘要，供銷 header 為本專案暫定格式，兩者在以實際 CSV 驗證前都只用 fixture。月均價是已公布月份的統計，不是今日報價；與 8066 批發日資料不互相加總；沒有原始抽樣數不提供信賴區間；畜產、水產品項只作歷史參考，不進入 Buy Score。
 - Advice 預設為 `deterministic_fallback`，provider 只接收已驗證 metrics、score 與 reason codes。
 - Traceability registry 的 source role 固定為 `authoritative_registry`；只允許 `config/produce.yml` 的 display name／explicit aliases，不做 fuzzy mapping，也不把 `canonical_id` 當成 live upstream 欄位。
 - `data/traceability/source-profile.json` 保存 adapter／schema version、擷取時間、content hash、raw／published／active／expired／unknown／unmapped／missing／duplicate counts；`data/traceability/daily/` 與 `data/traceability/profiles/` 保存 exact-date evidence。原始筆數低於前次 live／stale LKG 的 80% 時拒絕 promotion。

@@ -454,3 +454,22 @@ Requested in review on PR #52: a Taipei failure must not block the nationwide pu
 - No new upstream was fetched; Taipei statistics only re-cut rows already stored from 8066.
 - The 104/109 identity relies on the existing `config/official-produce-markets.json` evidence (checked 2026-08-30); the 台／臺 alias is the only name normalization.
 - Data sets listed in Issue #51 for PR 2–4 (Taipei retail monthly prices, food supply-and-sales, annual source-region shares, 7299 fish market, 7296 hogs) are untouched.
+
+## Issue #51 PR 2 — Taipei monthly retail and food supply (local evidence, fixture only)
+
+Base: `9123db4590a79061032014f699a5a489d3603d74` (`main`). Status ladder: **fixture passed** locally; no live fetch (the container's proxy denies `data.taipei`, `data.gov.tw` and `data.moa.gov.tw`, and the web fetcher cannot resolve `data.taipei` or `data.gov.tw`), no full ingestion, not merged, not deployed.
+
+### Source evidence used for the contracts
+
+| Source | Evidence tier | What it says | Used for |
+|---|---|---|---|
+| Search-engine summary of data.gov.tw dataset 145841 (臺北市公有零售市場行情) | B, unverified | monthly CSV from 113年7月; fields 序號, 縣市名, 縣市別代碼, 項目, 平均(元/台斤) | `retail-5col` header |
+| Search-engine summary of the data.taipei listing | B, unverified | fields 序號, 項目, 平均(元/台斤); yearly update | `retail-3col` header |
+| 2020 NCHC mirror (via search summary) | B, unverified | 日期, 種類, 市場, 品名, 平均_元/公斤 | rejected: fails closed |
+| 臺北市食物供銷按月別 (`925ba4ba…`) | not found by search | — | header is project-defined (`provisional_project_defined`) |
+
+### Checks
+
+- `tests/unit/test_taipei_monthly.py` (17) and `tests/integration/test_taipei_monthly_build.py` (5): 元/台斤 ÷ 0.6 (60→100, 45→75, 33→55); `mass_basis=false` items keep no per-kg or per-piece price; cuts and species stay separate series; header drift, non-UTF-8, unknown tokens, non-Taipei rows, duplicate items and unknown supply categories fail closed with nothing written; `-` is `missing` and `0` is `zero_reported`; identical re-ingest leaves the file byte-identical, changed content adds revision 2 with both raw hashes kept; revisions known after the requested date are ignored; exact median/quartiles/MoM/YoY on a 13-month series; daily wholesale rows never change the monthly document; a corrupted stored snapshot publishes `analysis_status=failed` while the nationwide JSON, aggregate, daily Markdown and the PR 1 Taipei JSON/CSV keep their SHA-256; hand-edited monthly CSV or JSON fails `verify-site` / `validate-data`; without snapshots both sources are `not_ingested` with no numbers.
+- Full `ci.yml` replay under Python 3.11 (seed → suite under the publication-signature guard → fixture rebuild → validate → Playwright): unittest 305 OK, publication signature unchanged; Playwright 45 passed, 1 skipped (pre-existing touch skip), including the monthly page on desktop, 390×844 mobile and with JavaScript disabled.
+- `tpw build --as-of 2026-10-16` on the committed live rows at `main` and with this change: `data/`, `reports/`, `site/data/current.json`, `site/data/taipei/current.json` and `site/data/taipei/items.csv` are byte-identical; `site/` only adds the monthly files plus one methodology section and one link on the Taipei page.

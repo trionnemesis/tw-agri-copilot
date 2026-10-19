@@ -6,6 +6,7 @@ from .categories import category_label, default_category_registry
 from .produce_icons import read_produce_icon_sprite, resolve_produce_icon
 from .publication import validate_market_status
 from .taipei_analysis import taipei_csv_documents
+from .taipei_monthly import monthly_csv_documents
 
 
 DISCLAIM = "批發市場平均行情，非實際零售通路售價。"
@@ -39,6 +40,15 @@ TAIPEI_ITEM_LABELS = {
     "no_taipei_observation": "臺北無成交資料",
 }
 TAIPEI_GATE_LABELS = {"insufficient": "資料不足", "not_evaluated": "未評分"}
+MONTHLY_WARNING = "月均價是已公布月份的統計，不是今日報價，也不是個別攤商價；零售月均價不與批發日均價加總。沒有原始抽樣數，不提供信賴區間，也不計算 Buy Score。"
+MONTHLY_SOURCE_LABELS = {"not_ingested": "尚未匯入", "fixture": "原型測試資料", "live": "官方資料", "manual": "人工匯入", "mixed": "混合來源狀態"}
+MONTHLY_CONTRACT_LABELS = {
+    "provisional_unverified": "欄位契約尚未以實際 CSV 驗證",
+    "provisional_project_defined": "欄位為本專案暫定格式，尚無上游實檔",
+}
+MONTHLY_FAMILY_LABELS = {"fruit": "水果", "vegetable": "蔬菜", "livestock": "畜產", "aquaculture": "水產", "unknown": "未分類（尚未審查）"}
+MONTHLY_POSITION_LABELS = {"below_q1": "低於歷史四分位下緣", "within_iqr": "位於歷史四分位區間", "above_q3": "高於歷史四分位上緣"}
+MONTHLY_DIRECTION_LABELS = {"up": "增", "down": "減", "flat": "持平"}
 TAIPEI_REASON_LABELS = {
     "NO_TAIPEI_OBSERVATION": "臺北無成交",
     "NO_VALID_TRADE": "無有效成交",
@@ -817,7 +827,7 @@ def _category_semantics_row(category):
     )
 
 
-def _methodology(source_status, quality, publication_status, include_season_map=False, registry=None, taipei=None):
+def _methodology(source_status, quality, publication_status, include_season_map=False, registry=None, taipei=None, taipei_monthly=None):
     registry = registry or default_category_registry()
     warnings = "".join(f"<li>{_escape(value)}</li>" for value in quality["warnings"]) or "<li>無</li>"
     status_label = MARKET_STATUS_LABELS[publication_status["status"]]
@@ -867,6 +877,14 @@ def _methodology(source_status, quality, publication_status, include_season_map=
             "<a href='taipei/index.html'>查看臺北市描述統計 →</a></section>"
             if taipei is not None else ""
         )
+        + (
+            "<section class='section' id='taipei-monthly-scope'><h2>臺北市月資料</h2>"
+            "<p>零售月均價（品項，元/台斤）與食物供銷（雞、鴨、魚、蔬菜、水果大類）分開匯入、分開計算，各自保留原始粒度與單位。"
+            "元/台斤換算元/公斤一律為原價 ÷ 0.6，保留原價；只比較原始項目字串完全相同的月份，不合併不同規格。</p>"
+            f"<p class='note warn'>{MONTHLY_WARNING}</p>"
+            "<a href='taipei/monthly.html'>查看臺北市月資料 →</a></section>"
+            if taipei_monthly is not None else ""
+        )
         + "</main>"
     )
 
@@ -915,7 +933,11 @@ def _taipei_downloads():
     return "<p>下載：<a href='../data/taipei/current.json'>JSON</a> · <a href='../data/taipei/items.csv'>品項 CSV</a> · <a href='../data/taipei/observations.csv'>成交列 CSV</a>（每列保留 row_hash 與來源）</p>"
 
 
-def _taipei_failed_page(taipei, include_season_map=False):
+def _taipei_monthly_link(monthly_link):
+    return "<p><a href='monthly.html'>另看臺北市零售月均價與食物供銷月統計 →</a></p>" if monthly_link else ""
+
+
+def _taipei_failed_page(taipei, include_season_map=False, monthly_link=False):
     return (
         "<header class='page-hero'><div class='wrap'><div class='eyebrow'>TAIPEI CITY · WHOLESALE</div>"
         "<h1>臺北市蔬果批發行情</h1><p>臺北一、臺北二果菜批發市場的量加權描述統計</p></div></header>"
@@ -928,13 +950,13 @@ def _taipei_failed_page(taipei, include_season_map=False):
         + f"<p class='note warn'>本次臺北範圍計算失敗：<code>{_escape(taipei['failure_reason'])}</code>。"
         + "本頁不沿用舊的臺北統計，也不改用全臺價格；全臺行情、Buy Score 與其他頁面照常發布。</p>"
         + f"<p class='note warn'>{TAIPEI_WARNING}</p>"
-        + _taipei_downloads() + "</section></main>"
+        + _taipei_downloads() + _taipei_monthly_link(monthly_link) + "</section></main>"
     )
 
 
-def _taipei_page(taipei, include_season_map=False):
+def _taipei_page(taipei, include_season_map=False, monthly_link=False):
     if taipei["analysis_status"] == "failed":
-        return _taipei_failed_page(taipei, include_season_map)
+        return _taipei_failed_page(taipei, include_season_map, monthly_link)
     markets = {market["market_code"]: market for market in taipei["markets"]}
     market_label = "、".join(f"{market['feed_market_name']}（{code}）" for code, market in markets.items())
     as_of = taipei["as_of_date"]
@@ -1004,12 +1026,116 @@ def _taipei_page(taipei, include_season_map=False):
         + "<section class='section' id='taipei-observations'><h2>截至日原始成交列</h2>"
         + f"<details><summary>展開 {len(taipei['observations'])} 筆臺北成交列</summary><div class='table-wrap'><table><thead><tr><th>市場</th><th>原始代碼</th><th>原始名稱</th><th class='num'>平均價</th><th class='num'>交易量</th><th>狀態</th></tr></thead>"
         + f"<tbody>{observation_rows}</tbody></table></div></details>"
-        + _taipei_downloads() + "</section>"
+        + _taipei_downloads() + _taipei_monthly_link(monthly_link) + "</section>"
         + "</main>"
     )
 
 
-def build_site(rows, as_of, root, source_status="validated", *, series=None, scores=None, seasonality=None, season_catalog=None, advice=None, traceability=None, traceability_status=None, traceability_events=None, traceability_event_status=None, quality=None, publication_status=None, season_map_payload=None, county_svg=None, category_registry=None, taipei_analysis=None):
+def _monthly_value(value, unit, digits=2):
+    return "—" if value is None else f"{value:,.{digits}f} {unit}"
+
+
+def _monthly_pct(value):
+    return "—" if value is None else _percent(value)
+
+
+def _monthly_retail_row(item):
+    quartiles = "—" if item["q1_price_raw"] is None else f"{item['q1_price_raw']:,.2f}–{item['q3_price_raw']:,.2f}"
+    reference = (
+        MONTHLY_POSITION_LABELS[item["latest_vs_history"]] if item["advice"]["status"] == "historical_reference"
+        else "資料不足"
+    )
+    per_kg = _monthly_value(item["latest_price_twd_per_kg"], "元/公斤") if item["mass_basis"] else "非重量計價，不換算"
+    latest_note = "" if item["in_latest_period"] else "<br><span class='small'>最新月份未列</span>"
+    return (
+        f"<tr data-monthly-retail-item='{_escape(item['item_raw'])}' data-advice-status='{_escape(item['advice']['status'])}'>"
+        f"<th scope='row'>{_escape(item['item_raw'])}</th><td>{_escape(MONTHLY_FAMILY_LABELS[item['commodity_family']])}</td>"
+        f"<td>{_escape(item['latest_valid_period'] or '—')}{latest_note}</td>"
+        f"<td class='num'>{_monthly_value(item['latest_price_raw'], '元/台斤')}</td><td class='num'>{per_kg}</td>"
+        f"<td class='num'>{item['valid_month_count']}</td><td class='num'>{_monthly_value(item['median_price_raw'], '元/台斤')}</td>"
+        f"<td class='num'>{quartiles}</td><td class='num'>{_monthly_pct(item['mom_pct'])}</td><td class='num'>{_monthly_pct(item['yoy_pct'])}</td>"
+        f"<td>{_escape(reference)}</td></tr>"
+    )
+
+
+def _monthly_supply_row(category):
+    volume, price, trend = category["volume"], category["price"], category["trend"]
+    trend_label = "—" if trend is None else f"量{MONTHLY_DIRECTION_LABELS[trend['volume']]}價{MONTHLY_DIRECTION_LABELS[trend['price']]}"
+    return (
+        f"<tr data-monthly-supply-category='{_escape(category['category'])}'><th scope='row'>{_escape(category['category'])}</th>"
+        f"<td>{_escape(volume['latest_valid_period'] or '—')}</td>"
+        f"<td class='num'>{_monthly_value(volume['latest'], 'kg', 0)}</td><td class='num'>{_monthly_value(price['latest'], '元/公斤')}</td>"
+        f"<td class='num'>{_monthly_pct(volume['mom_pct'])}／{_monthly_pct(price['mom_pct'])}</td>"
+        f"<td class='num'>{_monthly_pct(volume['yoy_pct'])}／{_monthly_pct(price['yoy_pct'])}</td>"
+        f"<td class='num'>{volume['valid_month_count']}／{price['valid_month_count']}</td><td>{_escape(trend_label)}</td></tr>"
+    )
+
+
+def _taipei_monthly_page(monthly, include_season_map=False):
+    attributes = (
+        f"data-monthly-analysis-status='{_escape(monthly['analysis_status'])}' data-monthly-as-of='{_escape(monthly['as_of_date'])}' "
+        f"data-monthly-requested='{_escape(monthly['requested_date'])}'"
+    )
+    head = (
+        "<header class='page-hero'><div class='wrap'><div class='eyebrow'>TAIPEI CITY · MONTHLY</div>"
+        "<h1>臺北市零售月均價與食物供銷</h1><p>已公布月份的歷史參考；零售品項與供銷大類分開呈現</p></div></header>"
+        + _toolbar("../", include_season_map)
+        + "<main id='main' class='wrap'>"
+    )
+    downloads = (
+        "<p>下載：<a href='../data/taipei/monthly.json'>JSON</a> · <a href='../data/taipei/monthly-retail.csv'>零售月資料 CSV</a> · "
+        "<a href='../data/taipei/monthly-supply.csv'>供銷月資料 CSV</a>（每列保留 revision、raw_hash 與來源狀態） · <a href='index.html'>回臺北市批發行情</a></p>"
+    )
+    if monthly["analysis_status"] == "failed":
+        return (
+            head + f"<section class='section' id='taipei-monthly-status' {attributes}><h2>資料狀態</h2>"
+            f"<p class='note warn'>本次臺北月資料計算失敗：<code>{_escape(monthly['failure_reason'])}</code>。"
+            "本頁不沿用舊的月統計，也不改用其他來源；全臺行情與臺北批發統計照常發布。</p>"
+            f"<p class='note warn'>{MONTHLY_WARNING}</p>{downloads}</section></main>"
+        )
+    sources = {source["source"]: source for source in monthly["sources"]}
+    retail, supply = sources["retail"], sources["supply"]
+    notes = "".join(
+        f"<p class='note warn'>{_escape(source['title'])}：{_escape(MONTHLY_CONTRACT_LABELS[source['contract_status']])}"
+        + ("；目前尚未匯入任何月份，本區不顯示數字。" if source["status"] == "not_ingested" else "；目前顯示的是原型測試資料，不是官方公布值。" if source["status"] in ("fixture", "mixed") else "。")
+        + "</p>"
+        for source in (retail, supply)
+    )
+    lineage_rows = "".join(
+        f"<tr><th scope='row'>{_escape(source['title'])}</th><td>{_escape(period['period'])}</td><td class='num'>r{period['revision']}／{period['revision_count']}</td>"
+        f"<td>{_escape(MONTHLY_SOURCE_LABELS[period['source_status']])}</td><td>{_escape(period['resource_name'])}</td>"
+        f"<td><code>{_escape(period['raw_hash'][:19])}…</code></td><td>{_escape(period['retrieved_at'])}</td><td>{_escape(period['license'])}</td></tr>"
+        for source in (retail, supply) for period in source["periods"]
+    ) or "<tr><td colspan='8'>尚未匯入任何月份。</td></tr>"
+    retail_body = "".join(_monthly_retail_row(item) for item in monthly["retail_items"]) or "<tr><td colspan='11'>沒有可顯示的零售月資料。</td></tr>"
+    supply_body = "".join(_monthly_supply_row(category) for category in monthly["supply_categories"]) or "<tr><td colspan='8'>沒有可顯示的供銷月資料。</td></tr>"
+    return (
+        head
+        + f"<section class='section' id='taipei-monthly-status' {attributes} data-monthly-retail-status='{_escape(retail['status'])}' data-monthly-supply-status='{_escape(supply['status'])}'>"
+        + "<h2>資料狀態</h2><div class='grid grid-4'>"
+        + f"<div class='card'><div class='label'>零售最新月份</div><div class='value'>{_escape(retail['latest_period'] or '—')}</div></div>"
+        + f"<div class='card'><div class='label'>零售資料</div><div class='value'>{_escape(MONTHLY_SOURCE_LABELS[retail['status']])}</div></div>"
+        + f"<div class='card'><div class='label'>供銷最新月份</div><div class='value'>{_escape(supply['latest_period'] or '—')}</div></div>"
+        + f"<div class='card'><div class='label'>供銷資料</div><div class='value'>{_escape(MONTHLY_SOURCE_LABELS[supply['status']])}</div></div></div>"
+        + notes + f"<p class='note warn'>{MONTHLY_WARNING}</p></section>"
+        + f"<section class='section' id='taipei-monthly-retail'><h2>{_escape(retail['title'])}</h2>"
+        + "<p>以原始「項目」字串為比較鍵，不合併不同規格或部位；原價為元/台斤，換算元/公斤 = 原價 ÷ 0.6。歷史參考比較最新有效月份與其之前月份的四分位，只描述位置，不代表今日最便宜。"
+        + "畜產、水產品項只作歷史參考，不進入 Buy Score；未經審查的項目一律列為未分類。</p>"
+        + "<div class='table-wrap'><table class='taipei-table'><thead><tr><th>項目（原始）</th><th>分類</th><th>最新有效月份</th><th class='num'>月均價</th><th class='num'>換算</th>"
+        + "<th class='num'>有效月數</th><th class='num'>中位數</th><th class='num'>四分位</th><th class='num'>月增</th><th class='num'>年增</th><th>歷史參考</th></tr></thead>"
+        + f"<tbody>{retail_body}</tbody></table></div></section>"
+        + f"<section class='section' id='taipei-monthly-supply'><h2>{_escape(supply['title'])}</h2>"
+        + "<p>雞、鴨、魚、蔬菜、水果為大類統計，不能代替個別品項價格；量價趨勢只比較最新月份與前一個月。</p>"
+        + "<div class='table-wrap'><table class='taipei-table'><thead><tr><th>類別</th><th>最新月份</th><th class='num'>交易量</th><th class='num'>均價</th>"
+        + "<th class='num'>月增（量／價）</th><th class='num'>年增（量／價）</th><th class='num'>有效月數（量／價）</th><th>量價趨勢</th></tr></thead>"
+        + f"<tbody>{supply_body}</tbody></table></div></section>"
+        + "<section class='section' id='taipei-monthly-lineage'><h2>來源與修訂紀錄</h2>"
+        + "<details><summary>展開每個月份採用的 revision</summary><div class='table-wrap'><table><thead><tr><th>來源</th><th>月份</th><th class='num'>採用／全部 revision</th><th>狀態</th><th>resource</th><th>raw hash</th><th>擷取時間</th><th>授權</th></tr></thead>"
+        + f"<tbody>{lineage_rows}</tbody></table></div></details>{downloads}</section></main>"
+    )
+
+
+def build_site(rows, as_of, root, source_status="validated", *, series=None, scores=None, seasonality=None, season_catalog=None, advice=None, traceability=None, traceability_status=None, traceability_events=None, traceability_event_status=None, quality=None, publication_status=None, season_map_payload=None, county_svg=None, category_registry=None, taipei_analysis=None, taipei_monthly=None):
     if not rows:
         raise ValueError("requested as-of date has no valid mapped aggregates")
     # tpw.cli always passes an explicit category_registry (loaded once per command from its
@@ -1151,15 +1277,24 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
             related_events = event_grouped.get(item["canonical_id"], [])
             trace_body = f"<header class='page-hero'><div class='wrap'><div class='eyebrow'>TRACEABILITY DETAIL</div><h1>{_escape(item['display_name'])}</h1></div></header>" + _toolbar("../", include_season_map) + f"<main id='main' class='wrap'><section class='section'><h2>7556 履歷批次</h2><p class='note warn'>{TRACE_WARNING}</p>{_traceability_source_notice(traceability_status)}<div class='table-wrap'><table><thead><tr><th>履歷代碼</th><th>組織</th><th>縣市</th><th>包裝日</th><th>驗證機構</th><th>有效至</th><th>狀態</th></tr></thead><tbody>{table_rows}</tbody></table></div></section><section class='section'><h2>H44 市場事件</h2><p class='note warn'>{EVENT_WARNING}</p><p class='disclaimer'>{DISCLAIM}</p>{_traceability_event_source_notice(traceability_event_status)}{_traceability_event_table(related_events)}</section></main>"
             (root / "traceability" / f"{item['canonical_id']}.html").write_text(_document(f"{item['display_name']}相關履歷", trace_body, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
-    (root / "methodology.html").write_text(_document("方法說明", _methodology(source_status, quality, publication_status, include_season_map, registry, taipei_analysis), "assets/css/app.css", "assets/js/app.js"), encoding="utf-8")
+    (root / "methodology.html").write_text(_document("方法說明", _methodology(source_status, quality, publication_status, include_season_map, registry, taipei_analysis, taipei_monthly), "assets/css/app.css", "assets/js/app.js"), encoding="utf-8")
     if taipei_analysis is not None:
         if taipei_analysis["as_of_date"] != as_of or taipei_analysis["requested_date"] != publication_status["requested_date"]:
             raise ValueError("Taipei analysis dates must match the site publication")
         (root / "taipei").mkdir(exist_ok=True)
-        (root / "taipei/index.html").write_text(_document("臺北市蔬果批發行情", _taipei_page(taipei_analysis, include_season_map), "../assets/css/app.css", "../assets/js/app.js", "臺北一、臺北二果菜批發市場的量加權描述統計；非零售價，也不是產地。"), encoding="utf-8")
+        (root / "taipei/index.html").write_text(_document("臺北市蔬果批發行情", _taipei_page(taipei_analysis, include_season_map, taipei_monthly is not None), "../assets/css/app.css", "../assets/js/app.js", "臺北一、臺北二果菜批發市場的量加權描述統計；非零售價，也不是產地。"), encoding="utf-8")
         (root / "data/taipei").mkdir(parents=True, exist_ok=True)
         (root / "data/taipei/current.json").write_text(json.dumps(taipei_analysis, ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
         for name, text in taipei_csv_documents(taipei_analysis).items():
+            (root / "data/taipei" / name).write_text(text, encoding="utf-8")
+    if taipei_monthly is not None:
+        if taipei_monthly["as_of_date"] != as_of or taipei_monthly["requested_date"] != publication_status["requested_date"]:
+            raise ValueError("Taipei monthly analysis dates must match the site publication")
+        (root / "taipei").mkdir(exist_ok=True)
+        (root / "taipei/monthly.html").write_text(_document("臺北市零售月均價與食物供銷", _taipei_monthly_page(taipei_monthly, include_season_map), "../assets/css/app.css", "../assets/js/app.js", "臺北市公有零售市場月均價與食物供銷月統計；已公布月份的歷史參考，不是今日報價。"), encoding="utf-8")
+        (root / "data/taipei").mkdir(parents=True, exist_ok=True)
+        (root / "data/taipei/monthly.json").write_text(json.dumps(taipei_monthly, ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+        for name, text in monthly_csv_documents(taipei_monthly).items():
             (root / "data/taipei" / name).write_text(text, encoding="utf-8")
     links = "".join(f"<li><a href='../daily/{path.parent.parent.name}/{path.parent.name}/{path.stem}.html'>{path.stem}</a></li>" for path in sorted((root / "daily").rglob("*.html"), reverse=True))
     archive_body = "<header class='page-hero'><div class='wrap'><div class='eyebrow'>ARCHIVE</div><h1>歷史日期</h1></div></header>" + _toolbar("../", include_season_map) + f"<main id='main' class='wrap'><section class='section'><ul class='archive-list'>{links}</ul></section></main>"

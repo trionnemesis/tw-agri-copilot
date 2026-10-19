@@ -1,0 +1,29 @@
+{
+  "schema_version": "1.0",
+  "notice": "Deterministic Taipei monthly fixture; never represent these values as published retail prices or food supply statistics.",
+  "retail": {
+    "start": "2024-07",
+    "months": 18,
+    "items": [
+      {"item": "香蕉", "base": 30.0, "slope": 0.3},
+      {"item": "高麗菜", "base": 25.0, "slope": -0.2, "season": [0, 0, 0, 0, 0, 0, 3, 6, 8, 4, 0, 0], "absent": ["2025-03"]},
+      {"item": "芒果", "base": 80.0, "slope": 0.5, "blank": ["2025-01"]},
+      {"item": "豬肉(里肌)", "base": 120.0, "slope": 0.8},
+      {"item": "雞蛋", "base": 40.0, "slope": 0.2},
+      {"item": "白蝦", "base": 300.0, "slope": 1.0},
+      {"item": "吳郭魚", "base": 70.0, "slope": 0.1},
+      {"item": "百香果", "base": 60.0, "slope": 0.0, "start_offset": 16}
+    ]
+  },
+  "supply": {
+    "start": "2024-07",
+    "months": 18,
+    "categories": [
+      {"category": "雞", "volume": 900000, "volume_slope": 5000, "price": 65.0, "price_slope": 0.3},
+      {"category": "鴨", "volume": 120000, "volume_slope": -1000, "price": 80.0, "price_slope": 0.2},
+      {"category": "魚", "volume": 650000, "volume_slope": 2000, "price": 150.0, "price_slope": -0.5},
+      {"category": "蔬菜", "volume": 4200000, "volume_slope": 10000, "price": 32.0, "price_slope": 0.1},
+      {"category": "水果", "volume": 2600000, "volume_slope": -8000, "price": 45.0, "price_slope": 0.4}
+    ]
+  }
+}

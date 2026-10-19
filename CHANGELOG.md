@@ -5,6 +5,23 @@
 
 ## [Unreleased]
 
+### Issue #51 PR 2：臺北市零售月均價與食物供銷月統計（fixture 先行）
+
+兩個月度來源分開匯入、分開計算：品項層級的公有零售市場月均價（元/台斤），以及雞、鴨、魚、蔬菜、水果大類的食物供銷。本次只以 deterministic fixture 驗證；上游欄位尚未以實際 CSV 驗證，沒有 live fetch，也沒有 workflow 變更。全臺 `data/`、`reports/`、`site/data/current.json` 與 PR 1 臺北批發輸出位元不變。
+
+#### Added
+
+- `src/tpw/taipei_monthly.py` 與 `schema/taipei-monthly.schema.json`（`schema_version 1.0`）：固定 header 契約（零售 `序號,項目,平均(元/台斤)` 與 `序號,縣市名,縣市別代碼,項目,平均(元/台斤)` 兩種，來源為未驗證的搜尋摘要，標 `provisional_unverified`；供銷 `類別,交易量(公斤),平均價格(元/公斤)` 為本專案暫定格式，標 `provisional_project_defined`）。其他 header、非 UTF-8、未知數值 token、非臺北市列、重複項目一律 fail closed。
+- `tpw ingest-taipei-monthly`：從本機檔案匯入單月 snapshot，保存 resource id／name／URL、觀測月份與其依據、retrieved_at、known_at、授權、raw hash、row count、contract 與完整原文。相同內容重跑不變更檔案；內容不同則新增 revision 並保留舊 revision。
+- 月度描述統計：依原始項目字串（或供銷大類）計算有效月數、中位數、四分位（`statistics.quantiles(..., method='inclusive')`）、月增、年增、供銷量價趨勢；最新月份相對歷史四分位的位置只標為「最近已公布月份歷史參考」或「資料不足」。元/台斤 ÷ 0.6 換元/公斤並保留原價；`-` 等空值為 `missing`、`0` 為 `zero_reported`，皆不納入統計也不補 0。
+- 歷史重建只採用 `known_at` 不晚於請求日的 revision。
+- `config/taipei-retail-items.json`：審查過的 exact 項目對照（目前為空，所有項目標 `unknown`）；可標 `mass_basis=false` 讓非重量計價品項不換算元/公斤。
+- `config/taipei-monthly.fixture.json` 與 `seed-prototype`：產生 18 個月的 fixture snapshot（標 `source_status=fixture`）；每日排程不執行 seed，正式站在匯入前顯示「尚未匯入」且不顯示數字。
+- 新公開輸出：`site/taipei/monthly.html`、`site/data/taipei/monthly.json`、`monthly-retail.csv`、`monthly-supply.csv`；臺北批發頁與方法頁加入入口。
+- 月資料失敗比照 PR 1 隔離：改發布 `analysis_status=failed` 與原因，不沿用舊月統計；`tpw build` 輸出 `::warning title=Taipei monthly analysis not published::`。`verify-site` 依 JSON 重產 CSV 比對並禁止 `NT$` 批發價格式；`validate-data` 依 `data/taipei-monthly/` 重算 JSON。
+
+### Issue #51 PR 1
+
 Issue #51 PR 1：臺北市蔬果批發描述統計。只取已驗證的臺北一（109）、臺北二（104）8066 成交列，當日與全部歷史使用同一政策先過濾再聚合，由既有 `tpw build` 產出；全臺 aggregate、series、Buy Score、`data/`、`reports/` 與 `site/data/current.json` 位元不變。
 
 ### Added
