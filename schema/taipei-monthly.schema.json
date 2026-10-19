@@ -1,0 +1,185 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://trionnemesis.github.io/tw-agri-copilot/schema/taipei-monthly.schema.json",
+  "title": "Taiwan Produce Watch Taipei monthly retail prices and food supply statistics",
+  "description": "site/data/taipei/monthly.json. Item-level retail monthly averages (元/台斤) and category-level food supply statistics are kept apart; descriptive history per exact raw item or category only, no Buy Score, no current-price claim, no confidence interval, no mixing with daily wholesale rows. A failed scope is published as analysis_status=failed with its reason and no statistics. tpw.taipei_monthly.validate_monthly_analysis enforces the same contract plus cross-field consistency.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "scope_id", "analysis_status", "failure_reason", "as_of_date", "requested_date", "national_fallback", "buy_score", "method", "snapshot_hash", "sources", "retail_items", "supply_categories"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "scope_id": {"const": "taipei-city"},
+    "analysis_status": {
+      "enum": ["published", "failed"]
+    },
+    "failure_reason": {
+      "type": ["string", "null"]
+    },
+    "as_of_date": {"type": "string", "format": "date"},
+    "requested_date": {"type": "string", "format": "date"},
+    "national_fallback": {"const": false},
+    "buy_score": {"const": "not_evaluated"},
+    "method": {
+      "type": "object",
+      "required": ["comparison_key", "jin_in_kg", "price_conversion", "quartile_method", "minimum_months", "position_reference", "knowledge_cutoff", "confidence_interval"],
+      "properties": {
+        "jin_in_kg": {"const": 0.6},
+        "confidence_interval": {"const": "not_published_without_sample_counts"}
+      }
+    },
+    "snapshot_hash": {
+      "type": ["string", "null"],
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "source_id", "title", "dataset_url", "granularity", "frequency", "market_level", "contract_status", "status", "latest_period", "periods"],
+        "properties": {
+          "source": {
+            "enum": ["retail", "supply"]
+          },
+          "source_id": {
+            "enum": ["taipei_public_retail_market_prices", "taipei_food_supply_monthly"]
+          },
+          "title": {"type": "string"},
+          "dataset_url": {"type": "string", "pattern": "^https://"},
+          "granularity": {
+            "enum": ["item", "category"]
+          },
+          "frequency": {"const": "monthly"},
+          "market_level": {
+            "enum": ["retail", "unknown"]
+          },
+          "contract_status": {
+            "enum": ["provisional_unverified", "provisional_project_defined", "verified"]
+          },
+          "status": {
+            "enum": ["not_ingested", "live", "manual", "fixture", "mixed"]
+          },
+          "latest_period": {
+            "type": ["string", "null"],
+            "pattern": "^[0-9]{4}-[0-9]{2}$"
+          },
+          "periods": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["period", "revision", "revision_count", "resource_id", "resource_name", "resource_url", "retrieved_at", "known_at", "license", "source_status", "period_evidence", "contract", "raw_hash", "row_count"],
+              "properties": {
+                "period": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}$"},
+                "revision": {"type": "integer", "minimum": 1},
+                "revision_count": {"type": "integer", "minimum": 1},
+                "resource_id": {"type": "string"},
+                "resource_name": {"type": "string"},
+                "resource_url": {"type": "string", "pattern": "^https://"},
+                "retrieved_at": {"type": "string"},
+                "known_at": {"type": "string"},
+                "license": {"type": "string", "minLength": 1},
+                "source_status": {
+                  "enum": ["live", "manual", "fixture"]
+                },
+                "period_evidence": {
+                  "enum": ["resource_name", "operator"]
+                },
+                "contract": {"type": "string"},
+                "raw_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+                "row_count": {"type": "integer", "minimum": 1}
+              }
+            }
+          }
+        }
+      }
+    },
+    "retail_items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["item_raw", "comparison_key", "mapping_status", "commodity_family", "canonical_id", "variant", "cut", "grade", "mass_basis", "price_unit_raw", "in_latest_period", "valid_month_count", "latest_valid_period", "mom_pct", "yoy_pct", "latest_vs_history", "stats_status", "latest_price_raw", "latest_price_twd_per_kg", "median_price_raw", "q1_price_raw", "q3_price_raw", "advice", "months"],
+        "properties": {
+          "comparison_key": {"const": "exact_raw_item"},
+          "mapping_status": {
+            "enum": ["reviewed", "unmapped"]
+          },
+          "commodity_family": {
+            "enum": ["fruit", "vegetable", "livestock", "aquaculture", "unknown"]
+          },
+          "price_unit_raw": {"const": "元/台斤"},
+          "latest_vs_history": {
+            "enum": ["below_q1", "within_iqr", "above_q3", null]
+          },
+          "stats_status": {
+            "enum": ["valid", "insufficient"]
+          },
+          "advice": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["status", "basis"],
+            "properties": {
+              "status": {
+                "enum": ["historical_reference", "insufficient"]
+              },
+              "basis": {"const": "latest_published_month"}
+            }
+          },
+          "months": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["period", "price_raw", "price_raw_status", "price_twd_per_kg", "revision", "raw_hash", "source_status"],
+              "properties": {
+                "price_raw_status": {
+                  "enum": ["valid", "missing", "zero_reported"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "supply_categories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["category", "volume", "price", "trend", "months"],
+        "properties": {
+          "category": {
+            "enum": ["雞", "鴨", "魚", "蔬菜", "水果"]
+          },
+          "trend": {
+            "type": ["object", "null"]
+          },
+          "months": {"type": "array"}
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "analysis_status": {"const": "failed"}
+        }
+      },
+      "then": {
+        "properties": {
+          "failure_reason": {"type": "string", "minLength": 1},
+          "snapshot_hash": {"type": "null"},
+          "sources": {"maxItems": 0},
+          "retail_items": {"maxItems": 0},
+          "supply_categories": {"maxItems": 0}
+        }
+      },
+      "else": {
+        "properties": {
+          "failure_reason": {"type": "null"},
+          "snapshot_hash": {"type": "string"},
+          "sources": {"minItems": 2, "maxItems": 2}
+        }
+      }
+    }
+  ]
+}

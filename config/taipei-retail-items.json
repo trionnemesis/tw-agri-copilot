@@ -1,0 +1,5 @@
+{
+  "schema_version": "1.0",
+  "review_policy": "Exact 項目 strings only, added by a human-reviewed PR with evidence. Unlisted items stay commodity_family=unknown; no fuzzy or name-based inference.",
+  "items": []
+}
