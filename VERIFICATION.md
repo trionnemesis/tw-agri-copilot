@@ -455,6 +455,27 @@ Requested in review on PR #52: a Taipei failure must not block the nationwide pu
 - The 104/109 identity relies on the existing `config/official-produce-markets.json` evidence (checked 2026-08-30); the 台／臺 alias is the only name normalization.
 - Data sets listed in Issue #51 for PR 2–4 (Taipei retail monthly prices, food supply-and-sales, annual source-region shares, 7299 fish market, 7296 hogs) are untouched.
 
+## Issue #51 WO-51-01 — provisional-to-live fail-closed guard
+
+Base: `9184f512474bb9e83fde3d5812cdeecc40349f12` (`main`). Local status: Python 3.12.14 targeted tests passed; Python 3.11 full CI remains pending until the draft PR run is observed.
+
+### Contract change
+
+- `source_status=live` requires the trusted source registry and retained revision to both use the reserved `verified_authoritative` contract status. Neither current monthly source is upgraded: retail remains `provisional_unverified`, supply remains `provisional_project_defined`.
+- The ingest gate runs before reading or writing a snapshot path, including the identical-content case, so a provisional live request cannot reach the idempotent early return. Retained snapshot validation applies the same dual provenance gate and does not trust a forged stored `contract_status`.
+- Fixture and manual semantics stay unchanged; no bypass option, live fetch, production ingestion or workflow change is included.
+
+### Local checks
+
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest tests.unit.test_taipei_monthly tests.integration.test_taipei_monthly_build -v`: 21 unit + 6 integration tests passed on Python 3.12.14. Both sources cover new-file rejection, identical/changed existing-file preservation, forged stored live status, a future test-only registry transition, and BOM fixture validation.
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python3 -m unittest discover -s tests -t . -q`: 310 tests passed on Python 3.12.14; the checked-out `data/`, `reports/` and `site/` publication signature stayed `5344d4a597431b05055ff522c522dfc2ad85f6ff8b0ff292ba9a5e3803cefaaa`.
+- The forged-live integration case publishes a monthly `analysis_status=failed` document while fixed nationwide and Taipei wholesale outputs retain their SHA-256; `validate-data` and `verify-site` pass in the isolated copy.
+- In isolated copies, `build --as-of 2026-10-16` from base and this change produced byte-identical `data/`, `reports/` and `site/`; both complete output-tree signatures were `fa6fdc72ee859d44d5a616491b8ec4f3b5187accc93679227df9001ca186d7be`. No checked-out publication path was used as a test target.
+
+### Not addressed
+
+- A2 raw text/hash integrity, A3 timezone normalization, A4 supply value/month display, annual origin ingestion and PR 3 UI remain separate work orders.
+
 ## Issue #51 PR 2 — Taipei monthly retail and food supply (local evidence, fixture only)
 
 Base: `9123db4590a79061032014f699a5a489d3603d74` (`main`). Status ladder: **fixture passed** locally; no live fetch (the container's proxy denies `data.taipei`, `data.gov.tw` and `data.moa.gov.tw`, and the web fetcher cannot resolve `data.taipei` or `data.gov.tw`), no full ingestion, not merged, not deployed.

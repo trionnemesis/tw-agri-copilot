@@ -5,9 +5,12 @@ import json
 import pathlib
 import tempfile
 import unittest
+from unittest import mock
 
 from tpw.taipei_monthly import (
     FIELDS,
+    SOURCES,
+    VERIFIED_AUTHORITATIVE_CONTRACT_STATUS,
     TaipeiMonthlyError,
     build_monthly_analysis,
     failed_monthly_analysis,
@@ -17,6 +20,7 @@ from tpw.taipei_monthly import (
     monthly_csv_documents,
     parse_snapshot,
     snapshot_path,
+    validate_snapshot_document,
     validate_monthly_analysis,
 )
 
@@ -45,11 +49,11 @@ class TaipeiMonthlyTest(unittest.TestCase):
         self.addCleanup(workspace.cleanup)
         self.data = pathlib.Path(workspace.name) / "data"
 
-    def ingest(self, source, raw, period, retrieved_at=None, name=None):
+    def ingest(self, source, raw, period, retrieved_at=None, name=None, source_status="fixture"):
         return ingest_snapshot(
             self.data, source, raw, period=period, resource_id="rid-" + period, resource_name=name or roc_name(period),
             resource_url="https://data.taipei/fixture", retrieved_at=retrieved_at or period + "-10T00:00:00Z",
-            license="test", source_status="fixture",
+            license="test", source_status=source_status,
         )
 
     def analyse(self, mapping=None, publication=PUBLICATION):
@@ -136,6 +140,69 @@ class TaipeiMonthlyTest(unittest.TestCase):
         stored = json.loads(path.read_text(encoding="utf-8"))
         self.assertEqual([revision["revision"] for revision in stored["revisions"]], [1, 2])
         self.assertNotEqual(stored["revisions"][0]["raw_hash"], stored["revisions"][1]["raw_hash"])
+
+    def test_provisional_contracts_reject_live_before_persistence(self):
+        cases = (
+            ("retail", retail_csv([("香蕉", "30")])),
+            ("supply", supply_csv([("雞", "1000", "60")])),
+        )
+        for source, raw in cases:
+            with self.subTest(source=source):
+                with self.assertRaisesRegex(TaipeiMonthlyError, "registry contract is not verified authoritative"):
+                    self.ingest(source, raw, "2025-12", source_status="live")
+                self.assertFalse(snapshot_path(self.data, source, "2025-12").exists())
+
+    def test_rejected_live_revision_does_not_overwrite_existing_snapshot(self):
+        cases = (
+            ("retail", retail_csv([("香蕉", "30")]), retail_csv([("香蕉", "31")])),
+            ("supply", supply_csv([("雞", "1000", "60")]), supply_csv([("雞", "1100", "58")])),
+        )
+        for source, original, changed in cases:
+            with self.subTest(source=source):
+                self.ingest(source, original, "2025-12")
+                path = snapshot_path(self.data, source, "2025-12")
+                before = path.read_bytes()
+                for candidate in (original, changed):
+                    with self.subTest(source=source, identical=candidate == original):
+                        with self.assertRaisesRegex(TaipeiMonthlyError, "registry contract is not verified authoritative"):
+                            self.ingest(source, candidate, "2025-12", retrieved_at="2026-02-01T00:00:00Z", source_status="live")
+                        self.assertEqual(path.read_bytes(), before)
+
+    def test_retained_live_revision_requires_trusted_and_stored_verification(self):
+        cases = (
+            ("retail", retail_csv([("香蕉", "30")])),
+            ("supply", supply_csv([("雞", "1000", "60")])),
+        )
+        for source, raw in cases:
+            with self.subTest(source=source):
+                self.ingest(source, raw, "2025-12")
+                path = snapshot_path(self.data, source, "2025-12")
+                stored = json.loads(path.read_text(encoding="utf-8"))
+                revision = stored["revisions"][0]
+                revision["source_status"] = "live"
+                revision["contract_status"] = VERIFIED_AUTHORITATIVE_CONTRACT_STATUS
+                with self.assertRaisesRegex(TaipeiMonthlyError, "registry contract is not verified authoritative"):
+                    validate_snapshot_document(stored, source, "2025-12")
+
+                revision["contract_status"] = SOURCES[source]["contract_status"]
+                with mock.patch.dict(SOURCES[source], {"contract_status": VERIFIED_AUTHORITATIVE_CONTRACT_STATUS}):
+                    with self.assertRaisesRegex(TaipeiMonthlyError, "stored contract is not verified authoritative"):
+                        validate_snapshot_document(stored, source, "2025-12")
+                    revision["contract_status"] = VERIFIED_AUTHORITATIVE_CONTRACT_STATUS
+                    self.assertIs(validate_snapshot_document(stored, source, "2025-12"), stored)
+
+    def test_fixture_bom_ingestion_remains_valid(self):
+        cases = (
+            ("retail", retail_csv([("香蕉", "30")])),
+            ("supply", supply_csv([("雞", "1000", "60")])),
+        )
+        for source, raw in cases:
+            with self.subTest(source=source):
+                self.ingest(source, b"\xef\xbb\xbf" + raw, "2025-12")
+                path = snapshot_path(self.data, source, "2025-12")
+                stored = json.loads(path.read_text(encoding="utf-8"))
+                self.assertIs(validate_snapshot_document(stored, source, "2025-12"), stored)
+                self.assertFalse(stored["revisions"][0]["raw_text"].startswith("\ufeff"))
 
     def test_revisions_known_after_the_requested_date_are_ignored(self):
         self.ingest("retail", retail_csv([("香蕉", "30")]), "2025-12", retrieved_at="2026-01-10T00:00:00Z")

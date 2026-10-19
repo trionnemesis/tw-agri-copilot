@@ -5,6 +5,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Issue #51 WO-51-01：臺北月資料的 `source_status=live` 現在只接受 trusted source registry 與 retained revision 同時標記為 `verified_authoritative` 的契約；目前兩個 provisional 契約均在寫檔前 fail closed，直接竄改 retained snapshot 也無法繞過。fixture／manual 行為不變，未啟用任何 live ingestion。
+
 ### Issue #51 PR 2：臺北市零售月均價與食物供銷月統計（fixture 先行）
 
 兩個月度來源分開匯入、分開計算：品項層級的公有零售市場月均價（元/台斤），以及雞、鴨、魚、蔬菜、水果大類的食物供銷。本次只以 deterministic fixture 驗證；上游欄位尚未以實際 CSV 驗證，沒有 live fetch，也沒有 workflow 變更。全臺 `data/`、`reports/`、`site/data/current.json` 與 PR 1 臺北批發輸出位元不變。
