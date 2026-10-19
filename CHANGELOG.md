@@ -12,6 +12,7 @@ Issue #51 PR 1：臺北市蔬果批發描述統計。只取已驗證的臺北一
 - `src/tpw/taipei_analysis.py` 與 `schema/taipei-analysis.schema.json`：版本化 Taipei analysis 契約（`schema_version 1.0`），含 scope／market／source lineage、`snapshot_hash`、量加權日價與 7／30／90D、逐日 `traded`／`scheduled_closed`／`missing`／`no_valid_trade`／`calendar_feed_discrepancy` 狀態，以及 row-level observations（原始作物代碼／名稱、原價與原單位、`row_hash`、`origin_status=unknown`）。
 - 新公開輸出：`site/taipei/index.html`、`site/data/taipei/current.json`、`site/data/taipei/items.csv`、`site/data/taipei/observations.csv`。頁面純靜態，停用 JavaScript 與 390px 手機寬度皆可讀。
 - 首頁新增「臺北市批發行情」入口 section，方法頁新增「臺北市範圍」section；`assets/css/app.css` 追加臺北表格樣式。
+- 臺北範圍失敗與全臺發布隔離：任何臺北計算失敗（例如 104／109 市場身分漂移）都改發布 `analysis_status=failed`、`scope_status=analysis_failed` 與 `failure_reason`，不含任何臺北數字；全臺 `data/`、`reports/`、`site/data/current.json` 照常產出且位元不變，首頁顯示「臺北統計未發布」，`tpw build` 輸出 `::warning title=Taipei analysis not published::` annotation。
 - `verify-site` 驗證臺北 JSON 契約、依 JSON 重產 CSV 比對、頁面日期／品項與 JSON 一致；帶 `--as-of` 時要求臺北輸出存在且與 publication 一致。`validate-data` 依 `data/market/daily/` 重算臺北 JSON 並比對。`verify-site` 的 secret scan 也涵蓋 `.csv`。
 
 ### Unchanged

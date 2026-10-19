@@ -4,7 +4,8 @@ Rows are filtered to the verified Taipei markets *before* aggregation, with one 
 as-of day and for every historical day, so a nationwide statistic is never relabelled as
 Taipei's. The scope publishes descriptive statistics only: it computes no Buy Score, never
 falls back to nationwide prices when Taipei has no rows, and never treats a market location
-as a production origin.
+as a production origin. When the scope itself fails, it publishes a failed document with the
+reason instead of statistics, so the failure stays visible without blocking the nationwide build.
 """
 
 import csv
@@ -32,13 +33,14 @@ PRICE_FORMULA = "sum(price_twd_per_kg*volume_kg)/sum(volume_kg)"
 MINIMUM_MARKET_COUNT = 2
 DAY_STATUSES = frozenset({"traded", "no_valid_trade", "scheduled_closed", "missing", "calendar_feed_discrepancy"})
 ITEM_STATUSES = frozenset({"observed", "no_valid_trade", "no_taipei_observation"})
-SCOPE_STATUSES = frozenset({"all_markets_observed", "partial_markets_observed", "no_taipei_observation"})
+SCOPE_STATUSES = frozenset({"all_markets_observed", "partial_markets_observed", "no_taipei_observation", "analysis_failed"})
+ANALYSIS_STATUSES = frozenset({"published", "failed"})
 GATE_STATUSES = frozenset({"insufficient", "not_evaluated"})
 COMMODITY_FAMILIES = frozenset({"fruit", "vegetable"})
 SCHEDULE_STATUSES = frozenset({"expected_open", "exceptional_open", "scheduled_closed", "unknown"})
 FIELDS = frozenset({
-    "schema_version", "scope_id", "scope_label", "market_level", "frequency", "as_of_date",
-    "requested_date", "publication_status", "source", "filter_policy", "national_fallback",
+    "schema_version", "scope_id", "scope_label", "market_level", "frequency", "analysis_status",
+    "failure_reason", "as_of_date", "requested_date", "publication_status", "source", "filter_policy", "national_fallback",
     "snapshot_hash", "expected_market_count", "observed_market_count", "scope_status", "method",
     "markets", "market_days", "items", "observations",
 })
@@ -253,6 +255,58 @@ def _observation(row):
     }
 
 
+def _method():
+    return {
+        "price_formula": PRICE_FORMULA,
+        "windows": {name: {"days": window_days, "minimum_days": minimum} for name, (window_days, minimum) in WINDOWS.items()},
+        "minimum_market_count": MINIMUM_MARKET_COUNT,
+        "buy_score": "not_evaluated",
+    }
+
+
+def _header(as_of_date, publication_status, source_status, retrieved_at):
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "scope_id": SCOPE_ID,
+        "scope_label": SCOPE_LABEL,
+        "market_level": "wholesale",
+        "frequency": "daily",
+        "as_of_date": as_of_date,
+        "requested_date": publication_status["requested_date"],
+        "publication_status": publication_status["status"],
+        "source": {
+            "source_id": SOURCE_ID,
+            "dataset_id": DATASET_ID,
+            "dataset_url": DATASET_URL,
+            "source_url": SOURCE_URL,
+            "source_status": source_status,
+            "retrieved_at": retrieved_at,
+        },
+        "filter_policy": FILTER_POLICY,
+        "national_fallback": False,
+        "method": _method(),
+    }
+
+
+def failed_taipei_analysis(as_of_date, publication_status, source_status, reason):
+    # Publishes the failure instead of statistics: no last-known-good Taipei numbers and no
+    # nationwide substitute, so a broken Taipei scope can never pass for a current one.
+    document = {
+        **_header(as_of_date, publication_status, source_status, None),
+        "analysis_status": "failed",
+        "failure_reason": reason,
+        "snapshot_hash": None,
+        "expected_market_count": 0,
+        "observed_market_count": 0,
+        "scope_status": "analysis_failed",
+        "markets": [],
+        "market_days": [],
+        "items": [],
+        "observations": [],
+    }
+    return validate_taipei_analysis(document)
+
+
 def build_taipei_analysis(rows, as_of_date, publication_status, items, market_registry, calendar_for, source_status):
     as_of_date = dt.date.fromisoformat(as_of_date).isoformat()
     requested_date = publication_status["requested_date"]
@@ -279,34 +333,13 @@ def build_taipei_analysis(rows, as_of_date, publication_status, items, market_re
     )
     retrieved = sorted({row["fetched_at"] for row in today_rows if isinstance(row.get("fetched_at"), str)})
     document = {
-        "schema_version": SCHEMA_VERSION,
-        "scope_id": SCOPE_ID,
-        "scope_label": SCOPE_LABEL,
-        "market_level": "wholesale",
-        "frequency": "daily",
-        "as_of_date": as_of_date,
-        "requested_date": requested_date,
-        "publication_status": publication_status["status"],
-        "source": {
-            "source_id": SOURCE_ID,
-            "dataset_id": DATASET_ID,
-            "dataset_url": DATASET_URL,
-            "source_url": SOURCE_URL,
-            "source_status": source_status,
-            "retrieved_at": retrieved[-1] if retrieved else None,
-        },
-        "filter_policy": FILTER_POLICY,
-        "national_fallback": False,
+        **_header(as_of_date, publication_status, source_status, retrieved[-1] if retrieved else None),
+        "analysis_status": "published",
+        "failure_reason": None,
         "snapshot_hash": _hash(history),
         "expected_market_count": len(markets),
         "observed_market_count": observed_market_count,
         "scope_status": scope_status,
-        "method": {
-            "price_formula": PRICE_FORMULA,
-            "windows": {name: {"days": window_days, "minimum_days": minimum} for name, (window_days, minimum) in WINDOWS.items()},
-            "minimum_market_count": MINIMUM_MARKET_COUNT,
-            "buy_score": "not_evaluated",
-        },
         "markets": [
             {
                 "market_code": market["market_code"],
@@ -358,14 +391,16 @@ def validate_taipei_analysis(document):
     _require(isinstance(source, dict) and set(source) == SOURCE_FIELDS, "Taipei source fields do not match the contract")
     _require((source["source_id"], source["dataset_id"], source["dataset_url"], source["source_url"]) == (SOURCE_ID, DATASET_ID, DATASET_URL, SOURCE_URL), "Taipei source lineage is invalid")
     _require(isinstance(source["source_status"], str) and source["source_status"], "Taipei source_status must be a non-empty string")
+    _require(document["method"] == _method(), "Taipei method does not match the published contract")
+    _require(document["analysis_status"] in ANALYSIS_STATUSES, "Taipei analysis_status is invalid")
+    if document["analysis_status"] == "failed":
+        _require(isinstance(document["failure_reason"], str) and document["failure_reason"].strip(), "a failed Taipei analysis must state its reason")
+        _require(document["snapshot_hash"] is None and source["retrieved_at"] is None, "a failed Taipei analysis must not claim a snapshot")
+        _require((document["expected_market_count"], document["observed_market_count"], document["scope_status"]) == (0, 0, "analysis_failed"), "a failed Taipei analysis must not claim market coverage")
+        _require(all(document[key] == [] for key in ("markets", "market_days", "items", "observations")), "a failed Taipei analysis must not publish statistics")
+        return document
+    _require(document["failure_reason"] is None, "a published Taipei analysis cannot carry a failure reason")
     _require(isinstance(document["snapshot_hash"], str) and document["snapshot_hash"].startswith("sha256:") and len(document["snapshot_hash"]) == 71, "Taipei snapshot_hash is invalid")
-    method = document["method"]
-    _require(method == {
-        "price_formula": PRICE_FORMULA,
-        "windows": {name: {"days": window_days, "minimum_days": minimum} for name, (window_days, minimum) in WINDOWS.items()},
-        "minimum_market_count": MINIMUM_MARKET_COUNT,
-        "buy_score": "not_evaluated",
-    }, "Taipei method does not match the published contract")
     markets = document["markets"]
     _require(isinstance(markets, list) and markets and len(markets) == document["expected_market_count"], "Taipei markets do not match the expected market count")
     codes = []

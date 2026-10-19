@@ -20,7 +20,7 @@ from .season_extensions import load_extension_catalog, merge_season_catalog
 from .publication import apply_market_calendar,classify_market_status,load_resolved_market_status,source_unavailable_status,validate_market_status
 from .market_calendar import evaluate_market_calendar,load_calendar_payload,refresh_market_calendar
 from .source_adapter import AGGREGATE_SOURCE_ROLE,MOA_MARKET_8066_ADAPTER,SourceAdapter,resolve_observations,source_run_document,validate_source_run_document
-from .taipei_analysis import build_taipei_analysis,taipei_csv_documents,validate_taipei_analysis
+from .taipei_analysis import build_taipei_analysis,failed_taipei_analysis,taipei_csv_documents,validate_taipei_analysis
 ROOT=pathlib.Path.cwd(); SECRET=('AKIA','ghp_','glpat-','github_pat_','sk-','-----BEGIN PRIVATE KEY-----','bearer ','base64,')
 def config(): return json.loads((ROOT/'config/produce.yml').read_text())['items']
 def write_json(p,v): p.parent.mkdir(parents=True,exist_ok=True);p.write_text(json.dumps(v,ensure_ascii=False,sort_keys=True,separators=(',',':')),encoding='utf-8')
@@ -149,7 +149,9 @@ def source_status_for(date):
  meta=ROOT/'data/source-meta'/(date+'.json');return json.loads(meta.read_text()).get('status','validated') if meta.exists() else 'validated'
 def taipei_analysis(rows,date,publication,market_registry,source_status):
  # Same rows, publication and calendar as the nationwide build; the Taipei scope only filters them.
- return build_taipei_analysis(rows,date,publication,config(),market_registry,lambda day:evaluate_market_calendar(ROOT,day),source_status)
+ # Any Taipei failure is published as a failed Taipei document so it never blocks the nationwide build.
+ try:return build_taipei_analysis(rows,date,publication,config(),market_registry,lambda day:evaluate_market_calendar(ROOT,day),source_status)
+ except Exception as exc:return failed_taipei_analysis(date,publication,source_status,type(exc).__name__+': '+str(exc))
 def load_date(date):
  p=path_for(ROOT/'data',date)
  if not p.exists():raise ValueError('requested as-of normalized data is absent')
@@ -329,6 +331,7 @@ def build(date):
   calendar=evaluate_market_calendar(ROOT,calendar_date)
   publication=load_resolved_market_status(ROOT/'data',date,status,len(configured),calendar);write_json(ds/'market-status/current.json',publication);context_month=publication['requested_date'][:7]
   series=build_series(all_aggs,date);season=seasonality_rows(context_month);season_map_config=load_season_map_config(ROOT);season_catalog=merged_season_catalog(context_month,season_map_config.category_registry,season);season_map_payload=build_season_map_payload(ROOT,season_catalog,date);scores=score_all(series,season);advice=generate_advice(scores,date);trace,trace_profile=traceability_context(publication['requested_date']);trace_events,trace_event_profile=traceability_event_context(publication['requested_date']);taipei=taipei_analysis(all_rows,date,publication,season_map_config.market_registry,status)
+  if taipei['analysis_status']=='failed':print('::warning title=Taipei analysis not published::'+taipei['failure_reason'])
   warnings=[]
   if status=='fixture':warnings.append('market data is deterministic prototype fixture')
   season_status=season[0]['source_status']
@@ -407,7 +410,7 @@ def verify_site(root=None,date=None):
    csv_path=root/'data/taipei'/name
    if not csv_path.exists() or csv_path.read_text(encoding='utf-8')!=text:raise ValueError('Taipei CSV does not match the Taipei analysis JSON: '+name)
   taipei_html=taipei_page.read_text()
-  if any(token not in taipei_html for token in ("data-taipei-as-of='"+taipei['as_of_date']+"'","data-taipei-requested='"+taipei['requested_date']+"'","data-taipei-scope-status='"+taipei['scope_status']+"'")):raise ValueError('Taipei page does not match the Taipei analysis JSON')
+  if any(token not in taipei_html for token in ("data-taipei-as-of='"+taipei['as_of_date']+"'","data-taipei-requested='"+taipei['requested_date']+"'","data-taipei-scope-status='"+taipei['scope_status']+"'","data-taipei-analysis-status='"+taipei['analysis_status']+"'")):raise ValueError('Taipei page does not match the Taipei analysis JSON')
   if sorted(re.findall(r"data-taipei-item='([^']+)'",taipei_html))!=sorted(html.escape(item['canonical_id']) for item in taipei['items']):raise ValueError('Taipei page items do not match the Taipei analysis JSON')
   if 'NT$' in taipei_html and DISCLAIM not in taipei_html:raise ValueError('Taipei page lacks the wholesale disclaimer')
  for p in files:
@@ -450,7 +453,7 @@ def verify_site(root=None,date=None):
    if len(ids)!=20:raise ValueError('prototype must render the configured 20-item watchlist')
    taipei=json.loads((root/'data/taipei/current.json').read_text())
    if taipei['as_of_date']!=date or taipei['requested_date']!=publication['requested_date'] or taipei['publication_status']!=publication['status']:raise ValueError('Taipei analysis does not match the site publication')
-   if {item['canonical_id'] for item in taipei['items']}!=ids:raise ValueError('Taipei analysis does not cover the configured watchlist')
+   if taipei['analysis_status']=='published' and {item['canonical_id'] for item in taipei['items']}!=ids:raise ValueError('Taipei analysis does not cover the configured watchlist')
    events=current.get('traceability_events',[]);event_status=current.get('traceability_event_status',{})
    if any(row.get('record_type')!='traceability_market_event' or row.get('eligible_for_market_aggregate') is not False or row.get('affects_buy_score') is not False for row in events):raise ValueError('traceability market events crossed an evidence boundary')
    if event_status.get('eligible_for_market_aggregate') is not False or event_status.get('affects_buy_score') is not False:raise ValueError('traceability market event profile crossed an evidence boundary')

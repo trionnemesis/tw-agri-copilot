@@ -445,6 +445,10 @@ The `ci.yml` step order was replayed verbatim under Python 3.13 and again under 
 
 Rebuilding the same snapshot twice produced identical SHA-256 for `site/taipei/index.html` and all three `site/data/taipei/*` files.
 
+### Taipei failure isolation
+
+Requested in review on PR #52: a Taipei failure must not block the nationwide publication. `tests/integration/test_taipei_build.py::test_taipei_failure_is_isolated_from_the_nationwide_publication` drifts one stored 104 row to `台中市`, rebuilds through the CLI and asserts: the build succeeds and prints the `::warning::` annotation; `site/data/current.json`, the 2026-08-25 aggregate, advice, quality JSON and daily Markdown keep the same SHA-256 as the undrifted build; `validate-data` and `verify-site --as-of` pass; the Taipei JSON is `analysis_status=failed` with empty items and observations; the Taipei page carries no price.
+
 ### Not verified in this slice
 
 - No new upstream was fetched; Taipei statistics only re-cut rows already stored from 8066.

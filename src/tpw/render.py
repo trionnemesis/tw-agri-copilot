@@ -720,9 +720,13 @@ def _home(items, scores, series, seasonality, advice, traceability, traceability
         + f"<div class='note warn'><strong>H44 市場事件</strong><p>{len(traceability_events)} 筆獨立市場事件、{traceability_event_status.get('market_count', 0)} 個市場。{EVENT_WARNING}</p><a href='traceability/market-events.html'>查看事件證據 →</a></div></div></section>"
         + (
             "<section class='section' id='taipei'><div class='section-heading'><div><div class='eyebrow ink'>TAIPEI CITY SCOPE</div><h2>臺北市批發行情</h2></div>"
-            f"<span class='badge info'>{taipei['observed_market_count']}／{taipei['expected_market_count']} 個臺北市場有成交</span></div>"
-            "<p>只取臺北一、臺北二的成交列再聚合，與全臺行情分開計算；不是零售價，也不是產地。</p>"
-            "<a href='taipei/index.html'>查看臺北市描述統計 →</a></section>"
+            + (
+                "<span class='badge neg'>臺北統計未發布</span></div><p>本次臺北範圍計算失敗，未發布臺北數字；全臺行情不受影響。</p>"
+                if taipei["analysis_status"] == "failed" else
+                f"<span class='badge info'>{taipei['observed_market_count']}／{taipei['expected_market_count']} 個臺北市場有成交</span></div>"
+                "<p>只取臺北一、臺北二的成交列再聚合，與全臺行情分開計算；不是零售價，也不是產地。</p>"
+            )
+            + "<a href='taipei/index.html'>查看臺北市描述統計 →</a></section>"
             if taipei is not None else ""
         )
         + "<section class='section' id='history'><h2>歷史紀錄</h2><p>每日 HTML、Markdown 與 machine-readable JSON 都保留在 repo 中。</p><a href='archive/index.html'>開啟日期封存 →</a></section>"
@@ -899,7 +903,38 @@ def _taipei_item_row(item):
     )
 
 
+def _taipei_status_attributes(taipei):
+    return (
+        f"data-taipei-as-of='{_escape(taipei['as_of_date'])}' data-taipei-requested='{_escape(taipei['requested_date'])}' "
+        f"data-taipei-scope-status='{_escape(taipei['scope_status'])}' data-taipei-analysis-status='{_escape(taipei['analysis_status'])}' "
+        f"data-taipei-observed-markets='{taipei['observed_market_count']}'"
+    )
+
+
+def _taipei_downloads():
+    return "<p>下載：<a href='../data/taipei/current.json'>JSON</a> · <a href='../data/taipei/items.csv'>品項 CSV</a> · <a href='../data/taipei/observations.csv'>成交列 CSV</a>（每列保留 row_hash 與來源）</p>"
+
+
+def _taipei_failed_page(taipei, include_season_map=False):
+    return (
+        "<header class='page-hero'><div class='wrap'><div class='eyebrow'>TAIPEI CITY · WHOLESALE</div>"
+        "<h1>臺北市蔬果批發行情</h1><p>臺北一、臺北二果菜批發市場的量加權描述統計</p></div></header>"
+        + _toolbar("../", include_season_map)
+        + f"<main id='main' class='wrap'><section class='section' id='taipei-status' {_taipei_status_attributes(taipei)}>"
+        + "<h2>資料狀態</h2><div class='grid grid-3'>"
+        + f"<div class='card'><div class='label'>全臺資料截至日</div><div class='value'>{_escape(taipei['as_of_date'])}</div></div>"
+        + f"<div class='card'><div class='label'>請求日</div><div class='value'>{_escape(taipei['requested_date'])}</div></div>"
+        + "<div class='card'><div class='label'>臺北統計</div><div class='value'>未發布</div></div></div>"
+        + f"<p class='note warn'>本次臺北範圍計算失敗：<code>{_escape(taipei['failure_reason'])}</code>。"
+        + "本頁不沿用舊的臺北統計，也不改用全臺價格；全臺行情、Buy Score 與其他頁面照常發布。</p>"
+        + f"<p class='note warn'>{TAIPEI_WARNING}</p>"
+        + _taipei_downloads() + "</section></main>"
+    )
+
+
 def _taipei_page(taipei, include_season_map=False):
+    if taipei["analysis_status"] == "failed":
+        return _taipei_failed_page(taipei, include_season_map)
     markets = {market["market_code"]: market for market in taipei["markets"]}
     market_label = "、".join(f"{market['feed_market_name']}（{code}）" for code, market in markets.items())
     as_of = taipei["as_of_date"]
@@ -945,8 +980,7 @@ def _taipei_page(taipei, include_season_map=False):
         f"<h1>臺北市蔬果批發行情</h1><p>{_escape(market_label)}果菜批發市場的量加權描述統計</p></div></header>"
         + _toolbar("../", include_season_map)
         + "<main id='main' class='wrap'>"
-        + f"<section class='section' id='taipei-status' data-taipei-as-of='{_escape(as_of)}' data-taipei-requested='{_escape(requested)}' "
-        + f"data-taipei-scope-status='{_escape(taipei['scope_status'])}' data-taipei-observed-markets='{taipei['observed_market_count']}'>"
+        + f"<section class='section' id='taipei-status' {_taipei_status_attributes(taipei)}>"
         + "<h2>資料狀態</h2><div class='grid grid-4'>"
         + f"<div class='card'><div class='label'>資料截至日</div><div class='value'>{_escape(as_of)}</div></div>"
         + f"<div class='card'><div class='label'>請求日</div><div class='value'>{_escape(requested)}</div></div>"
@@ -970,7 +1004,7 @@ def _taipei_page(taipei, include_season_map=False):
         + "<section class='section' id='taipei-observations'><h2>截至日原始成交列</h2>"
         + f"<details><summary>展開 {len(taipei['observations'])} 筆臺北成交列</summary><div class='table-wrap'><table><thead><tr><th>市場</th><th>原始代碼</th><th>原始名稱</th><th class='num'>平均價</th><th class='num'>交易量</th><th>狀態</th></tr></thead>"
         + f"<tbody>{observation_rows}</tbody></table></div></details>"
-        + "<p>下載：<a href='../data/taipei/current.json'>JSON</a> · <a href='../data/taipei/items.csv'>品項 CSV</a> · <a href='../data/taipei/observations.csv'>成交列 CSV</a>（每列保留 row_hash 與來源）</p></section>"
+        + _taipei_downloads() + "</section>"
         + "</main>"
     )
 

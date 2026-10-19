@@ -15,6 +15,7 @@ from tpw.taipei_analysis import (
     OBSERVATION_FIELDS,
     TaipeiAnalysisError,
     build_taipei_analysis,
+    failed_taipei_analysis,
     feed_market_name_key,
     taipei_csv_documents,
     validate_taipei_analysis,
@@ -209,6 +210,28 @@ class TaipeiAnalysisTest(unittest.TestCase):
         unobserved["items"][0]["today"] = {"price_twd_per_kg": 0}
         with self.assertRaises(TaipeiAnalysisError):
             validate_taipei_analysis(unobserved)
+
+    def test_failed_analysis_publishes_the_reason_and_no_statistics(self):
+        document = failed_taipei_analysis(AS_OF, publication("2026-08-26", "pending"), "success", "TaipeiAnalysisError: drift")
+        self.assertEqual((document["analysis_status"], document["scope_status"], document["failure_reason"]), ("failed", "analysis_failed", "TaipeiAnalysisError: drift"))
+        self.assertIs(document["national_fallback"], False)
+        self.assertEqual([document[key] for key in ("markets", "market_days", "items", "observations")], [[], [], [], []])
+        self.assertEqual(taipei_csv_documents(document)["items.csv"].count("\n"), 1)
+        tampering = (
+            lambda value: value.update(failure_reason=""),
+            lambda value: value.update(items=self.analyse(history())["items"]),
+            lambda value: value.update(snapshot_hash="sha256:" + "0" * 64),
+            lambda value: value.update(analysis_status="published"),
+        )
+        for tamper in tampering:
+            changed = copy.deepcopy(document)
+            tamper(changed)
+            with self.assertRaises(TaipeiAnalysisError):
+                validate_taipei_analysis(changed)
+        published = self.analyse(history())
+        published["failure_reason"] = "stale reason"
+        with self.assertRaises(TaipeiAnalysisError):
+            validate_taipei_analysis(published)
 
     def test_schema_documents_the_validated_contract(self):
         schema = json.loads((ROOT / "schema/taipei-analysis.schema.json").read_text(encoding="utf-8"))
