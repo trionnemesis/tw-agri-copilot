@@ -314,6 +314,34 @@ class TaipeiMonthlyTest(unittest.TestCase):
         schema = json.loads((ROOT / "schema/taipei-monthly.schema.json").read_text(encoding="utf-8"))
         self.assertEqual(set(schema["required"]), FIELDS)
 
+    def test_schema_accepts_authoritative_analysis_contract_status(self):
+        schema = json.loads((ROOT / "schema/taipei-monthly.schema.json").read_text(encoding="utf-8"))
+        allowed = schema["properties"]["sources"]["items"]["properties"]["contract_status"]["enum"]
+        for source, raw in (("retail", retail_csv([("香蕉", "30")])), ("supply", supply_csv([("雞", "1000", "60")]))):
+            with self.subTest(source=source), mock.patch.dict(SOURCES[source], {"contract_status": VERIFIED_AUTHORITATIVE_CONTRACT_STATUS}):
+                self.ingest(source, raw, "2025-12", source_status="live")
+                document = self.analyse()
+                for summary in document["sources"]:
+                    self.assertIn(summary["contract_status"], allowed)
+            # Do not retain a simulated live revision after restoring the trusted registry.
+            snapshot_path(self.data, source, "2025-12").unlink()
+
+    def test_schema_rejects_legacy_and_unknown_contract_statuses(self):
+        schema = json.loads((ROOT / "schema/taipei-monthly.schema.json").read_text(encoding="utf-8"))
+        allowed = schema["properties"]["sources"]["items"]["properties"]["contract_status"]["enum"]
+        self.assertEqual(set(allowed), {"provisional_unverified", "provisional_project_defined", "verified_authoritative"})
+        for status in ("verified", "unknown", "", None):
+            with self.subTest(status=status):
+                self.assertNotIn(status, allowed)
+
+    def test_non_authoritative_registry_markers_cannot_enable_live(self):
+        for source, raw in (("retail", retail_csv([("香蕉", "30")])), ("supply", supply_csv([("雞", "1000", "60")]))):
+            for status in ("verified", "unknown", "", None):
+                with self.subTest(source=source, status=status), mock.patch.dict(SOURCES[source], {"contract_status": status}):
+                    with self.assertRaisesRegex(TaipeiMonthlyError, "registry contract is not verified authoritative"):
+                        self.ingest(source, raw, "2025-12", source_status="live")
+                    self.assertFalse(snapshot_path(self.data, source, "2025-12").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

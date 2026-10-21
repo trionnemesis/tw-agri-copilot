@@ -1,6 +1,8 @@
-import hashlib, json, os, pathlib, shutil, subprocess, sys, tempfile, unittest
+import csv, hashlib, json, os, pathlib, shutil, subprocess, sys, tempfile, unittest
 from unittest import mock
-from tpw.taipei_monthly import validate_monthly_analysis
+from contextlib import ExitStack
+from tpw import cli
+from tpw.taipei_monthly import SOURCES, VERIFIED_AUTHORITATIVE_CONTRACT_STATUS, ingest_snapshot, validate_monthly_analysis
 REPO=pathlib.Path(__file__).parents[2]
 IGNORED=shutil.ignore_patterns('.git','.venv','__pycache__','.pytest_cache','*.py[cod]','dist','build','*.egg-info','node_modules','playwright-report','test-results')
 MONTHLY_OUTPUTS=('site/taipei/monthly.html','site/data/taipei/monthly.json','site/data/taipei/monthly-retail.csv','site/data/taipei/monthly-supply.csv')
@@ -34,6 +36,33 @@ class TaipeiMonthlyBuildTest(unittest.TestCase):
   self.assertIn('"status": "unchanged"',self.command(*args).stdout);self.assertEqual(before,snapshot.read_bytes())
   raw.write_text('日期,品名,平均_元/公斤\n2025-12-01,香蕉,50\n',encoding='utf-8')
   failed=self.command(*args,check=False);self.assertNotEqual(failed.returncode,0);self.assertIn('header does not match a pinned contract',failed.stderr);self.assertEqual(before,snapshot.read_bytes())
+ def test_authoritative_sources_publish_html_json_and_csv(self):
+  self.command('seed-prototype','--as-of','2026-08-25');self.command('build','--as-of','2026-08-25');before=self.digest(UNRELATED_OUTPUTS)
+  raw={'retail':'序號,項目,平均(元/台斤)\n1,香蕉,30\n','supply':'類別,交易量(公斤),平均價格(元/公斤)\n雞,1000,60\n'}
+  for promoted in (('retail',),('supply',),('retail','supply')):
+   with self.subTest(promoted=promoted), ExitStack() as patches:
+    shutil.rmtree(self.root/'data/taipei-monthly',ignore_errors=True)
+    for source in promoted:
+     # Test-only simulation of future approval; no registry file or network access changes.
+     patches.enter_context(mock.patch.dict(SOURCES[source],{'contract_status':VERIFIED_AUTHORITATIVE_CONTRACT_STATUS}))
+     ingest_snapshot(self.root/'data',source,raw[source].encode('utf-8'),period='2025-12',resource_id='test-'+source,resource_name='114年12月份行情',resource_url='https://data.taipei/fixture',retrieved_at='2026-01-10T00:00:00Z',license='test',source_status='live')
+    # Run the actual CLI functions in-process so the temporary registry applies throughout.
+    cli.build('2026-08-25');cli.validate_data('2026-08-25');cli.verify_site(date='2026-08-25')
+    monthly=self.monthly();self.assertEqual(monthly['analysis_status'],'published')
+    self.assertEqual(before,self.digest(UNRELATED_OUTPUTS))
+    page=(self.root/'site/taipei/monthly.html').read_text()
+    self.assertEqual(page.count('欄位契約已完成官方來源驗證'),len(promoted))
+    for summary in monthly['sources']:
+     source=summary['source'];expected='live' if source in promoted else 'not_ingested'
+     self.assertEqual(summary['status'],expected)
+     self.assertIn("data-monthly-"+source+"-status='"+expected+"'",page)
+     if source in promoted:
+      self.assertEqual(summary['contract_status'],VERIFIED_AUTHORITATIVE_CONTRACT_STATUS)
+      rows=list(csv.DictReader((self.root/('site/data/taipei/monthly-'+source+'.csv')).read_text().splitlines()))
+      self.assertTrue(rows);self.assertEqual({row['source_status'] for row in rows},{'live'})
+     else:
+      self.assertIn('尚未匯入',page)
+    self.assertIn('不是今日報價',page)
  def test_monthly_failure_is_isolated_from_other_publications(self):
   self.command('seed-prototype','--as-of','2026-08-25');self.command('build','--as-of','2026-08-25');before=self.digest(UNRELATED_OUTPUTS)
   path=self.root/'data/taipei-monthly/retail/2025-12.json';snapshot=json.loads(path.read_text());snapshot['revisions'][0]['raw_text']=snapshot['revisions'][0]['raw_text'].replace('平均(元/台斤)','平均(元/公斤)');path.write_text(json.dumps(snapshot,ensure_ascii=False))
