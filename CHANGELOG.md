@@ -7,6 +7,8 @@
 
 ### Fixed
 
+- PR #54 P2：補齊 `verified_authoritative` 的臺北月資料 HTML 契約標籤，並取代 JSON Schema 中不一致的 `verified` enum；加入正式發布路徑與拒收狀態回歸測試。此為未來通過上游驗證後的發布相容性修正，目前兩來源仍為 provisional，未啟用 live fetch。
+
 - Issue #51 WO-51-01：臺北月資料的 `source_status=live` 現在只接受 trusted source registry 與 retained revision 同時標記為 `verified_authoritative` 的契約；目前兩個 provisional 契約均在寫檔前 fail closed，直接竄改 retained snapshot 也無法繞過。fixture／manual 行為不變，未啟用任何 live ingestion。
 
 ### Issue #51 PR 2：臺北市零售月均價與食物供銷月統計（fixture 先行）
