@@ -43,6 +43,7 @@ TAIPEI_GATE_LABELS = {"insufficient": "資料不足", "not_evaluated": "未評�
 MONTHLY_WARNING = "月均價是已公布月份的統計，不是今日報價，也不是個別攤商價；零售月均價不與批發日均價加總。沒有原始抽樣數，不提供信賴區間，也不計算 Buy Score。"
 MONTHLY_SOURCE_LABELS = {"not_ingested": "尚未匯入", "fixture": "原型測試資料", "live": "官方資料", "manual": "人工匯入", "mixed": "混合來源狀態"}
 MONTHLY_CONTRACT_LABELS = {
+    "verified_authoritative": "欄位契約已完成官方來源驗證",
     "provisional_unverified": "欄位契約尚未以實際 CSV 驗證",
     "provisional_project_defined": "欄位為本專案暫定格式，尚無上游實檔",
 }

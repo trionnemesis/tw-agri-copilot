@@ -54,7 +54,7 @@
             "enum": ["retail", "unknown"]
           },
           "contract_status": {
-            "enum": ["provisional_unverified", "provisional_project_defined", "verified"]
+            "enum": ["provisional_unverified", "provisional_project_defined", "verified_authoritative"]
           },
           "status": {
             "enum": ["not_ingested", "live", "manual", "fixture", "mixed"]

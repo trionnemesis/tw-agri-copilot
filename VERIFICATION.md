@@ -494,3 +494,48 @@ Base: `9123db4590a79061032014f699a5a489d3603d74` (`main`). Status ladder: **fixt
 - `tests/unit/test_taipei_monthly.py` (17) and `tests/integration/test_taipei_monthly_build.py` (5): 元/台斤 ÷ 0.6 (60→100, 45→75, 33→55); `mass_basis=false` items keep no per-kg or per-piece price; cuts and species stay separate series; header drift, non-UTF-8, unknown tokens, non-Taipei rows, duplicate items and unknown supply categories fail closed with nothing written; `-` is `missing` and `0` is `zero_reported`; identical re-ingest leaves the file byte-identical, changed content adds revision 2 with both raw hashes kept; revisions known after the requested date are ignored; exact median/quartiles/MoM/YoY on a 13-month series; daily wholesale rows never change the monthly document; a corrupted stored snapshot publishes `analysis_status=failed` while the nationwide JSON, aggregate, daily Markdown and the PR 1 Taipei JSON/CSV keep their SHA-256; hand-edited monthly CSV or JSON fails `verify-site` / `validate-data`; without snapshots both sources are `not_ingested` with no numbers.
 - Full `ci.yml` replay under Python 3.11 (seed → suite under the publication-signature guard → fixture rebuild → validate → Playwright): unittest 305 OK, publication signature unchanged; Playwright 45 passed, 1 skipped (pre-existing touch skip), including the monthly page on desktop, 390×844 mobile and with JavaScript disabled.
 - `tpw build --as-of 2026-10-16` on the committed live rows at `main` and with this change: `data/`, `reports/`, `site/data/current.json`, `site/data/taipei/current.json` and `site/data/taipei/items.csv` are byte-identical; `site/` only adds the monthly files plus one methodology section and one link on the Taipei page.
+
+## PR #54 P2 follow-up — authoritative monthly publication — 2026-10-21
+
+Base: `cb83d4f962781a3ae3db2705488b2e1c7df82216` (current main when work began).
+Scope: downstream HTML label and JSON Schema enum only; Issue #51 A2–A4 remain separate.
+
+### Red → green reproduction
+
+The first commit, `f255b757a390bb6d76bd83ae058dbd020d084fae`, contains tests only. Run:
+
+```sh
+PYTHONPATH=src python3 -m unittest \
+  tests.unit.test_taipei_monthly.TaipeiMonthlyTest.test_schema_accepts_authoritative_analysis_contract_status \
+  tests.unit.test_taipei_monthly.TaipeiMonthlyTest.test_schema_rejects_legacy_and_unknown_contract_statuses \
+  tests.integration.test_taipei_monthly_build.TaipeiMonthlyBuildTest.test_authoritative_sources_publish_html_json_and_csv -v
+```
+
+On unchanged production code: 3 tests, 3 failures and 3 errors (subtests). Retail-only,
+supply-only and both-source promotion reach `build_site` and fail with
+`KeyError: 'verified_authoritative'`. Generated source summaries are rejected by the
+schema's old enum; `verified` is incorrectly allowed there. Promotions exist only in
+`mock.patch.dict` scopes; snapshots and site builds use temporary directories.
+
+The fix adds the precise HTML label and replaces `verified` in the enum. The integration
+regression drives ingestion → analysis → actual CLI build → validate-data → verify-site,
+checks HTML/JSON/CSV source status, and compares unrelated publication hashes. New negative
+cases reject `verified`, `unknown`, empty and null registry markers for both sources before
+persistence. Existing provisional/live, forged retained revision, no-overwrite, fixture/BOM,
+failed-scope isolation and not-ingested tests remain in the suite.
+
+### Local evidence
+
+- Python 3.12.14; fixed `build --as-of 2026-10-18` on base and candidate: 786 files each
+  under `data/`, `reports/`, `site/`, no differing paths (all byte-identical).
+- Additional isolated validation with `jsonschema==4.25.1` / Draft 2020-12: schema is valid;
+  generated authoritative retail and supply documents pass the entire candidate schema;
+  each fails only the enum against the base schema. Four invalid contract markers per
+  source are rejected by the candidate schema. This optional local cross-check adds no
+  runtime/CI dependency; committed regression tests pin the enum and generated statuses.
+- Full suite and remote Python 3.11/browser CI results are recorded on the PR/Issue #51
+  after completion, pinned to the reviewed head and actual workflow run.
+
+No source registry, ingestion/validation gate, fixture data, live fetch, workflow, published
+artifact, or Issue #51 A2–A4 implementation changes. No upstream contract is promoted.
+This proves the future publication path with synthetic data, not upstream verification.
