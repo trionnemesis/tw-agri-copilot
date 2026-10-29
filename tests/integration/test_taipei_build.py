@@ -56,3 +56,23 @@ class TaipeiBuildTest(unittest.TestCase):
   self.assertEqual((taipei['analysis_status'],taipei['items'],taipei['observations']),('failed',[],[]))
   page=(self.root/'site/taipei/index.html').read_text();self.assertIn("data-taipei-analysis-status='failed'",page);self.assertNotIn('NT$',page)
   self.assertIn('臺北統計未發布',(self.root/'site/index.html').read_text())
+ def test_live_build_ignores_fixture_history_and_same_day_rows(self):
+  # Promote this isolated synthetic input to a live-shaped test snapshot, then prove
+  # inserting explicitly marked fixtures cannot alter either national or Taipei output.
+  for path in (self.root/'data/market/daily').rglob('*.json'):
+   rows=json.loads(path.read_text())
+   for row in rows:row['fetched_at']=row['transaction_date']+'T12:00:00Z'
+   path.write_text(json.dumps(rows))
+  path=self.root/'data/source-meta/2026-08-25.json';meta=json.loads(path.read_text());meta['status']='success';path.write_text(json.dumps(meta))
+  self.command('build','--as-of','2026-08-25')
+  outputs=TAIPEI_OUTPUTS+('site/data/current.json',)+tuple(str(path.relative_to(self.root)) for path in sorted((self.root/'data/series').glob('*.json')))
+  before=self.digest(outputs)
+  for day in ('2026-08-25','2026-08-24','2026-06-01'):
+   path=self.root/'data/market/daily'/day[:4]/day[5:7]/(day+'.json');path.parent.mkdir(parents=True,exist_ok=True)
+   rows=json.loads(path.read_text()) if path.exists() else []
+   base=json.loads((self.root/'data/market/daily/2026/08/2026-08-25.json').read_text())[0]
+   fake=dict(base,transaction_date=day,fetched_at='fixture',avg_price_twd_per_kg=999999,volume_kg=999999)
+   path.write_text(json.dumps(rows+[fake]))
+  self.command('build','--as-of','2026-08-25')
+  self.assertEqual(before,self.digest(outputs))
+  self.command('validate-data','--as-of','2026-08-25')

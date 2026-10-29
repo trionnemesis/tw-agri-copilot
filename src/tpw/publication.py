@@ -4,6 +4,7 @@ import datetime as dt
 import json
 import pathlib
 
+from .analytics import market_rows_for_analysis
 from .market_calendar import validate_calendar_evaluation
 
 
@@ -129,6 +130,8 @@ def classify_market_status(
     calendar=None,
 ):
     requested = _date(requested_date, "requested_date").isoformat()
+    observed_rows = market_rows_for_analysis(observed_rows, include_fixtures=source_status == "fixture")
+    stored_rows = market_rows_for_analysis(stored_rows, include_fixtures=source_status == "fixture")
     expected = set(expected_ids)
     observed = [
         row for row in observed_rows if row.get("transaction_date") == requested

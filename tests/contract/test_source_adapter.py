@@ -146,11 +146,11 @@ class SourceAdapterContractTest(unittest.TestCase):
         moa_batch = self.moa_batch()
         validation_batch = validation.fetch("2026-08-25", "2026-08-25")
         moa = MOA_MARKET_8066_ADAPTER.normalize(moa_batch, self.mapping)
-        reference = aggregate([dict(moa[0].record)])
+        reference = aggregate([dict(moa[0].record)], include_fixtures=True)
         resolution = resolve_observations(
             moa + validation.normalize(validation_batch, self.mapping)
         )
-        self.assertEqual(aggregate(resolution.eligible_records), reference)
+        self.assertEqual(aggregate(resolution.eligible_records, include_fixtures=True), reference)
         eligible = [
             item for item in resolution.observations if item.eligible_for_aggregate
         ]

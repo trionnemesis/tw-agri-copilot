@@ -100,8 +100,8 @@ class TaipeiAnalysisTest(unittest.TestCase):
         self.assertEqual(polluted, baseline)
         self.assertEqual(taipei_csv_documents(polluted), taipei_csv_documents(baseline))
         # The same extreme rows do move the nationwide aggregate, so the equality above is the filter at work.
-        national = {(value["transaction_date"], value["canonical_id"]): value["weighted_avg_price_twd_per_kg"] for value in aggregate(rows)}
-        national_polluted = {(value["transaction_date"], value["canonical_id"]): value["weighted_avg_price_twd_per_kg"] for value in aggregate(rows + extreme)}
+        national = {(value["transaction_date"], value["canonical_id"]): value["weighted_avg_price_twd_per_kg"] for value in aggregate(rows, include_fixtures=True)}
+        national_polluted = {(value["transaction_date"], value["canonical_id"]): value["weighted_avg_price_twd_per_kg"] for value in aggregate(rows + extreme, include_fixtures=True)}
         self.assertNotEqual(national, national_polluted)
 
     def test_history_uses_the_same_filter_as_the_as_of_day(self):

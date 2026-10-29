@@ -2,7 +2,7 @@ import argparse,datetime as dt,html,json,os,pathlib,re,shutil,tempfile,urllib.pa
 from html.parser import HTMLParser
 from .model import canonical_map,upsert
 from .market import UpstreamUnavailable
-from .analytics import aggregate
+from .analytics import aggregate,market_rows_for_analysis
 from .render import build_site,render_report,DISCLAIM
 from .prototype import generate_market_rows
 from .analytics import build_series
@@ -142,10 +142,10 @@ def record_unavailable_status(requested_date):
   if previous['requested_date']==requested_date and previous['status']=='complete':return apply_market_calendar(previous,calendar)
  status=source_unavailable_status(requested_date,len(config()),calendar)
  write_json(path,status);return status
-def stored_market_rows():
+def stored_market_rows(*,include_fixtures=False):
  rows=[]
  for p in sorted((ROOT/'data/market/daily').rglob('*.json')):rows.extend(json.loads(p.read_text()))
- return rows
+ return market_rows_for_analysis(rows,include_fixtures=include_fixtures)
 def source_status_for(date):
  meta=ROOT/'data/source-meta'/(date+'.json');return json.loads(meta.read_text()).get('status','validated') if meta.exists() else 'validated'
 def taipei_analysis(rows,date,publication,market_registry,source_status):
@@ -163,7 +163,7 @@ def seed_monthly_fixture():
 def load_date(date):
  p=path_for(ROOT/'data',date)
  if not p.exists():raise ValueError('requested as-of normalized data is absent')
- rows=[r for r in json.loads(p.read_text()) if r.get('canonical_id') and r.get('transaction_date')==date]
+ rows=[r for r in market_rows_for_analysis(json.loads(p.read_text()),include_fixtures=source_status_for(date)=='fixture') if r.get('canonical_id') and r.get('transaction_date')==date]
  if not rows:raise ValueError('requested as-of date has no valid mapped normalized data')
  return rows
 def _base_css():
@@ -323,8 +323,9 @@ def refresh_traceability_events(requested_date,fetcher=fetch_market_events,retri
  _persist_traceability_event_snapshot(rows,profile);return profile
 def build(date):
  rows=load_date(date);configured=config();items={i['canonical_id']:i for i in configured}
- all_rows=stored_market_rows()
- all_aggs=aggregate(all_rows);aggs=[r for r in all_aggs if r['transaction_date']==date]
+ include_fixtures=source_status_for(date)=='fixture'
+ all_rows=stored_market_rows(include_fixtures=include_fixtures)
+ all_aggs=aggregate(all_rows,include_fixtures=include_fixtures);aggs=[r for r in all_aggs if r['transaction_date']==date]
  for row in aggs:row.update({'display_name':items[row['canonical_id']]['display_name'],'category':items[row['canonical_id']]['category']})
  if len(aggs)!=len(configured):raise ValueError('requested as-of date does not cover the configured 20-item watchlist')
  stage=pathlib.Path(tempfile.mkdtemp(prefix='tpw-build-',dir=ROOT))
@@ -515,7 +516,7 @@ def validate_data(date):
  map_config=load_season_map_config(ROOT);map_payload=validate_season_map_payload(json.loads((ROOT/'site/data/season-map/current.json').read_text()),map_config,expected_month=context_month,expected_resolved_market_date=date);expected_map_payload=build_season_map_payload(ROOT,merged_season_catalog(context_month,map_config.category_registry,seasonality_rows(context_month)),date)
  if map_payload!=expected_map_payload:raise ValueError('season map payload does not match the mapped seasonality catalog')
  taipei_path=ROOT/'site/data/taipei/current.json'
- if taipei_path.exists() and validate_taipei_analysis(json.loads(taipei_path.read_text()))!=taipei_analysis(stored_market_rows(),date,publication,map_config.market_registry,source_status_for(date)):raise ValueError('Taipei analysis does not match the stored 8066 rows')
+ if taipei_path.exists() and validate_taipei_analysis(json.loads(taipei_path.read_text()))!=taipei_analysis(stored_market_rows(include_fixtures=source_status_for(date)=='fixture'),date,publication,map_config.market_registry,source_status_for(date)):raise ValueError('Taipei analysis does not match the stored 8066 rows')
  monthly_path=ROOT/'site/data/taipei/monthly.json'
  if monthly_path.exists() and validate_monthly_analysis(json.loads(monthly_path.read_text()))!=taipei_monthly(date,publication):raise ValueError('Taipei monthly analysis does not match the stored monthly snapshots')
  if len(list((ROOT/'data/series').glob('*.json')))!=20:raise ValueError('series data must cover 20 configured items')
