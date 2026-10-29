@@ -153,3 +153,8 @@ Issue #44 Part B：多類別產季語意契約與畜產／養殖水產 22 縣市
 
 [1.1.0]: https://github.com/trionnemesis/tw-agri-copilot/releases/tag/v1.1.0
 [1.0.0]: https://github.com/trionnemesis/tw-agri-copilot/releases/tag/v1.0.0
+
+### 臺北市場別行情地圖（開發中）
+
+- 新增獨立臺北市場／原始作物代碼的日價量視圖與來源資格政策；保留既有聚合與評分算法。
+- 地理來源、位置驗證狀態、來源失敗與資料截至日分開呈現；fixture 僅由明確模式使用。

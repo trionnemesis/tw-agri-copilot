@@ -1437,3 +1437,7 @@ Agent 閱讀本文件後，下一步 MUST 依序產生：
 4. PR 1 implementation；
 5. `VERIFICATION.md`。
 
+
+## 臺北市場別行情地圖（WO-51-MAP-01）
+
+新增獨立 `/taipei/map.html` 與 `data/taipei/map.json`、`map-observations.csv`，保留現有臺北及全臺聚合語意。以市場代碼 × 原始作物代碼 × 交易日為粒度；比較僅限同日同代碼，窗口以有效觀測成交量加權。正式統計排除 fixture 與來源資格不明列，並公開排除原因、來源與日期。行政區作中性定位，無法驗證位置不得繪製為已驗證營運點。地圖失敗須輸出獨立 failed 文件及無行情數字頁，不能重用舊結果；其他範圍依原契約處理。

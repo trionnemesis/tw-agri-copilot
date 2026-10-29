@@ -21,6 +21,9 @@ from .publication import apply_market_calendar,classify_market_status,load_resol
 from .market_calendar import evaluate_market_calendar,load_calendar_payload,refresh_market_calendar
 from .source_adapter import AGGREGATE_SOURCE_ROLE,MOA_MARKET_8066_ADAPTER,SourceAdapter,resolve_observations,source_run_document,validate_source_run_document
 from .taipei_analysis import build_taipei_analysis,failed_taipei_analysis,taipei_csv_documents,validate_taipei_analysis
+from .taipei_map import build_taipei_map,failed_taipei_map,validate_taipei_map,taipei_map_csv
+from .taipei_map_assets import load_taipei_map_assets
+from .taipei_map_render import render_taipei_map,map_js,map_css,map_initial_json
 from .taipei_monthly import SOURCES as MONTHLY_SOURCES,build_monthly_analysis,failed_monthly_analysis,fixture_snapshots,ingest_snapshot,load_retail_mapping,monthly_csv_documents,validate_monthly_analysis
 ROOT=pathlib.Path.cwd(); SECRET=('AKIA','ghp_','glpat-','github_pat_','sk-','-----BEGIN PRIVATE KEY-----','bearer ','base64,')
 def config(): return json.loads((ROOT/'config/produce.yml').read_text())['items']
@@ -153,6 +156,14 @@ def taipei_analysis(rows,date,publication,market_registry,source_status):
  # Any Taipei failure is published as a failed Taipei document so it never blocks the nationwide build.
  try:return build_taipei_analysis(rows,date,publication,config(),market_registry,lambda day:evaluate_market_calendar(ROOT,day),source_status)
  except Exception as exc:return failed_taipei_analysis(date,publication,source_status,type(exc).__name__+': '+str(exc))
+def taipei_map(rows,date,publication,market_registry,mode="observed"):
+ # All map-specific configuration and assets belong to this failure boundary.
+ try:
+  geography,geometry,svg=load_taipei_map_assets(ROOT)
+  document=build_taipei_map(rows,date,publication,config(),market_registry,lambda day:evaluate_market_calendar(ROOT,day),ROOT,geography,geometry,mode=mode)
+  return validate_taipei_map(document,expected_mode=mode),svg
+ except Exception as exc:
+  return validate_taipei_map(failed_taipei_map(date,publication,type(exc).__name__+': '+str(exc),mode=mode),expected_mode=mode),None
 def taipei_monthly(date,publication):
  # Monthly retail and food-supply history; a failure is published as a failed document so it never blocks the build.
  try:return build_monthly_analysis(ROOT/'data',date,publication,load_retail_mapping(ROOT))
@@ -321,7 +332,7 @@ def refresh_traceability_events(requested_date,fetcher=fetch_market_events,retri
   previous_count=previous_profile['raw_record_count']
   if previous_count and profile['raw_record_count']*100<previous_count*80:raise ValueError('traceability market event row count fell below the 80 percent LKG threshold')
  _persist_traceability_event_snapshot(rows,profile);return profile
-def build(date):
+def build(date,taipei_map_mode="observed"):
  rows=load_date(date);configured=config();items={i['canonical_id']:i for i in configured}
  all_rows=stored_market_rows()
  all_aggs=aggregate(all_rows);aggs=[r for r in all_aggs if r['transaction_date']==date]
@@ -339,6 +350,8 @@ def build(date):
   calendar=evaluate_market_calendar(ROOT,calendar_date)
   publication=load_resolved_market_status(ROOT/'data',date,status,len(configured),calendar);write_json(ds/'market-status/current.json',publication);context_month=publication['requested_date'][:7]
   series=build_series(all_aggs,date);season=seasonality_rows(context_month);season_map_config=load_season_map_config(ROOT);season_catalog=merged_season_catalog(context_month,season_map_config.category_registry,season);season_map_payload=build_season_map_payload(ROOT,season_catalog,date);scores=score_all(series,season);advice=generate_advice(scores,date);trace,trace_profile=traceability_context(publication['requested_date']);trace_events,trace_event_profile=traceability_event_context(publication['requested_date']);taipei=taipei_analysis(all_rows,date,publication,season_map_config.market_registry,status);monthly=taipei_monthly(date,publication)
+  map_document,map_svg=taipei_map(all_rows,date,publication,season_map_config.market_registry,taipei_map_mode)
+  if map_document['analysis_status']=='failed':print('::warning title=Taipei map not published::'+map_document['failure_reason'])
   if taipei['analysis_status']=='failed':print('::warning title=Taipei analysis not published::'+taipei['failure_reason'])
   if monthly['analysis_status']=='failed':print('::warning title=Taipei monthly analysis not published::'+monthly['failure_reason'])
   warnings=[]
@@ -362,16 +375,17 @@ def build(date):
   if (ROOT/'site').exists():shutil.copytree(ROOT/'site',site)
   (site/'assets/css').mkdir(parents=True,exist_ok=True);(site/'assets/js').mkdir(parents=True,exist_ok=True)
   (site/'.nojekyll').write_text('');(site/'assets/css/app.css').write_text(css()+market_status_css(),encoding='utf-8');(site/'assets/js/app.js').write_text(js(),encoding='utf-8')
-  build_site(aggs,date,site,status,series=series,scores=scores,seasonality=season,season_catalog=season_catalog,advice=advice,traceability=trace,traceability_status=trace_profile,traceability_events=trace_events,traceability_event_status=trace_event_profile,quality=quality,publication_status=publication,season_map_payload=season_map_payload,county_svg=season_map_config.svg,category_registry=season_map_config.category_registry,taipei_analysis=taipei,taipei_monthly=monthly)
+  build_site(aggs,date,site,status,series=series,scores=scores,seasonality=season,season_catalog=season_catalog,advice=advice,traceability=trace,traceability_status=trace_profile,traceability_events=trace_events,traceability_event_status=trace_event_profile,quality=quality,publication_status=publication,season_map_payload=season_map_payload,county_svg=season_map_config.svg,category_registry=season_map_config.category_registry,taipei_analysis=taipei,taipei_monthly=monthly,taipei_map=map_document,taipei_map_svg=map_svg)
   reports=stage/'reports'
   if (ROOT/'reports').exists():shutil.copytree(ROOT/'reports',reports)
   rp=reports/'daily'/date[:4]/date[5:7];rp.mkdir(parents=True,exist_ok=True);rp.joinpath(date+'.md').write_text(render_report(aggs,scores,advice,quality,date,season_map_config.category_registry),encoding='utf-8')
-  verify_site(site,date);swap_all([(ds,ROOT/'data'),(site,ROOT/'site'),(reports,ROOT/'reports')])
+  verify_site(site,date,taipei_map_mode);swap_all([(ds,ROOT/'data'),(site,ROOT/'site'),(reports,ROOT/'reports')])
  finally:shutil.rmtree(stage,ignore_errors=True)
 class Links(HTMLParser):
  def __init__(self):super().__init__();self.links=[];self.uses=[];self.use_tags=0;self.ids=[]
  def handle_starttag(self,t,a):
   if t in ('a','link'):self.links += [v for k,v in a if k=='href']
+  if t=='script':self.links += [v for k,v in a if k=='src']
   if t=='use':self.use_tags+=1;self.uses += [v for k,v in a if k in ('href','xlink:href')]
   self.ids += [v for k,v in a if k=='id']
 SAFE_LOCAL_SVG_PATH=re.compile(r'^(?:[A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+\.svg$')
@@ -381,7 +395,7 @@ def local_svg_reference(reference):
  except ValueError as exc:raise ValueError('SVG use is not a valid local reference') from exc
  if parsed.scheme or parsed.netloc or parsed.query or not parsed.path or not parsed.fragment or parsed.path.startswith('/') or not SAFE_LOCAL_SVG_PATH.fullmatch(parsed.path):raise ValueError('SVG use must reference a local sprite fragment')
  return parsed.path,parsed.fragment
-def verify_site(root=None,date=None):
+def verify_site(root=None,date=None,taipei_map_mode="observed"):
  root=ROOT/'site' if root is None else root  # bind at call time so tests redirecting ROOT reach it
  registry=load_category_registry(ROOT)
  files=list(root.rglob('*.html'));assert files,'no generated HTML'; total=0;largest=(0,None)
@@ -422,6 +436,29 @@ def verify_site(root=None,date=None):
   if any(token not in taipei_html for token in ("data-taipei-as-of='"+taipei['as_of_date']+"'","data-taipei-requested='"+taipei['requested_date']+"'","data-taipei-scope-status='"+taipei['scope_status']+"'","data-taipei-analysis-status='"+taipei['analysis_status']+"'")):raise ValueError('Taipei page does not match the Taipei analysis JSON')
   if sorted(re.findall(r"data-taipei-item='([^']+)'",taipei_html))!=sorted(html.escape(item['canonical_id']) for item in taipei['items']):raise ValueError('Taipei page items do not match the Taipei analysis JSON')
   if 'NT$' in taipei_html and DISCLAIM not in taipei_html:raise ValueError('Taipei page lacks the wholesale disclaimer')
+ map_path=root/'data/taipei/map.json'
+ if (root/'taipei/index.html').exists() and "href='map.html'" in (root/'taipei/index.html').read_text(encoding='utf-8') and not map_path.exists():raise ValueError('Taipei map payload is missing')
+ if map_path.exists():
+  if not (root/'taipei/index.html').exists() or "href='map.html'" not in (root/'taipei/index.html').read_text(encoding='utf-8'):raise ValueError('Taipei map entry link is missing')
+  document=validate_taipei_map(json.loads(map_path.read_text(encoding='utf-8')),expected_mode=taipei_map_mode)
+  map_page=root/'taipei/map.html';csv_path=root/'data/taipei/map-observations.csv'
+  if not csv_path.exists() or csv_path.read_bytes()!=taipei_map_csv(document).encode('utf-8'):raise ValueError('Taipei map CSV does not match JSON')
+  initial_path=root/'data/taipei/map-ui.json'
+  if not initial_path.exists() or initial_path.read_bytes()!=map_initial_json(document).encode('utf-8'):raise ValueError('Taipei map initial payload does not match JSON')
+  if document['analysis_status']=='failed':svg=None
+  else:
+   _,_,svg=load_taipei_map_assets(ROOT)
+   if len(svg.encode('utf-8'))>150*1024:raise ValueError('Taipei map SVG exceeds 150 KiB')
+  from .presentation import rewrite_text
+  if not map_page.exists() or rewrite_text(map_page.read_text(encoding='utf-8'))!=rewrite_text(render_taipei_map(document,svg)):raise ValueError('Taipei map HTML does not match JSON and reviewed assets')
+  for name,expected in (('js/taipei-map.js',map_js()),('css/taipei-map.css',map_css())):
+   path=root/'assets'/name
+   if not path.exists() or path.read_text(encoding='utf-8')!=expected:raise ValueError('Taipei map asset missing or inconsistent: '+name)
+  if map_page.stat().st_size>300*1024 or initial_path.stat().st_size>500*1024 or map_path.stat().st_size>2*1024*1024:raise ValueError('Taipei map HTML or payload exceeds size budget')
+  if sum((root/'assets'/name).stat().st_size for name in ('js/taipei-map.js','css/taipei-map.css'))>80*1024:raise ValueError('Taipei map JS and CSS exceed size budget')
+  if (root/'data/current.json').exists():
+   current=json.loads((root/'data/current.json').read_text());publication=current['publication_status']
+   if document['as_of_date']!=current['as_of_date'] or document['requested_date']!=publication['requested_date'] or document['publication_status']!=publication['status']:raise ValueError('Taipei map does not match publication')
  monthly_path=root/'data/taipei/monthly.json'
  if monthly_path.exists():
   monthly=validate_monthly_analysis(json.loads(monthly_path.read_text()));monthly_page=root/'taipei/monthly.html'
@@ -502,7 +539,7 @@ def verify_site(root=None,date=None):
     if current.get('eligible_recommendations',0)<3:raise ValueError('fixture must produce at least three eligible recommendations')
     if index.read_text().count("class='recommendation-card")<3:raise ValueError('first prototype surface lacks three recommendation cards')
    if current.get('generation_mode') not in ('deterministic_fallback','ai'):raise ValueError('advice generation mode missing')
-def validate_data(date):
+def validate_data(date,taipei_map_mode="observed"):
  load_date(date)
  source_run_path=ROOT/'data/source-runs'/(date+'.json')
  if source_run_path.exists():validate_source_run_document(json.loads(source_run_path.read_text()))
@@ -516,6 +553,8 @@ def validate_data(date):
  if map_payload!=expected_map_payload:raise ValueError('season map payload does not match the mapped seasonality catalog')
  taipei_path=ROOT/'site/data/taipei/current.json'
  if taipei_path.exists() and validate_taipei_analysis(json.loads(taipei_path.read_text()))!=taipei_analysis(stored_market_rows(),date,publication,map_config.market_registry,source_status_for(date)):raise ValueError('Taipei analysis does not match the stored 8066 rows')
+ map_path=ROOT/'site/data/taipei/map.json'
+ if map_path.exists() and validate_taipei_map(json.loads(map_path.read_text()),expected_mode=taipei_map_mode)!=taipei_map(stored_market_rows(),date,publication,map_config.market_registry,taipei_map_mode)[0]:raise ValueError('Taipei map does not match stored inputs')
  monthly_path=ROOT/'site/data/taipei/monthly.json'
  if monthly_path.exists() and validate_monthly_analysis(json.loads(monthly_path.read_text()))!=taipei_monthly(date,publication):raise ValueError('Taipei monthly analysis does not match the stored monthly snapshots')
  if len(list((ROOT/'data/series').glob('*.json')))!=20:raise ValueError('series data must cover 20 configured items')
@@ -528,10 +567,10 @@ def main(argv=None):
  rs=s.add_parser('refresh-seasonality');rs.add_argument('--month',default=dt.date.today().strftime('%Y-%m'));rs.add_argument('--force',action='store_true')
  ft=s.add_parser('fetch-traceability');ft.add_argument('--as-of',default=dt.date.today().isoformat())
  fte=s.add_parser('fetch-traceability-events');fte.add_argument('--as-of',default=dt.date.today().isoformat())
- b=s.add_parser('build');b.add_argument('--as-of',required=True)
+ b=s.add_parser('build');b.add_argument('--as-of',required=True);b.add_argument('--taipei-map-mode',choices=('observed','fixture'),default='observed')
  bf=s.add_parser('backfill');bf.add_argument('--days',type=int,default=120);bf.add_argument('--end',default=dt.date.today().isoformat())
- d=s.add_parser('validate-data');d.add_argument('--as-of',required=True)
- v=s.add_parser('verify-site');v.add_argument('--as-of')
+ d=s.add_parser('validate-data');d.add_argument('--as-of',required=True);d.add_argument('--taipei-map-mode',choices=('observed','fixture'),default='observed')
+ v=s.add_parser('verify-site');v.add_argument('--as-of');v.add_argument('--taipei-map-mode',choices=('observed','fixture'),default='observed')
  ms=s.add_parser('record-market-status');ms.add_argument('--requested-date',required=True);ms.add_argument('--status',choices=('source_unavailable',),required=True)
  mc=s.add_parser('refresh-market-calendar');mc.add_argument('--year',required=True,type=int)
  mvc=s.add_parser('validate-market-calendar');mvc.add_argument('--year',required=True,type=int)
@@ -540,7 +579,7 @@ def main(argv=None):
  s.add_parser('validate-traceability-events')
  ar=s.add_parser('validate-agent-run');ar.add_argument('paths',nargs='+');a=p.parse_args(argv)
  if a.cmd=='validate-config':
-  items=config();map_config=load_season_map_config(ROOT);registry=map_config.category_registry;canonical_map(items,registry);assert sum(x['category']=='fruit' and x.get('enabled') for x in items)>=10 and sum(x['category']=='vegetable' and x.get('enabled') for x in items)>=10;validate_produce_icon_sprite(read_produce_icon_sprite(registry=registry),registry);print('config valid: 20 mapped items, '+str(len(map_config.county_registry['counties']))+' counties, '+str(len(map_config.market_registry['markets']))+' verified markets, '+str(len(registry.ids()))+' produce categories')
+  load_taipei_map_assets(ROOT);items=config();map_config=load_season_map_config(ROOT);registry=map_config.category_registry;canonical_map(items,registry);assert sum(x['category']=='fruit' and x.get('enabled') for x in items)>=10 and sum(x['category']=='vegetable' and x.get('enabled') for x in items)>=10;validate_produce_icon_sprite(read_produce_icon_sprite(registry=registry),registry);print('config valid: 20 mapped items, '+str(len(map_config.county_registry['counties']))+' counties, '+str(len(map_config.market_registry['markets']))+' verified markets, '+str(len(registry.ids()))+' produce categories')
  elif a.cmd=='seed-prototype':
   fixture=json.loads((ROOT/'config/prototype.fixture.json').read_text());raw=generate_market_rows(config(),fixture,a.as_of);start=(dt.date.fromisoformat(a.as_of)-dt.timedelta(days=int(fixture.get('days',35))-1)).isoformat();print('seeded normalized rows:',ingest(raw,start,a.as_of,'fixture'));print('seeded Taipei monthly snapshots:',len(seed_monthly_fixture()))
  elif a.cmd=='ingest-taipei-monthly':print('Taipei monthly snapshot:',json.dumps(ingest_snapshot(ROOT/'data',a.source,pathlib.Path(a.file).read_bytes(),period=a.period,resource_id=a.resource_id,resource_name=a.resource_name,resource_url=a.resource_url,retrieved_at=a.retrieved_at,license=a.license,source_status=a.source_status),ensure_ascii=False,sort_keys=True))
@@ -550,8 +589,8 @@ def main(argv=None):
  elif a.cmd=='fetch-traceability':print('traceability refresh:',json.dumps(refresh_traceability(a.as_of),ensure_ascii=False,sort_keys=True))
  elif a.cmd=='fetch-traceability-events':print('traceability market event refresh:',json.dumps(refresh_traceability_events(a.as_of),ensure_ascii=False,sort_keys=True))
  elif a.cmd=='backfill':print('backfill windows:',backfill(a.days,a.end))
- elif a.cmd=='build':build(a.as_of);print('build promoted safely')
- elif a.cmd=='validate-data':validate_data(a.as_of);print('data valid')
+ elif a.cmd=='build':build(a.as_of,a.taipei_map_mode);print('build promoted safely')
+ elif a.cmd=='validate-data':validate_data(a.as_of,a.taipei_map_mode);print('data valid')
  elif a.cmd=='validate-agent-run':
   for path in a.paths:validate_agent_run_file(path)
   print('agent run valid:',len(a.paths))
@@ -570,4 +609,4 @@ def main(argv=None):
   rows=json.loads((ROOT/'data/traceability/current.json').read_text());profile=json.loads((ROOT/'data/traceability/source-profile.json').read_text());validate_registry_snapshot(rows,profile);print('valid traceability registry:',profile['source_status'],len(rows))
  elif a.cmd=='validate-traceability-events':
   rows=json.loads((ROOT/'data/traceability/market-events/current.json').read_text());profile=json.loads((ROOT/'data/traceability/market-events/source-profile.json').read_text());validate_market_event_snapshot(rows,profile);print('valid traceability market events:',profile['source_status'],len(rows))
- else:verify_site(date=a.as_of);print('site verified')
+ else:verify_site(date=a.as_of,taipei_map_mode=a.taipei_map_mode);print('site verified')

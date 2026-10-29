@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Taipei wholesale market geography",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "dataset_url", "resource_url", "source_path", "source_sha256", "downloaded_at", "license", "license_url", "markets"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "dataset_url": {"type": "string", "format": "uri"},
+    "resource_url": {"type": "string", "format": "uri"},
+    "source_path": {"type": "string"},
+    "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "downloaded_at": {"type": "string", "format": "date"},
+    "license": {"type": "string"},
+    "license_url": {"type": "string", "format": "uri"},
+    "markets": {
+      "type": "array", "minItems": 2, "maxItems": 2,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["market_namespace", "market_code", "official_name", "district_code", "district_name", "reference_address", "operating_address", "longitude", "latitude", "coordinate_crs", "location_role", "location_status", "valid_from", "valid_to", "valid_time_precision", "verified_at", "address_evidence_url", "coordinate_evidence_url", "source_snapshot_hash", "location_note"],
+        "properties": {
+          "market_namespace": {"const": "moa_market_8066"}, "market_code": {"enum": ["104", "109"]},
+          "official_name": {"type": "string"}, "district_code": {"type": "string"}, "district_name": {"type": "string"},
+          "reference_address": {"type": ["string", "null"]}, "operating_address": {"type": ["string", "null"]},
+          "longitude": {"type": ["number", "null"], "minimum": 121.4, "maximum": 121.7}, "latitude": {"type": ["number", "null"], "minimum": 24.9, "maximum": 25.3},
+          "coordinate_crs": {"const": "EPSG:4326"}, "location_role": {"enum": ["operating_site", "reference_site"]},
+          "location_status": {"enum": ["verified", "conflicting_sources", "unverified"]},
+          "valid_from": {"type": ["string", "null"], "format": "date"}, "valid_to": {"type": ["string", "null"], "format": "date"},
+          "valid_time_precision": {"enum": ["day", "month", "year", "unknown"]}, "verified_at": {"type": "string", "format": "date"},
+          "address_evidence_url": {"type": "string", "format": "uri"}, "coordinate_evidence_url": {"type": "string", "format": "uri"},
+          "source_snapshot_hash": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "location_note": {"type": "string"}
+        }
+      }
+    }
+  }
+}

@@ -20,4 +20,4 @@ version = {attr = "tpw.__version__"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-tpw = ["assets/*.svg"]
+tpw = ["assets/*.svg", "assets/*.js", "assets/*.css"]

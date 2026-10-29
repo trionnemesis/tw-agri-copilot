@@ -52,12 +52,12 @@ jobs:
       - name: Rebuild the committed prototype fixture
         run: |
           PYTHONPATH=src python3 -m tpw seed-prototype --as-of 2026-08-25
-          PYTHONPATH=src python3 -m tpw build --as-of 2026-08-25
+          PYTHONPATH=src python3 -m tpw build --as-of 2026-08-25 --taipei-map-mode fixture
           PYTHONPATH=src python3 -m tpw.presentation
           PYTHONPATH=src python3 -m tpw validate-traceability
           PYTHONPATH=src python3 -m tpw validate-traceability-events
-          PYTHONPATH=src python3 -m tpw validate-data --as-of 2026-08-25
-          PYTHONPATH=src python3 -m tpw verify-site --as-of 2026-08-25
+          PYTHONPATH=src python3 -m tpw validate-data --as-of 2026-08-25 --taipei-map-mode fixture
+          PYTHONPATH=src python3 -m tpw verify-site --as-of 2026-08-25 --taipei-map-mode fixture
       - run: npm run test:browser
       - run: test "$(du -sm site | cut -f1)" -le 900
       - run: test "$(du -sm --exclude=.git . | cut -f1)" -le 900
