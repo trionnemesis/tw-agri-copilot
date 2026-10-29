@@ -5,6 +5,8 @@ import datetime as dt
 import json
 import pathlib
 
+from .analytics import market_rows_for_analysis
+
 
 def configured_ids(root):
     payload = json.loads((root / "config/produce.yml").read_text(encoding="utf-8"))
@@ -32,7 +34,7 @@ def latest_complete_date(root, on_or_before):
         rows = json.loads(path.read_text(encoding="utf-8"))
         covered = {
             row.get("canonical_id")
-            for row in rows
+            for row in market_rows_for_analysis(rows)
             if row.get("transaction_date") == day.isoformat()
             and row.get("canonical_id")
         }

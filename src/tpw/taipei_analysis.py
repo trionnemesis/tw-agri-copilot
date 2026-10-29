@@ -14,7 +14,7 @@ import hashlib
 import io
 import json
 
-from .analytics import WINDOWS, aggregate, build_series
+from .analytics import WINDOWS, aggregate, build_series, market_rows_for_analysis
 from .publication import MARKET_STATES
 
 
@@ -312,6 +312,8 @@ def build_taipei_analysis(rows, as_of_date, publication_status, items, market_re
     requested_date = publication_status["requested_date"]
     if publication_status.get("resolved_date") != as_of_date:
         raise TaipeiAnalysisError("publication status does not resolve to the Taipei as-of date")
+    include_fixtures = source_status == "fixture"
+    rows = market_rows_for_analysis(rows, include_fixtures=include_fixtures)
     markets = taipei_markets(market_registry)
     configured = {item["canonical_id"] for item in items}
     taipei_rows = [row for row in filter_taipei_rows(rows, markets) if row.get("canonical_id") in configured]
@@ -320,7 +322,7 @@ def build_taipei_analysis(rows, as_of_date, publication_status, items, market_re
         (row for row in taipei_rows if row["transaction_date"] <= as_of_date),
         key=lambda row: (row["transaction_date"], str(row["market_code"]), row["crop_code"], row["row_hash"]),
     )
-    series = {row["canonical_id"]: row for row in build_series(aggregate(history), as_of_date)}
+    series = {row["canonical_id"]: row for row in build_series(aggregate(history, include_fixtures=include_fixtures), as_of_date)}
     today_rows = [row for row in history if row["transaction_date"] == as_of_date]
     window_start = (dt.date.fromisoformat(as_of_date) - dt.timedelta(days=WINDOWS["7d"][0] - 1)).isoformat()
     days = market_days(taipei_rows, markets, window_start, requested_date, calendar_for)

@@ -9,9 +9,22 @@ WINDOWS = {
 }
 
 
-def aggregate(rows):
+def market_rows_for_analysis(rows, *, include_fixtures=False):
+    """Exclude explicitly synthetic market observations from production statistics.
+
+    A real source_id is not provenance: seed-prototype uses the same MOA id.
+    Only a caller building an explicitly labelled fixture publication may opt in.
+    This does not establish the authenticity of otherwise unmarked observations.
+    """
+    return [row for row in rows if include_fixtures or not any(
+        str(row.get(field, "")).strip().lower() == "fixture"
+        for field in ("fetched_at", "source_status")
+    )]
+
+
+def aggregate(rows, *, include_fixtures=False):
     groups = {}
-    for row in rows:
+    for row in market_rows_for_analysis(rows, include_fixtures=include_fixtures):
         if not row["canonical_id"]:
             continue
         groups.setdefault((row["transaction_date"], row["canonical_id"]), []).append(row)
