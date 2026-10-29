@@ -254,3 +254,9 @@ VERIFICATION.md         本地與遠端 acceptance evidence
 - Automation：GitHub Actions 09:17／18:17（Asia/Taipei）負責市場與 Pages 發布；7556 兩次檢查，H44 僅 18:17／手動／evening recovery 更新。09:47／18:47 internal guard 只在對應 primary run 完全不存在時 dispatch bounded recovery；外部 ChatGPT 10:30／19:30 預設 verifier，僅在 primary 與 guard recovery 都缺失、沒有 Daily run 執行中、publication stale 且能確認 recovery-capable push run 時，才可 re-run 該 GitHub Actions `update` job。資料抓取、Buy Score、commit 與 Pages 發布仍全部由 GitHub Actions 負責。
 
 視覺語言來自使用者提供的分析型 HTML（navy gradient、paper cards、status badges、responsive grids）；README 資訊架構參考 [AgentSec README.zh-TW](https://github.com/trionnemesis/AgentSec/blob/main/README.zh-TW.md)，但內容與資料邊界皆針對本專案重寫。
+
+### 臺北市場別行情地圖
+
+`/taipei/map.html` 以臺北市十二區作定位底圖，對照臺北一（109）與臺北二（104）同日、同原始作物代碼的批發價量；市場位置證據不足時保留數據並標示位置未確認。價格不代表零售價或產地，行政區底色不是價格熱度。7／30／90 日為截至日以前的日曆窗口，均價以成交量加權；缺列不補零，同代碼比較也未控制等級與批次。
+
+地圖使用獨立的 `taipei-map-observed-v1` 來源資格政策，排除 fixture 與來源不明列，因而與既有聚合頁可能不同。`map.json` 和 `map-observations.csv` 保留狀態及 lineage；資料截至日與請求日分開顯示。`build`、`validate-data`、`verify-site` 預設 observed；僅合成測試使用 `--taipei-map-mode fixture`，不得作正式行情。

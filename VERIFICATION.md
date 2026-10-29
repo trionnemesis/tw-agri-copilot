@@ -1,5 +1,9 @@
 # Prototype verification evidence
 
+## WO-51-MAP-01 — evidence in progress
+
+Base: `f5e20443edb3687d7d0d3872c544132926c39381`. Local tests, asset sizes, source evidence, browser checks, merge and Pages deployment must be recorded separately after they are actually verified; no deployment or complete location verification is asserted here.
+
 ## v1.1.0 — Issue #44 Part B — 2026-09-04
 
 環境：Python 3.11.15、Node 22、`PYTHONPATH=src`、無網路（所有 `*.gov.tw` egress 封鎖）。版本：`src/tpw/__init__.py` `__version__ = "1.1.0"`。
@@ -539,3 +543,7 @@ failed-scope isolation and not-ingested tests remain in the suite.
 No source registry, ingestion/validation gate, fixture data, live fetch, workflow, published
 artifact, or Issue #51 A2–A4 implementation changes. No upstream contract is promoted.
 This proves the future publication path with synthetic data, not upstream verification.
+
+## WO-51-MAP-01 臺北市場行情地圖
+
+詳細驗收、338項Python測試、browser、來源限制、大小與截圖見 [docs/taipei-map-verification.md](docs/taipei-map-verification.md)。104點位已驗證；109營運點位仍未確認，UI明示且不畫假pin。

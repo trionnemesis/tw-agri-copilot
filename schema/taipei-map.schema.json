@@ -1,0 +1,1759 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0"
+    },
+    "scope_id": {
+      "const": "taipei-city"
+    },
+    "market_level": {
+      "const": "wholesale"
+    },
+    "data_mode": {
+      "enum": [
+        "observed",
+        "fixture"
+      ]
+    },
+    "requested_date": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "as_of_date": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "publication_status": {
+      "type": "string"
+    },
+    "analysis_status": {
+      "enum": [
+        "published",
+        "failed"
+      ]
+    },
+    "failure_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "policy": {
+      "type": "object",
+      "properties": {
+        "analysis_input_policy": {
+          "enum": [
+            "taipei-map-observed-v1",
+            "taipei-map-fixture-v1"
+          ]
+        },
+        "method_version": {
+          "const": "1.0"
+        },
+        "price_unit": {
+          "const": "TWD/kg"
+        },
+        "volume_unit": {
+          "const": "kg"
+        },
+        "window_definition": {
+          "const": "inclusive calendar days ending as_of_date"
+        },
+        "minimum_days": {
+          "type": "object",
+          "properties": {
+            "7d": {
+              "const": 3
+            },
+            "30d": {
+              "const": 10
+            },
+            "90d": {
+              "const": 30
+            }
+          },
+          "required": [
+            "7d",
+            "30d",
+            "90d"
+          ],
+          "additionalProperties": false
+        },
+        "comparison_definition": {
+          "const": "104 minus 109; relative 104/109 - 1"
+        },
+        "default_selection": {
+          "type": "object",
+          "properties": {
+            "item": {
+              "const": "cabbage"
+            },
+            "crop": {
+              "const": "LA2"
+            },
+            "market": {
+              "const": "all"
+            },
+            "window": {
+              "const": "30d"
+            }
+          },
+          "required": [
+            "item",
+            "crop",
+            "market",
+            "window"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "analysis_input_policy",
+        "method_version",
+        "price_unit",
+        "volume_unit",
+        "window_definition",
+        "minimum_days",
+        "comparison_definition",
+        "default_selection"
+      ],
+      "additionalProperties": false
+    },
+    "inputs": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "normalized_input_hash": {
+              "type": "string",
+              "pattern": "^sha256:[0-9a-f]{64}$"
+            },
+            "input_files": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  }
+                },
+                "required": [
+                  "path",
+                  "hash"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "source_manifest_refs": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "path": {
+                    "type": "string"
+                  },
+                  "hash": {
+                    "type": "string",
+                    "pattern": "^sha256:[0-9a-f]{64}$"
+                  },
+                  "start": {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "end": {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  }
+                },
+                "required": [
+                  "path",
+                  "hash",
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "lineage_level": {
+              "const": "normalized_snapshot_with_ingestion_metadata"
+            },
+            "raw_replay_available": {
+              "const": false
+            }
+          },
+          "required": [
+            "normalized_input_hash",
+            "input_files",
+            "source_manifest_refs",
+            "lineage_level",
+            "raw_replay_available"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "geography": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "markets": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "market_namespace": {
+                    "type": "string"
+                  },
+                  "coordinate_crs": {
+                    "const": "EPSG:4326"
+                  },
+                  "valid_from": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "valid_to": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "valid_time_precision": {
+                    "enum": [
+                      "unknown",
+                      "day",
+                      "month",
+                      "year"
+                    ]
+                  },
+                  "verified_at": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "address_evidence_url": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "coordinate_evidence_url": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "source_snapshot_hash": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "market_code": {
+                    "enum": [
+                      "104",
+                      "109"
+                    ]
+                  },
+                  "official_name": {
+                    "type": "string"
+                  },
+                  "district_code": {
+                    "type": "string"
+                  },
+                  "district_name": {
+                    "type": "string"
+                  },
+                  "reference_address": {
+                    "type": "string"
+                  },
+                  "operating_address": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "longitude": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "latitude": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "location_role": {
+                    "enum": [
+                      "operating_site",
+                      "reference_site"
+                    ]
+                  },
+                  "location_status": {
+                    "enum": [
+                      "verified",
+                      "conflicting_sources",
+                      "unverified"
+                    ]
+                  },
+                  "location_note": {
+                    "type": "string"
+                  },
+                  "display_x": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "display_y": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "market_namespace",
+                  "coordinate_crs",
+                  "valid_from",
+                  "valid_to",
+                  "valid_time_precision",
+                  "verified_at",
+                  "address_evidence_url",
+                  "coordinate_evidence_url",
+                  "source_snapshot_hash",
+                  "market_code",
+                  "official_name",
+                  "district_code",
+                  "district_name",
+                  "reference_address",
+                  "operating_address",
+                  "longitude",
+                  "latitude",
+                  "location_role",
+                  "location_status",
+                  "location_note",
+                  "display_x",
+                  "display_y"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "boundary": {
+              "type": "object",
+              "properties": {
+                "schema_version": {
+                  "type": "string"
+                },
+                "dataset_url": {
+                  "type": "string"
+                },
+                "resource_url": {
+                  "type": "string"
+                },
+                "downloaded_at": {
+                  "type": "string"
+                },
+                "source_path": {
+                  "type": "string"
+                },
+                "source_sha256": {
+                  "type": "string"
+                },
+                "source_crs_wkt": {
+                  "type": "string"
+                },
+                "source_crs": {
+                  "const": "EPSG:3826"
+                },
+                "output_crs": {
+                  "const": "EPSG:3826"
+                },
+                "transform": {
+                  "type": "object",
+                  "properties": {
+                    "min_x": {
+                      "type": "number"
+                    },
+                    "max_y": {
+                      "type": "number"
+                    },
+                    "scale": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "offset_x": {
+                      "type": "number"
+                    },
+                    "offset_y": {
+                      "type": "number"
+                    },
+                    "view_box": {
+                      "const": [
+                        0,
+                        0,
+                        800,
+                        800
+                      ]
+                    }
+                  },
+                  "required": [
+                    "min_x",
+                    "max_y",
+                    "scale",
+                    "offset_x",
+                    "offset_y",
+                    "view_box"
+                  ],
+                  "additionalProperties": false
+                },
+                "simplification": {
+                  "type": "string"
+                },
+                "generator": {
+                  "type": "string"
+                },
+                "output_path": {
+                  "type": "string"
+                },
+                "output_sha256": {
+                  "type": "string"
+                },
+                "license": {
+                  "type": "string"
+                },
+                "license_url": {
+                  "type": "string"
+                },
+                "attribution": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "schema_version",
+                "dataset_url",
+                "resource_url",
+                "downloaded_at",
+                "source_path",
+                "source_sha256",
+                "source_crs_wkt",
+                "source_crs",
+                "output_crs",
+                "transform",
+                "simplification",
+                "generator",
+                "output_path",
+                "output_sha256",
+                "license",
+                "license_url",
+                "attribution"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "markets",
+            "boundary"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "canonical_id": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "crops": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "product_code_raw": {
+                  "type": "string"
+                },
+                "product_name_raw": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "product_code_raw",
+                "product_name_raw"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "canonical_id",
+          "display_name",
+          "crops"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "series": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "market_code": {
+            "enum": [
+              "104",
+              "109"
+            ]
+          },
+          "canonical_id": {
+            "type": "string"
+          },
+          "product_code_raw": {
+            "type": "string"
+          },
+          "product_name_raw": {
+            "type": "string"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "date": {
+                  "type": "string",
+                  "format": "date",
+                  "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                },
+                "price_twd_per_kg": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "volume_kg": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "observation_status": {
+                  "enum": [
+                    "observed",
+                    "zero_price",
+                    "zero_volume",
+                    "provenance_unknown",
+                    "source_unavailable",
+                    "missing"
+                  ]
+                },
+                "calendar_status": {
+                  "enum": [
+                    "expected_open",
+                    "exceptional_open",
+                    "scheduled_closed",
+                    "unknown"
+                  ]
+                },
+                "calendar_conflict": {
+                  "type": "boolean"
+                },
+                "row_hash": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "date",
+                "price_twd_per_kg",
+                "volume_kg",
+                "observation_status",
+                "calendar_status",
+                "calendar_conflict",
+                "row_hash"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "market_code",
+          "canonical_id",
+          "product_code_raw",
+          "product_name_raw",
+          "days"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "statistics": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "market_code": {
+            "enum": [
+              "104",
+              "109"
+            ]
+          },
+          "canonical_id": {
+            "type": "string"
+          },
+          "product_code_raw": {
+            "type": "string"
+          },
+          "windows": {
+            "type": "object",
+            "properties": {
+              "7d": {
+                "type": "object",
+                "properties": {
+                  "price_twd_per_kg": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "total_volume_kg": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "coverage_days": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minimum_days": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "status": {
+                    "enum": [
+                      "valid",
+                      "insufficient"
+                    ]
+                  },
+                  "insufficient_reason": {
+                    "enum": [
+                      null,
+                      "coverage_below_minimum"
+                    ]
+                  }
+                },
+                "required": [
+                  "price_twd_per_kg",
+                  "total_volume_kg",
+                  "coverage_days",
+                  "minimum_days",
+                  "status",
+                  "insufficient_reason"
+                ],
+                "additionalProperties": false
+              },
+              "30d": {
+                "type": "object",
+                "properties": {
+                  "price_twd_per_kg": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "total_volume_kg": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "coverage_days": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minimum_days": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "status": {
+                    "enum": [
+                      "valid",
+                      "insufficient"
+                    ]
+                  },
+                  "insufficient_reason": {
+                    "enum": [
+                      null,
+                      "coverage_below_minimum"
+                    ]
+                  }
+                },
+                "required": [
+                  "price_twd_per_kg",
+                  "total_volume_kg",
+                  "coverage_days",
+                  "minimum_days",
+                  "status",
+                  "insufficient_reason"
+                ],
+                "additionalProperties": false
+              },
+              "90d": {
+                "type": "object",
+                "properties": {
+                  "price_twd_per_kg": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "total_volume_kg": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "coverage_days": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minimum_days": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "status": {
+                    "enum": [
+                      "valid",
+                      "insufficient"
+                    ]
+                  },
+                  "insufficient_reason": {
+                    "enum": [
+                      null,
+                      "coverage_below_minimum"
+                    ]
+                  }
+                },
+                "required": [
+                  "price_twd_per_kg",
+                  "total_volume_kg",
+                  "coverage_days",
+                  "minimum_days",
+                  "status",
+                  "insufficient_reason"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "7d",
+              "30d",
+              "90d"
+            ],
+            "additionalProperties": false
+          },
+          "previous_observation": {
+            "type": "object",
+            "properties": {
+              "date": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "price_twd_per_kg": {
+                "anyOf": [
+                  {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "latest_date": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "interval_days": {
+                "anyOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "change_pct": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "required": [
+              "date",
+              "price_twd_per_kg",
+              "latest_date",
+              "interval_days",
+              "change_pct"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "market_code",
+          "canonical_id",
+          "product_code_raw",
+          "windows",
+          "previous_observation"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "comparisons": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "canonical_id": {
+            "type": "string"
+          },
+          "product_code_raw": {
+            "type": "string"
+          },
+          "date": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          },
+          "price_104": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "price_109": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "volume_104": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "volume_109": {
+            "anyOf": [
+              {
+                "type": "number",
+                "exclusiveMinimum": 0
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "absolute_gap": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "relative_gap_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "comparison_status": {
+            "enum": [
+              "comparable",
+              "not_comparable"
+            ]
+          }
+        },
+        "required": [
+          "canonical_id",
+          "product_code_raw",
+          "date",
+          "price_104",
+          "price_109",
+          "volume_104",
+          "volume_109",
+          "absolute_gap",
+          "relative_gap_pct",
+          "comparison_status"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "quality": {
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "by_date_market": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "date": {
+                    "type": "string",
+                    "format": "date",
+                    "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                  },
+                  "market_code": {
+                    "enum": [
+                      "104",
+                      "109"
+                    ]
+                  },
+                  "observed": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "fixture": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "provenance_unknown": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "invalid": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "reasons": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                },
+                "required": [
+                  "date",
+                  "market_code",
+                  "observed",
+                  "fixture",
+                  "provenance_unknown",
+                  "invalid",
+                  "reasons"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "calendar_conflicts": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unplaced_markets": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "104",
+                  "109"
+                ]
+              }
+            },
+            "valid_days_by_market": {
+              "type": "object",
+              "properties": {
+                "104": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "109": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "required": [
+                "104",
+                "109"
+              ],
+              "additionalProperties": false
+            },
+            "observed_market_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "observed_crop_count": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "by_date_market",
+            "calendar_conflicts",
+            "unplaced_markets",
+            "valid_days_by_market",
+            "observed_market_count",
+            "observed_crop_count"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "null"
+        }
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "scope_id",
+    "market_level",
+    "data_mode",
+    "requested_date",
+    "as_of_date",
+    "publication_status",
+    "analysis_status",
+    "failure_reason",
+    "policy",
+    "inputs",
+    "geography",
+    "items",
+    "series",
+    "statistics",
+    "comparisons",
+    "quality"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "analysis_status": {
+            "const": "failed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "failure_reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "inputs": {
+            "type": "null"
+          },
+          "geography": {
+            "type": "null"
+          },
+          "quality": {
+            "type": "null"
+          },
+          "items": {
+            "maxItems": 0
+          },
+          "series": {
+            "maxItems": 0
+          },
+          "statistics": {
+            "maxItems": 0
+          },
+          "comparisons": {
+            "maxItems": 0
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "failure_reason": {
+            "type": "null"
+          },
+          "inputs": {
+            "type": "object",
+            "properties": {
+              "normalized_input_hash": {
+                "type": "string",
+                "pattern": "^sha256:[0-9a-f]{64}$"
+              },
+              "input_files": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "hash": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "hash"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "source_manifest_refs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "hash": {
+                      "type": "string",
+                      "pattern": "^sha256:[0-9a-f]{64}$"
+                    },
+                    "start": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    "end": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    }
+                  },
+                  "required": [
+                    "path",
+                    "hash",
+                    "start",
+                    "end"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "lineage_level": {
+                "const": "normalized_snapshot_with_ingestion_metadata"
+              },
+              "raw_replay_available": {
+                "const": false
+              }
+            },
+            "required": [
+              "normalized_input_hash",
+              "input_files",
+              "source_manifest_refs",
+              "lineage_level",
+              "raw_replay_available"
+            ],
+            "additionalProperties": false
+          },
+          "geography": {
+            "type": "object",
+            "properties": {
+              "markets": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "market_namespace": {
+                      "type": "string"
+                    },
+                    "coordinate_crs": {
+                      "const": "EPSG:4326"
+                    },
+                    "valid_from": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "valid_to": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "valid_time_precision": {
+                      "enum": [
+                        "unknown",
+                        "day",
+                        "month",
+                        "year"
+                      ]
+                    },
+                    "verified_at": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "address_evidence_url": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "coordinate_evidence_url": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "source_snapshot_hash": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "market_code": {
+                      "enum": [
+                        "104",
+                        "109"
+                      ]
+                    },
+                    "official_name": {
+                      "type": "string"
+                    },
+                    "district_code": {
+                      "type": "string"
+                    },
+                    "district_name": {
+                      "type": "string"
+                    },
+                    "reference_address": {
+                      "type": "string"
+                    },
+                    "operating_address": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "longitude": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "latitude": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "location_role": {
+                      "enum": [
+                        "operating_site",
+                        "reference_site"
+                      ]
+                    },
+                    "location_status": {
+                      "enum": [
+                        "verified",
+                        "conflicting_sources",
+                        "unverified"
+                      ]
+                    },
+                    "location_note": {
+                      "type": "string"
+                    },
+                    "display_x": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "display_y": {
+                      "anyOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "market_namespace",
+                    "coordinate_crs",
+                    "valid_from",
+                    "valid_to",
+                    "valid_time_precision",
+                    "verified_at",
+                    "address_evidence_url",
+                    "coordinate_evidence_url",
+                    "source_snapshot_hash",
+                    "market_code",
+                    "official_name",
+                    "district_code",
+                    "district_name",
+                    "reference_address",
+                    "operating_address",
+                    "longitude",
+                    "latitude",
+                    "location_role",
+                    "location_status",
+                    "location_note",
+                    "display_x",
+                    "display_y"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "boundary": {
+                "type": "object",
+                "properties": {
+                  "schema_version": {
+                    "type": "string"
+                  },
+                  "dataset_url": {
+                    "type": "string"
+                  },
+                  "resource_url": {
+                    "type": "string"
+                  },
+                  "downloaded_at": {
+                    "type": "string"
+                  },
+                  "source_path": {
+                    "type": "string"
+                  },
+                  "source_sha256": {
+                    "type": "string"
+                  },
+                  "source_crs_wkt": {
+                    "type": "string"
+                  },
+                  "source_crs": {
+                    "const": "EPSG:3826"
+                  },
+                  "output_crs": {
+                    "const": "EPSG:3826"
+                  },
+                  "transform": {
+                    "type": "object",
+                    "properties": {
+                      "min_x": {
+                        "type": "number"
+                      },
+                      "max_y": {
+                        "type": "number"
+                      },
+                      "scale": {
+                        "type": "number",
+                        "exclusiveMinimum": 0
+                      },
+                      "offset_x": {
+                        "type": "number"
+                      },
+                      "offset_y": {
+                        "type": "number"
+                      },
+                      "view_box": {
+                        "const": [
+                          0,
+                          0,
+                          800,
+                          800
+                        ]
+                      }
+                    },
+                    "required": [
+                      "min_x",
+                      "max_y",
+                      "scale",
+                      "offset_x",
+                      "offset_y",
+                      "view_box"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "simplification": {
+                    "type": "string"
+                  },
+                  "generator": {
+                    "type": "string"
+                  },
+                  "output_path": {
+                    "type": "string"
+                  },
+                  "output_sha256": {
+                    "type": "string"
+                  },
+                  "license": {
+                    "type": "string"
+                  },
+                  "license_url": {
+                    "type": "string"
+                  },
+                  "attribution": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "schema_version",
+                  "dataset_url",
+                  "resource_url",
+                  "downloaded_at",
+                  "source_path",
+                  "source_sha256",
+                  "source_crs_wkt",
+                  "source_crs",
+                  "output_crs",
+                  "transform",
+                  "simplification",
+                  "generator",
+                  "output_path",
+                  "output_sha256",
+                  "license",
+                  "license_url",
+                  "attribution"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "markets",
+              "boundary"
+            ],
+            "additionalProperties": false
+          },
+          "quality": {
+            "type": "object",
+            "properties": {
+              "by_date_market": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "date": {
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+                    },
+                    "market_code": {
+                      "enum": [
+                        "104",
+                        "109"
+                      ]
+                    },
+                    "observed": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "fixture": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "provenance_unknown": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "invalid": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "reasons": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "integer",
+                        "minimum": 0
+                      }
+                    }
+                  },
+                  "required": [
+                    "date",
+                    "market_code",
+                    "observed",
+                    "fixture",
+                    "provenance_unknown",
+                    "invalid",
+                    "reasons"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "calendar_conflicts": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "unplaced_markets": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "104",
+                    "109"
+                  ]
+                }
+              },
+              "valid_days_by_market": {
+                "type": "object",
+                "properties": {
+                  "104": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "109": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "104",
+                  "109"
+                ],
+                "additionalProperties": false
+              },
+              "observed_market_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "observed_crop_count": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "by_date_market",
+              "calendar_conflicts",
+              "unplaced_markets",
+              "valid_days_by_market",
+              "observed_market_count",
+              "observed_crop_count"
+            ],
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "data_mode": {
+            "const": "observed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "policy": {
+            "properties": {
+              "analysis_input_policy": {
+                "const": "taipei-map-observed-v1"
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "policy": {
+            "properties": {
+              "analysis_input_policy": {
+                "const": "taipei-map-fixture-v1"
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}
