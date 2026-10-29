@@ -28,6 +28,9 @@ class TaipeiMapBuildTest(unittest.TestCase):
     def test_fixture_rebuild_mode_and_tampering(self):
         args = ('--as-of', '2026-08-25', '--taipei-map-mode', 'fixture')
         self.run_cli('build', *args); first = self.hashes()
+        home = (self.root / 'site/index.html').read_text()
+        nav = home.split("<nav class='toolbar'", 1)[1].split('</nav>', 1)[0]
+        self.assertIn("<a href='taipei/map.html'>臺北行情地圖</a>", nav)
         self.run_cli('build', *args); self.assertEqual(first, self.hashes())
         self.run_cli('validate-data', *args); self.run_cli('verify-site', *args)
         self.assertNotEqual(self.run_cli('verify-site', '--as-of', '2026-08-25', check=False).returncode, 0)

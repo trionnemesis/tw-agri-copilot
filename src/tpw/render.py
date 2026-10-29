@@ -104,13 +104,15 @@ def _document(title, body, css="assets/css/app.css", js=None, description=None):
     )
 
 
-def _toolbar(prefix="", include_season_map=False):
+def _toolbar(prefix="", include_season_map=False, include_taipei_map=False):
     links = [
         ("首頁", f"{prefix}index.html"),
         ("當季", f"{prefix}season/current.html"),
     ]
     if include_season_map:
         links.append(("產季地圖", f"{prefix}season/map.html"))
+    if include_taipei_map:
+        links.append(("臺北行情地圖", f"{prefix}taipei/map.html"))
     links.extend((
         ("日趨勢", f"{prefix}trends/daily.html"),
         ("週趨勢", f"{prefix}trends/weekly.html"),
@@ -671,7 +673,7 @@ def _sparkline(points):
     )
 
 
-def _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map=False, registry=None, taipei=None):
+def _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map=False, registry=None, taipei=None, include_taipei_map=False):
     registry = registry or default_category_registry()
     item_map = {item["canonical_id"]: item for item in items}
     series_map = {row["canonical_id"]: row for row in series}
@@ -710,7 +712,7 @@ def _home(items, scores, series, seasonality, advice, traceability, traceability
     return (
         _hero(as_of, source_status, len(in_season), len(recommendations), publication_status)
         + _market_status_notice(publication_status)
-        + _toolbar(include_season_map=include_season_map)
+        + _toolbar(include_season_map=include_season_map, include_taipei_map=include_taipei_map)
         + "<main id='main' class='wrap'>"
         + "<section class='section recommendations' id='recommendations'><div class='section-heading'><div>"
         + "<div class='eyebrow ink'>BUY SCORE · EVIDENCE FIRST</div><h2>今日推薦採買</h2></div>"
@@ -1220,9 +1222,9 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
     complete = bool(series and scores and seasonality)
     include_season_map = season_map_payload is not None
     if complete:
-        home = _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map, registry, taipei_analysis)
+        home = _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map, registry, taipei_analysis, taipei_map is not None)
     else:
-        home = _hero(as_of, source_status, 0, 0, publication_status) + _market_status_notice(publication_status) + "<nav class='toolbar' aria-label='主要導覽'><div class='inner'><a href='archive/index.html'>歷史</a><a href='methodology.html'>方法</a></div></nav>" + "<main id='main' class='wrap'><section class='section' id='recommendations'><h2>今日推薦採買</h2><p>資料不足，暫不判定。</p></section>" + _market_table(rows, "fruit", registry=registry) + _market_table(rows, "vegetable", registry=registry) + "</main>"
+        home = _hero(as_of, source_status, 0, 0, publication_status) + _market_status_notice(publication_status) + "<nav class='toolbar' aria-label='主要導覽'><div class='inner'>" + ("<a href='taipei/map.html'>臺北行情地圖</a>" if taipei_map is not None else "") + "<a href='archive/index.html'>歷史</a><a href='methodology.html'>方法</a></div></nav>" + "<main id='main' class='wrap'><section class='section' id='recommendations'><h2>今日推薦採買</h2><p>資料不足，暫不判定。</p></section>" + _market_table(rows, "fruit", registry=registry) + _market_table(rows, "vegetable", registry=registry) + "</main>"
     (root / "index.html").write_text(_document("Taiwan Produce Watch", home, "assets/css/app.css", "assets/js/app.js"), encoding="utf-8")
     daily_body = _toolbar("../../../", include_season_map) + f"<main id='main' class='wrap'><section class='section'><h1>每日行情 {as_of}</h1><p class='disclaimer'>{DISCLAIM}</p></section>"
     if complete:

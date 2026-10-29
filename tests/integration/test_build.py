@@ -42,6 +42,7 @@ class BuildTest(unittest.TestCase):
   with tempfile.TemporaryDirectory() as raw:
    rendered=pathlib.Path(raw); build_site([{'canonical_id':'banana','display_name':'香蕉','category':'fruit','weighted_avg_price_twd_per_kg':20,'total_volume_kg':10}],'2026-08-25',rendered,"<live>")
    self.assertIn("資料狀態：&lt;live&gt;",(rendered/'index.html').read_text())
+   self.assertNotIn("href='taipei/map.html'",(rendered/'index.html').read_text())
  def test_mismatch_and_backfill_windows(self):
   with self.assertRaises(subprocess.CalledProcessError): self.command('build','--as-of','2026-07-01')
   calls=[]; self.assertEqual(backfill(9,'2026-08-25',lambda a,b:calls.append((a,b))),calls)
