@@ -51,3 +51,12 @@ Tests cover direct aggregation, mixed live/fixture rows, historical coverage/ran
 Taipei market counts/lineage, fixture-only latest dates, false completeness, explicitly
 labelled prototype compatibility and end-to-end live-shaped rebuild invariance.
 No merge, deployment or live-site verification is implied by these local results.
+
+## Concurrent map integration
+
+Revalidated against `bc3f826` after #57 (Taipei map) and #58 (home navigation).
+The map keeps its own stricter provenance gate and receives raw rows, so rejected
+fixture counts remain visible rather than disappearing from its quality evidence.
+Its JSON, observations CSV and map HTML, plus homepage navigation, remain byte-identical
+to that main snapshot after this repair's rebuild. National and Taipei aggregate paths
+still exclude fixtures. Separate map provenance/UI concerns are outside this repair.

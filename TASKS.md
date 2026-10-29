@@ -139,3 +139,9 @@ T-000 → T-101 → T-102 → T-103 → T-104 → T-105
 This work order completes the **PR 1–5 side-project prototype**, not the full production P0 Definition of Done. Live 120-day bootstrap, live traceability, an external AI provider, long-running scheduled publication and production data freshness remain explicitly unverified. Issue #8 adds the live seasonality adapter without expanding those remaining scopes.
 
 Issue #44 Part B ships the multi-category produce contract with livestock and aquaculture mapped as explicit `unknown` across the 22-county matrix; live adapters for those two categories remain out of scope pending S-grade discovery on a `*.gov.tw`-reachable environment.
+
+### WO-51-MAP-01
+
+- [ ] 驗證官方地理資產及市場精確位置與有效時間；無法確認者保持未驗證。
+- [ ] 完成市場／raw code 資料投影、地圖頁、整合與負向測試。
+- [ ] 執行隔離的完整 CI、瀏覽器與重建檢查，記錄限制及發布證據。

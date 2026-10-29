@@ -137,3 +137,7 @@ This side project intentionally does not require the full Hermes engineering pro
 3. unit, contract, integration, workflow-YAML, secret, size, and deterministic-build checks;
 4. desktop/mobile browser verification with working routes and no horizontal overflow;
 5. observed remote `main`, successful CI/Pages workflows, and a reachable public site.
+
+### WO-51-MAP-01：臺北市場別地圖
+
+以獨立資料投影、地理資產與靜態頁面接入現有 staging build；驗證模式、重建、失敗隔離與原有 publication guard。實際驗證和未完成證據以 VERIFICATION.md 為準。

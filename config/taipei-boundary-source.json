@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0",
+  "dataset_url": "https://data.taipei/dataset/detail?id=1601ef3a-c253-4988-b047-943d9e786143",
+  "resource_url": "https://data.taipei/api/frontstage/tpeod/dataset/resource.download?rid=d8b7eb29-136f-49fc-b14b-3489d3656122",
+  "downloaded_at": "2026-10-29",
+  "source_path": "data/geography/taipei/districts.zip",
+  "source_sha256": "77bcc347b503b8ff8a43f7e1afaaedb18877a6222282587b145adaba69afd2d9",
+  "source_crs_wkt": "PROJCS[\"TWD_1997_TM_Taiwan\",GEOGCS[\"GCS_TWD_1997\",DATUM[\"D_TWD_1997\",SPHEROID[\"GRS_1980\",6378137.0,298.257222101]],PRIMEM[\"Greenwich\",0.0],UNIT[\"Degree\",0.0174532925199433]],PROJECTION[\"Transverse_Mercator\"],PARAMETER[\"False_Easting\",250000.0],PARAMETER[\"False_Northing\",0.0],PARAMETER[\"Central_Meridian\",121.0],PARAMETER[\"Scale_Factor\",0.9999],PARAMETER[\"Latitude_Of_Origin\",0.0],UNIT[\"Meter\",1.0]]",
+  "source_crs": "EPSG:3826",
+  "output_crs": "EPSG:3826",
+  "transform": {
+    "min_x": 296266.05303026026,
+    "max_y": 2789176.169387096,
+    "scale": 0.02675220295351135,
+    "offset_x": 120.02204168251922,
+    "offset_y": 30.0,
+    "view_box": [
+      0,
+      0,
+      800,
+      800
+    ]
+  },
+  "simplification": "No independent line simplification; shared transformed coordinates rounded to nearest SVG unit and adjacent duplicates removed.",
+  "generator": "tools/generate_taipei_svg.py (Python standard library)",
+  "output_path": "src/tpw/assets/taipei-districts.svg",
+  "output_sha256": "d9a5c569044d9ff40a869851cfb46b8e22b0bda3aa35528af12da393eb17e061",
+  "license": "臺北市政府資料開放授權條款第1版",
+  "license_url": "https://data.taipei/rule",
+  "attribution": "臺北市政府民政局，臺北市區界圖"
+}

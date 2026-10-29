@@ -7,6 +7,8 @@ from .produce_icons import read_produce_icon_sprite, resolve_produce_icon
 from .publication import validate_market_status
 from .taipei_analysis import taipei_csv_documents
 from .taipei_monthly import monthly_csv_documents
+from .taipei_map import taipei_map_csv
+from .taipei_map_render import render_taipei_map, map_js, map_css, map_initial_json
 
 
 DISCLAIM = "批發市場平均行情，非實際零售通路售價。"
@@ -102,13 +104,15 @@ def _document(title, body, css="assets/css/app.css", js=None, description=None):
     )
 
 
-def _toolbar(prefix="", include_season_map=False):
+def _toolbar(prefix="", include_season_map=False, include_taipei_map=False):
     links = [
         ("首頁", f"{prefix}index.html"),
         ("當季", f"{prefix}season/current.html"),
     ]
     if include_season_map:
         links.append(("產季地圖", f"{prefix}season/map.html"))
+    if include_taipei_map:
+        links.append(("臺北行情地圖", f"{prefix}taipei/map.html"))
     links.extend((
         ("日趨勢", f"{prefix}trends/daily.html"),
         ("週趨勢", f"{prefix}trends/weekly.html"),
@@ -669,7 +673,7 @@ def _sparkline(points):
     )
 
 
-def _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map=False, registry=None, taipei=None):
+def _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map=False, registry=None, taipei=None, include_taipei_map=False):
     registry = registry or default_category_registry()
     item_map = {item["canonical_id"]: item for item in items}
     series_map = {row["canonical_id"]: row for row in series}
@@ -708,7 +712,7 @@ def _home(items, scores, series, seasonality, advice, traceability, traceability
     return (
         _hero(as_of, source_status, len(in_season), len(recommendations), publication_status)
         + _market_status_notice(publication_status)
-        + _toolbar(include_season_map=include_season_map)
+        + _toolbar(include_season_map=include_season_map, include_taipei_map=include_taipei_map)
         + "<main id='main' class='wrap'>"
         + "<section class='section recommendations' id='recommendations'><div class='section-heading'><div>"
         + "<div class='eyebrow ink'>BUY SCORE · EVIDENCE FIRST</div><h2>今日推薦採買</h2></div>"
@@ -930,15 +934,15 @@ def _taipei_status_attributes(taipei):
     )
 
 
-def _taipei_downloads():
-    return "<p>下載：<a href='../data/taipei/current.json'>JSON</a> · <a href='../data/taipei/items.csv'>品項 CSV</a> · <a href='../data/taipei/observations.csv'>成交列 CSV</a>（每列保留 row_hash 與來源）</p>"
+def _taipei_downloads(map_link=False):
+    return ("<p><a href='map.html'>臺北行情地圖</a></p>" if map_link else "") + "<p>下載：<a href='../data/taipei/current.json'>JSON</a> · <a href='../data/taipei/items.csv'>品項 CSV</a> · <a href='../data/taipei/observations.csv'>成交列 CSV</a>（每列保留 row_hash 與來源）</p>"
 
 
 def _taipei_monthly_link(monthly_link):
     return "<p><a href='monthly.html'>另看臺北市零售月均價與食物供銷月統計 →</a></p>" if monthly_link else ""
 
 
-def _taipei_failed_page(taipei, include_season_map=False, monthly_link=False):
+def _taipei_failed_page(taipei, include_season_map=False, monthly_link=False, map_link=False):
     return (
         "<header class='page-hero'><div class='wrap'><div class='eyebrow'>TAIPEI CITY · WHOLESALE</div>"
         "<h1>臺北市蔬果批發行情</h1><p>臺北一、臺北二果菜批發市場的量加權描述統計</p></div></header>"
@@ -951,13 +955,13 @@ def _taipei_failed_page(taipei, include_season_map=False, monthly_link=False):
         + f"<p class='note warn'>本次臺北範圍計算失敗：<code>{_escape(taipei['failure_reason'])}</code>。"
         + "本頁不沿用舊的臺北統計，也不改用全臺價格；全臺行情、Buy Score 與其他頁面照常發布。</p>"
         + f"<p class='note warn'>{TAIPEI_WARNING}</p>"
-        + _taipei_downloads() + _taipei_monthly_link(monthly_link) + "</section></main>"
+        + _taipei_downloads(map_link) + _taipei_monthly_link(monthly_link) + "</section></main>"
     )
 
 
-def _taipei_page(taipei, include_season_map=False, monthly_link=False):
+def _taipei_page(taipei, include_season_map=False, monthly_link=False, map_link=False):
     if taipei["analysis_status"] == "failed":
-        return _taipei_failed_page(taipei, include_season_map, monthly_link)
+        return _taipei_failed_page(taipei, include_season_map, monthly_link, map_link)
     markets = {market["market_code"]: market for market in taipei["markets"]}
     market_label = "、".join(f"{market['feed_market_name']}（{code}）" for code, market in markets.items())
     as_of = taipei["as_of_date"]
@@ -1027,7 +1031,7 @@ def _taipei_page(taipei, include_season_map=False, monthly_link=False):
         + "<section class='section' id='taipei-observations'><h2>截至日原始成交列</h2>"
         + f"<details><summary>展開 {len(taipei['observations'])} 筆臺北成交列</summary><div class='table-wrap'><table><thead><tr><th>市場</th><th>原始代碼</th><th>原始名稱</th><th class='num'>平均價</th><th class='num'>交易量</th><th>狀態</th></tr></thead>"
         + f"<tbody>{observation_rows}</tbody></table></div></details>"
-        + _taipei_downloads() + _taipei_monthly_link(monthly_link) + "</section>"
+        + _taipei_downloads(map_link) + _taipei_monthly_link(monthly_link) + "</section>"
         + "</main>"
     )
 
@@ -1136,7 +1140,7 @@ def _taipei_monthly_page(monthly, include_season_map=False):
     )
 
 
-def build_site(rows, as_of, root, source_status="validated", *, series=None, scores=None, seasonality=None, season_catalog=None, advice=None, traceability=None, traceability_status=None, traceability_events=None, traceability_event_status=None, quality=None, publication_status=None, season_map_payload=None, county_svg=None, category_registry=None, taipei_analysis=None, taipei_monthly=None):
+def build_site(rows, as_of, root, source_status="validated", *, series=None, scores=None, seasonality=None, season_catalog=None, advice=None, traceability=None, traceability_status=None, traceability_events=None, traceability_event_status=None, quality=None, publication_status=None, season_map_payload=None, county_svg=None, category_registry=None, taipei_analysis=None, taipei_monthly=None, taipei_map=None, taipei_map_svg=None):
     if not rows:
         raise ValueError("requested as-of date has no valid mapped aggregates")
     # tpw.cli always passes an explicit category_registry (loaded once per command from its
@@ -1218,9 +1222,9 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
     complete = bool(series and scores and seasonality)
     include_season_map = season_map_payload is not None
     if complete:
-        home = _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map, registry, taipei_analysis)
+        home = _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map, registry, taipei_analysis, taipei_map is not None)
     else:
-        home = _hero(as_of, source_status, 0, 0, publication_status) + _market_status_notice(publication_status) + "<nav class='toolbar' aria-label='主要導覽'><div class='inner'><a href='archive/index.html'>歷史</a><a href='methodology.html'>方法</a></div></nav>" + "<main id='main' class='wrap'><section class='section' id='recommendations'><h2>今日推薦採買</h2><p>資料不足，暫不判定。</p></section>" + _market_table(rows, "fruit", registry=registry) + _market_table(rows, "vegetable", registry=registry) + "</main>"
+        home = _hero(as_of, source_status, 0, 0, publication_status) + _market_status_notice(publication_status) + "<nav class='toolbar' aria-label='主要導覽'><div class='inner'>" + ("<a href='taipei/map.html'>臺北行情地圖</a>" if taipei_map is not None else "") + "<a href='archive/index.html'>歷史</a><a href='methodology.html'>方法</a></div></nav>" + "<main id='main' class='wrap'><section class='section' id='recommendations'><h2>今日推薦採買</h2><p>資料不足，暫不判定。</p></section>" + _market_table(rows, "fruit", registry=registry) + _market_table(rows, "vegetable", registry=registry) + "</main>"
     (root / "index.html").write_text(_document("Taiwan Produce Watch", home, "assets/css/app.css", "assets/js/app.js"), encoding="utf-8")
     daily_body = _toolbar("../../../", include_season_map) + f"<main id='main' class='wrap'><section class='section'><h1>每日行情 {as_of}</h1><p class='disclaimer'>{DISCLAIM}</p></section>"
     if complete:
@@ -1283,11 +1287,20 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
         if taipei_analysis["as_of_date"] != as_of or taipei_analysis["requested_date"] != publication_status["requested_date"]:
             raise ValueError("Taipei analysis dates must match the site publication")
         (root / "taipei").mkdir(exist_ok=True)
-        (root / "taipei/index.html").write_text(_document("臺北市蔬果批發行情", _taipei_page(taipei_analysis, include_season_map, taipei_monthly is not None), "../assets/css/app.css", "../assets/js/app.js", "臺北一、臺北二果菜批發市場的量加權描述統計；非零售價，也不是產地。"), encoding="utf-8")
+        (root / "taipei/index.html").write_text(_document("臺北市蔬果批發行情", _taipei_page(taipei_analysis, include_season_map, taipei_monthly is not None, taipei_map is not None), "../assets/css/app.css", "../assets/js/app.js", "臺北一、臺北二果菜批發市場的量加權描述統計；非零售價，也不是產地。"), encoding="utf-8")
         (root / "data/taipei").mkdir(parents=True, exist_ok=True)
         (root / "data/taipei/current.json").write_text(json.dumps(taipei_analysis, ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
         for name, text in taipei_csv_documents(taipei_analysis).items():
             (root / "data/taipei" / name).write_text(text, encoding="utf-8")
+    if taipei_map is not None:
+        (root / "taipei").mkdir(exist_ok=True)
+        (root / "data/taipei").mkdir(parents=True, exist_ok=True)
+        (root / "taipei/map.html").write_text(render_taipei_map(taipei_map, taipei_map_svg), encoding="utf-8")
+        (root / "data/taipei/map.json").write_text(json.dumps(taipei_map, ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+        (root / "data/taipei/map-ui.json").write_text(map_initial_json(taipei_map), encoding="utf-8")
+        (root / "data/taipei/map-observations.csv").write_text(taipei_map_csv(taipei_map), encoding="utf-8")
+        (root / "assets/js/taipei-map.js").write_text(map_js(), encoding="utf-8")
+        (root / "assets/css/taipei-map.css").write_text(map_css(), encoding="utf-8")
     if taipei_monthly is not None:
         if taipei_monthly["as_of_date"] != as_of or taipei_monthly["requested_date"] != publication_status["requested_date"]:
             raise ValueError("Taipei monthly analysis dates must match the site publication")
