@@ -65,7 +65,7 @@ REPLACEMENTS = (
         "目前只有批發市場行情使用每日更新的官方來源；產季與產銷履歷仍採原型參考資料，不應解讀為即時官方查詢結果。",
     ),
     ("目前尚無完整 analytics evidence，因此使用 deterministic placeholder。", "目前尚無完整分析資料，因此暫不產生採買判定。"),
-    ("Top recommendations", "今日優先項目"),
+    ("Top recommendations", "當日歷史優先項目"),
     ("Watch items", "觀察項目"),
     ("Data quality", "資料品質"),
     ("Sources and boundaries", "資料來源與邊界"),
