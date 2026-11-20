@@ -8,6 +8,8 @@ from .prototype import generate_market_rows
 from .analytics import build_series
 from .seasonality import CATEGORIES as AFA_CATEGORIES,build_catalog,catalog_from_seasonality,fetch_official,load_manual,map_catalog,seasonality_refresh_decision,with_source_status
 from .scoring import score_all
+from .latest_market import build_latest_market,validate_latest_market
+from .render import _latest_market_section
 from .advice import generate_advice
 from .traceability import fetch_registry,normalize_registry,validate_registry_snapshot
 from .traceability_events import fetch_market_events,normalize_market_events,validate_market_event_snapshot
@@ -350,6 +352,7 @@ def build(date,taipei_map_mode="observed"):
    if dt.date.fromisoformat(requested)>=dt.date.fromisoformat(date):calendar_date=requested
   calendar=evaluate_market_calendar(ROOT,calendar_date)
   publication=load_resolved_market_status(ROOT/'data',date,status,len(configured),calendar);write_json(ds/'market-status/current.json',publication);context_month=publication['requested_date'][:7]
+  latest_market=build_latest_market(all_rows,configured,publication['requested_date'],date,include_fixtures=include_fixtures)
   series=build_series(all_aggs,date);season=seasonality_rows(context_month);season_map_config=load_season_map_config(ROOT);season_catalog=merged_season_catalog(context_month,season_map_config.category_registry,season);season_map_payload=build_season_map_payload(ROOT,season_catalog,date);scores=score_all(series,season);advice=generate_advice(scores,date);trace,trace_profile=traceability_context(publication['requested_date']);trace_events,trace_event_profile=traceability_event_context(publication['requested_date']);taipei=taipei_analysis(all_rows,date,publication,season_map_config.market_registry,status);monthly=taipei_monthly(date,publication)
   # Map owns a stricter provenance gate and must retain rejected-row quality evidence.
   map_document,map_svg=taipei_map(stored_market_rows(include_fixtures=True),date,publication,season_map_config.market_registry,taipei_map_mode)
@@ -377,7 +380,7 @@ def build(date,taipei_map_mode="observed"):
   if (ROOT/'site').exists():shutil.copytree(ROOT/'site',site)
   (site/'assets/css').mkdir(parents=True,exist_ok=True);(site/'assets/js').mkdir(parents=True,exist_ok=True)
   (site/'.nojekyll').write_text('');(site/'assets/css/app.css').write_text(css()+market_status_css(),encoding='utf-8');(site/'assets/js/app.js').write_text(js(),encoding='utf-8')
-  build_site(aggs,date,site,status,series=series,scores=scores,seasonality=season,season_catalog=season_catalog,advice=advice,traceability=trace,traceability_status=trace_profile,traceability_events=trace_events,traceability_event_status=trace_event_profile,quality=quality,publication_status=publication,season_map_payload=season_map_payload,county_svg=season_map_config.svg,category_registry=season_map_config.category_registry,taipei_analysis=taipei,taipei_monthly=monthly,taipei_map=map_document,taipei_map_svg=map_svg)
+  build_site(aggs,date,site,status,series=series,scores=scores,seasonality=season,season_catalog=season_catalog,advice=advice,traceability=trace,traceability_status=trace_profile,traceability_events=trace_events,traceability_event_status=trace_event_profile,quality=quality,publication_status=publication,season_map_payload=season_map_payload,county_svg=season_map_config.svg,category_registry=season_map_config.category_registry,taipei_analysis=taipei,taipei_monthly=monthly,taipei_map=map_document,taipei_map_svg=map_svg,latest_market=latest_market)
   reports=stage/'reports'
   if (ROOT/'reports').exists():shutil.copytree(ROOT/'reports',reports)
   rp=reports/'daily'/date[:4]/date[5:7];rp.mkdir(parents=True,exist_ok=True);rp.joinpath(date+'.md').write_text(render_report(aggs,scores,advice,quality,date,season_map_config.category_registry),encoding='utf-8')
@@ -414,6 +417,13 @@ def verify_site(root=None,date=None,taipei_map_mode="observed"):
  current_path=root/'data/current.json'
  if current_path.exists():
   public_current=json.loads(current_path.read_text())
+  if public_current.get('latest_market_path') is not None:
+   if public_current['latest_market_path']!='latest-market.json':raise ValueError('latest market path is invalid')
+   latest_path=root/'data/latest-market.json'
+   if not latest_path.exists():raise ValueError('latest market payload is missing')
+   latest=validate_latest_market(json.loads(latest_path.read_text()))
+   if latest['requested_date']!=public_current['publication_status']['requested_date'] or latest['complete_reference_date']!=public_current['as_of_date']:raise ValueError('latest market dates do not match publication')
+   if _latest_market_section(latest) not in index.read_text():raise ValueError('latest market HTML does not match payload')
   if public_current.get('prototype_complete'):
    map_config=load_season_map_config(ROOT);map_payload_path=root/'data/season-map/current.json';map_page=root/'season/map.html'
    if not map_payload_path.exists() or not map_page.exists():raise ValueError('season map route or payload is missing')
@@ -539,13 +549,17 @@ def verify_site(root=None,date=None,taipei_map_mode="observed"):
    if season_html.count("class='produce-icon ")!=len(catalog) or season_html.count("aria-hidden='true' focusable='false'")!=len(catalog):raise ValueError('season produce icons must be decorative and complete')
    if current.get('source_status')=='fixture':
     if current.get('eligible_recommendations',0)<3:raise ValueError('fixture must produce at least three eligible recommendations')
-    if index.read_text().count("class='recommendation-card")<3:raise ValueError('first prototype surface lacks three recommendation cards')
+    if publication['requested_date']==date and publication['status']=='complete' and index.read_text().count("class='recommendation-card")<3:raise ValueError('first prototype surface lacks three recommendation cards')
    if current.get('generation_mode') not in ('deterministic_fallback','ai'):raise ValueError('advice generation mode missing')
 def validate_data(date,taipei_map_mode="observed"):
  load_date(date)
  source_run_path=ROOT/'data/source-runs'/(date+'.json')
  if source_run_path.exists():validate_source_run_document(json.loads(source_run_path.read_text()))
  publication=validate_market_status(json.loads((ROOT/'data/market-status/current.json').read_text()));context_month=publication['requested_date'][:7]
+ current=json.loads((ROOT/'site/data/current.json').read_text())
+ if current.get('latest_market_path') is not None:
+  latest=json.loads((ROOT/'site/data/latest-market.json').read_text())
+  if validate_latest_market(latest)!=build_latest_market(stored_market_rows(include_fixtures=source_status_for(date)=='fixture'),config(),publication['requested_date'],date,include_fixtures=source_status_for(date)=='fixture'):raise ValueError('latest market does not match stored observations')
  trace_rows=json.loads((ROOT/'data/traceability/current.json').read_text());trace_profile=json.loads((ROOT/'data/traceability/source-profile.json').read_text());validate_registry_snapshot(trace_rows,trace_profile)
  event_rows=json.loads((ROOT/'data/traceability/market-events/current.json').read_text());event_profile=json.loads((ROOT/'data/traceability/market-events/source-profile.json').read_text());validate_market_event_snapshot(event_rows,event_profile)
  required=(ROOT/'data/aggregates/daily'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/seasonality'/(context_month+'.json'),ROOT/'data/seasonality/catalog'/(context_month+'.json'),ROOT/'data/traceability/current.json',ROOT/'data/traceability/source-profile.json',ROOT/'data/traceability/market-events/current.json',ROOT/'data/traceability/market-events/source-profile.json',ROOT/'data/advice'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/quality'/date[:4]/date[5:7]/(date+'.json'),ROOT/'data/market-status/current.json',ROOT/'site/data/season-map/current.json')

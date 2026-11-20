@@ -81,7 +81,7 @@ Build 只從已保存的 normalized history 重算，不從生成後的 HTML 或
 
 H44 refresh 以單一 `StartDate`／`EndDate` 加 `$top`／`$skip` 擷取，保留交易日期、市場、作物、交易金額、交易量與官方「溯源代號」。每列以完整官方欄位 hash 作事件 identity，只去除完全相同的重複列；不同金額或交易量仍是不同事件。H44 是單日事件證據，因此只允許同 requested date 的 live／stale LKG；跨日期上游失敗不會把前一日事件改標成今日事件。所有事件固定 `eligible_for_market_aggregate=false`、`affects_buy_score=false`，也不嘗試以溯源代號連接 7556 `Tracecode`。官方資料說明：[H44](https://data.moa.gov.tw/open_detail.aspx?id=H44)；registry 說明：[7556／063](https://data.moa.gov.tw/open_detail.aspx?id=063)。
 
-首頁會分開顯示「今日資料檢查」與「最近完整交易日」。`calendar.schedule_status` 與 `feed_status` 分開保存：預期開市但 feed 空白時不會誤標休市，日曆與交易資料衝突時會顯示 `calendar_feed_discrepancy`。網站會保留最近完整交易日，不把舊日期冒充成今日行情；相同證據也會寫入 `site/data/current.json` 的 `publication_status`。
+首頁會分開顯示「最近資料檢查」、「最近取得行情」與「最近完整交易日」。`site/data/latest-market.json` 獨立呈現截至檢查日最近一個觀測日的已保存 8066 行情，即使只有 19／20 項，也會展示這 19 項的同日實際價格。缺項明示「缺資料（原因未確認）」並保留 null，不補 0、不沿用其他日期價格，也不推論休市或沒有交易。有資料列但無有效成交則另外標記，畫面覆蓋率只計有效行情。這份描述性快照不進入 Buy Score；完整分析仍使用原有全清單參考日，首頁不將過期完整分析顯示為當次採買建議，價格漲跌與品項／趨勢頁均標示實際資料日期。`calendar.schedule_status` 與 `feed_status` 分開保存：預期開市但 feed 空白時不會誤標休市，日曆與交易資料衝突時會顯示 `calendar_feed_discrepancy`。網站會保留最近完整交易日，不把舊日期冒充成今日行情；相同證據也會寫入 `site/data/current.json` 的 `publication_status`。
 
 ## 自動更新排程
 

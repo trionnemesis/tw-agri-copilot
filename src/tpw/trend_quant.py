@@ -49,7 +49,7 @@ def _summary_html(series):
     windows = series["windows"]
     previous = series["previous_trading_day"]
     cards = [
-        _metric_card("最新價", _price(series["today"]["price_twd_per_kg"]), series["as_of_date"]),
+        _metric_card("參考日價格", _price(series["today"]["price_twd_per_kg"]), series["as_of_date"]),
         _metric_card(
             "前一交易日",
             _percent(previous["change_pct"]),
@@ -70,7 +70,7 @@ def _summary_html(series):
             _volatility(series.get("volatility_7d_cv")),
             _status_label(series.get("volatility_7d_status")),
         ),
-        _metric_card("今日交易量", f"{_number(series['today']['volume_kg'], 0)} kg"),
+        _metric_card("參考日交易量", f"{_number(series['today']['volume_kg'], 0)} kg", series["as_of_date"]),
         _metric_card(
             "交易量 vs 7D",
             _percent(windows["7d"]["today_volume_change_pct"]),
