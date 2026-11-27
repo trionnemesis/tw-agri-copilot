@@ -5,6 +5,7 @@ from . import __version__
 from .categories import category_label, default_category_registry
 from .produce_icons import read_produce_icon_sprite, resolve_produce_icon
 from .publication import validate_market_status
+from .latest_market import validate_latest_market
 from .taipei_analysis import taipei_csv_documents
 from .taipei_monthly import monthly_csv_documents
 from .taipei_map import taipei_map_csv
@@ -17,7 +18,7 @@ EVENT_WARNING = "H44 市場事件與 7556 履歷批次、8066 批發行情是不
 TAIPEI_WARNING = "臺北一、臺北二是市場所在地，不是產地；成交品項不代表產自臺北市，本頁也不揭露產地。"
 MARKET_STATUS_LABELS = {
     "complete": "行情完整",
-    "market_closed": "今日休市",
+    "market_closed": "檢查日休市",
     "incomplete": "行情尚未完整",
     "pending": "尚無完整行情",
     "source_unavailable": "官方資料暫時無法取得",
@@ -127,15 +128,16 @@ def _toolbar(prefix="", include_season_map=False, include_taipei_map=False):
     ) + "<button type='button' data-print>列印 / 存 PDF</button></div></nav>"
 
 
-def _hero(as_of, source_status, in_season_count, recommendation_count, publication_status):
+def _hero(as_of, source_status, in_season_count, recommendation_count, publication_status, latest_market=None):
     return (
         "<header class='hero'><div class='wrap'>"
         "<div class='eyebrow'>TAIWAN PRODUCE WATCH</div>"
         "<h1>今天吃什麼？</h1>"
         "<p>台灣當季蔬果 × 每日批發行情 × AI 採買情報</p>"
         "<div class='meta'>"
+    ) + (f"<span>最近取得行情：{_escape(latest_market['as_of_date'] or '尚無資料')}</span>" if latest_market else "") + (
         f"<span>最近完整交易日：{_escape(as_of)}</span>"
-        f"<span>今日資料檢查：{_escape(publication_status['requested_date'])}</span>"
+        f"<span>最近資料檢查：{_escape(publication_status['requested_date'])}</span>"
         f"<span>當季品項：{in_season_count}</span>"
         f"<span>推薦品項：{recommendation_count}</span>"
         f"<span>資料狀態：{_escape(source_status)}</span>"
@@ -187,7 +189,7 @@ def _market_status_notice(status):
         )
     elif state == "incomplete":
         heading = f"{requested} 行情尚未完整"
-        message = f"今日資料已檢查，但尚未涵蓋完整觀察清單；目前顯示最近完整交易日 {resolved}。"
+        message = f"指定日期資料已檢查，但尚未涵蓋完整觀察清單；已取得的行情另列於下方，完整分析參考日為 {resolved}。"
         if schedule_status == "scheduled_closed":
             message += f" {market_names}同日為官方公告休市（{calendar['reason']}）。"
     elif state == "pending":
@@ -199,7 +201,7 @@ def _market_status_notice(status):
                 f"不可標示休市，先顯示最近完整交易日 {resolved}。"
             )
         else:
-            message = f"今日資料已檢查，目前尚無可發布的完整交易行情；先顯示最近完整交易日 {resolved}。"
+            message = f"指定日期資料已檢查，目前尚無可發布的完整交易行情；先顯示最近完整交易日 {resolved}。"
     else:
         heading = f"{requested} 官方資料暫時無法取得"
         message = f"系統已完成重試並保留 last-known-good；目前顯示最近完整交易日 {resolved}，不把來源失敗誤標為休市。"
@@ -209,6 +211,30 @@ def _market_status_notice(status):
         "role='status' aria-live='polite'>"
         f"<div class='wrap'><strong>{_escape(heading)}</strong><span>{_escape(message)}{evidence_link}</span>"
         "</div></aside>"
+    )
+
+
+def _latest_market_section(payload):
+    validate_latest_market(payload)
+    labels = {"observed": "有有效成交", "missing": "缺資料（原因未確認）", "no_valid_trade": "有資料列但無有效成交"}
+    day = payload["as_of_date"] or "尚無資料"
+    rows = "".join(
+        f"<tr data-latest-item='{_escape(item['canonical_id'])}' data-observation-status='{item['observation_status']}'>"
+        f"<th scope='row'>{_escape(item['display_name'])}</th><td class='num'>{_price(item['price_twd_per_kg'])}</td>"
+        f"<td class='num'>{_number(item['volume_kg'], 0)}</td><td class='num'>{_number(item['market_count'], 0)}</td>"
+        f"<td>{labels[item['observation_status']]}{'；有品質警示' if item['quality_warnings'] else ''}</td></tr>"
+        for item in payload["items"]
+    )
+    source_label = "原型測試資料" if payload["source_status"] == "fixture" else "已保存的農業部 8066 觀測"
+    return (
+        f"<section class='section' id='latest-market' data-latest-as-of='{_escape(payload['as_of_date'] or '')}'>"
+        f"<h2>最近取得行情：{_escape(day)}</h2>"
+        f"<p class='lead'>有效行情 {payload['valid_watchlist_count']}／{payload['expected_watchlist_count']} 項；{source_label}。"
+        f"最近檢查日期：{_escape(payload['requested_date'])}。</p>"
+        "<p class='note warn'>缺資料不等於休市或沒有交易，不補 0、不沿用其他日期的價格。此區只呈現同一資料日的實際觀測，不產生 Buy Score 或採買建議。</p>"
+        f"<p class='disclaimer'>{DISCLAIM}</p><div class='table-wrap'><table><thead><tr><th>品項</th>"
+        "<th class='num'>加權平均價</th><th class='num'>交易量（kg）</th><th class='num'>市場數</th><th>觀測狀態</th>"
+        f"</tr></thead><tbody>{rows}</tbody></table></div></section>"
     )
 
 
@@ -643,7 +669,7 @@ def _advice_section(advice, items):
     ) or "<li>目前沒有額外觀察項目。</li>"
     return (
         "<section class='section ai-summary' id='advice'><div class='section-heading'>"
-        "<div><div class='eyebrow ink'>DETERMINISTIC ADVICE</div><h2>AI 今日採買情報</h2></div>"
+        "<div><div class='eyebrow ink'>DETERMINISTIC ADVICE</div><h2>按資料日期的採買分析</h2></div>"
         f"<span class='badge neu'>{_escape(advice['generation_mode'])}</span></div>"
         f"<h3>{_escape(advice['headline'])}</h3><p class='lead'>{_escape(advice['summary'])}</p>"
         "<div class='grid grid-2'><div class='note'><strong>優先理由</strong><ul>"
@@ -673,17 +699,20 @@ def _sparkline(points):
     )
 
 
-def _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map=False, registry=None, taipei=None, include_taipei_map=False):
+def _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map=False, registry=None, taipei=None, include_taipei_map=False, latest_market=None):
     registry = registry or default_category_registry()
     item_map = {item["canonical_id"]: item for item in items}
     series_map = {row["canonical_id"]: row for row in series}
     trace_ids = {row["canonical_id"] for row in traceability if row.get("certification_status") == "active"}
     in_season = [row for row in seasonality if row["seasonality_status"] == "in_season"]
-    recommendations = [row for row in scores if row["eligible"]][:6]
+    current_reference = as_of == publication_status["requested_date"] and publication_status["status"] == "complete"
+    recommendations = [row for row in scores if row["eligible"]][:6] if current_reference else []
     cards = "".join(
         _recommendation_card(row, item_map[row["canonical_id"]], trace_available=row["canonical_id"] in trace_ids, registry=registry)
         for row in recommendations
     ) or "<div class='note warn'>資料覆蓋率或品質 gate 尚未通過，本期不產生正向推薦。</div>"
+    if not current_reference:
+        cards = f"<div class='note warn'>完整分析仍截至 {_escape(as_of)}，不將歷史 Buy Score 作為本次採買推薦；最新觀測僅供描述參考。</div>"
     season_cards = "".join(
         f"<article class='card season-card' data-category='{_escape(row['category'])}'>"
         f"<div class='label'>{_escape(category_label(row['category'], registry))}</div>"
@@ -693,8 +722,8 @@ def _home(items, scores, series, seasonality, advice, traceability, traceability
         for row in in_season
     )
     movers = [row for row in scores if row["previous_trading_day_change_pct"] is not None]
-    cheaper = sorted(movers, key=lambda row: row["previous_trading_day_change_pct"])[:5]
-    pricier = sorted(movers, key=lambda row: row["previous_trading_day_change_pct"], reverse=True)[:5]
+    cheaper = sorted([row for row in movers if row["previous_trading_day_change_pct"] < 0], key=lambda row: row["previous_trading_day_change_pct"])[:5]
+    pricier = sorted([row for row in movers if row["previous_trading_day_change_pct"] > 0], key=lambda row: row["previous_trading_day_change_pct"], reverse=True)[:5]
     def mover_list(rows):
         return "".join(
             f"<li><a href='produce/{_escape(row['canonical_id'])}.html'>{_escape(item_map[row['canonical_id']]['display_name'])}</a>"
@@ -710,25 +739,26 @@ def _home(items, scores, series, seasonality, advice, traceability, traceability
     )
     warning_text = "、".join(quality["warnings"]) or "無"
     return (
-        _hero(as_of, source_status, len(in_season), len(recommendations), publication_status)
+        _hero(as_of, source_status, len(in_season), len(recommendations), publication_status, latest_market)
         + _market_status_notice(publication_status)
         + _toolbar(include_season_map=include_season_map, include_taipei_map=include_taipei_map)
         + "<main id='main' class='wrap'>"
+        + (_latest_market_section(latest_market) if latest_market else "")
         + "<section class='section recommendations' id='recommendations'><div class='section-heading'><div>"
-        + "<div class='eyebrow ink'>BUY SCORE · EVIDENCE FIRST</div><h2>今日推薦採買</h2></div>"
+        + "<div class='eyebrow ink'>BUY SCORE · EVIDENCE FIRST</div><h2>採買參考</h2></div>"
         + f"<span class='badge info'>{len(recommendations)} 項通過 gate</span></div>"
         + f"<p class='disclaimer'>{DISCLAIM}</p><div class='recommendation-grid'>{cards}</div></section>"
-        + _advice_section(advice, items)
+        + (_advice_section(advice, items) if current_reference else f"<section class='section' id='advice'><h2>歷史採買分析</h2><p>價格參考日：{_escape(as_of)}；產季背景月份：{_escape(publication_status['requested_date'][:7])}。最新觀測尚未通過完整分析流程，不產生新的採買建議。</p><a href='daily/{as_of[:4]}/{as_of[5:7]}/{as_of}.html'>查看當日歷史分析 →</a></section>")
         + "<section class='section' id='season'><div class='section-heading'><div><div class='eyebrow ink'>SEASONALITY</div><h2>本月當季蔬果</h2></div>"
         + "<div class='filter-group' aria-label='當季品項篩選'><button type='button' data-filter='all' aria-pressed='true'>全部</button><button type='button' data-filter='fruit' aria-pressed='false'>水果</button><button type='button' data-filter='vegetable' aria-pressed='false'>蔬菜</button></div></div>"
         + _season_source_notice(seasonality, registry)
         + f"<div class='grid grid-3' data-season-grid>{season_cards}</div><p><a href='season/current.html'>查看完整當季清單 →</a></p></section>"
-        + "<section class='section' id='movers'><h2>今日變便宜／今日變貴</h2><p class='lead'>以各品項前一個有效交易日為基準。</p>"
-        + f"<div class='grid grid-2'><div class='verdict positive'><strong>今天變便宜</strong><ul class='mover-list'>{mover_list(cheaper)}</ul></div>"
-        + f"<div class='verdict negative'><strong>今天變貴</strong><ul class='mover-list'>{mover_list(pricier)}</ul></div></div></section>"
-        + "<section class='section' id='trends'><div class='section-heading'><div><div class='eyebrow ink'>ROLLING ANALYTICS</div><h2>日／週／月／季趨勢</h2></div>"
+        + f"<section class='section' id='movers'><h2>{_escape(as_of)} 價格漲跌（完整分析參考日）</h2><p class='lead'>以各品項前一個有效交易日為基準，不代表目前價格。</p>"
+        + f"<div class='grid grid-2'><div class='verdict positive'><strong>價格下降</strong><ul class='mover-list'>{mover_list(cheaper)}</ul></div>"
+        + f"<div class='verdict negative'><strong>價格上升</strong><ul class='mover-list'>{mover_list(pricier)}</ul></div></div></section>"
+        + "<section class='section' id='trends'><div class='section-heading'><div><div class='eyebrow ink'>ROLLING ANALYTICS</div><h2>日／週／月／季趨勢（完整分析參考）</h2></div>"
         + "<div class='tabs'><a href='trends/daily.html'>日</a><a href='trends/weekly.html'>週</a><a href='trends/monthly.html'>月</a><a href='trends/quarterly.html'>季</a></div></div>"
-        + f"<div class='grid grid-4'>{trend_cards}</div></section>"
+        + f"<p class='lead'>資料截至 {_escape(as_of)}，不是目前報價。</p><div class='grid grid-4'>{trend_cards}</div></section>"
         + "<section class='section' id='origins'><h2>產地／產銷履歷入口</h2>"
         + f"<div class='grid grid-3'><div class='note'><strong>當季主要產地</strong><p>{len(in_season)} 項行情觀察品項具當季資料；產地只作季節背景，不代表當日成交來源。</p><a href='season/current.html'>查看當季與產地 →</a></div>"
         + f"<div class='note warn'><strong>7556 相關產銷履歷</strong><p>{traceability_status.get('active_record_count', 0)} 筆有效履歷批次、{traceability_status.get('operator_count', 0)} 個驗證經營者。{TRACE_WARNING}</p><a href='traceability/index.html'>查看履歷邊界 →</a></div>"
@@ -752,7 +782,7 @@ def _home(items, scores, series, seasonality, advice, traceability, traceability
     )
 
 
-def _produce_page(item, series, score, season, trace_rows, traceability_events, include_season_map=False, registry=None):
+def _produce_page(item, series, score, season, trace_rows, traceability_events, include_season_map=False, registry=None, historical=False):
     registry = registry or default_category_registry()
     windows = series["windows"]
     season_source = {"live": "官方資料", "stale": "最近驗證資料", "fallback": "內建參考"}.get(
@@ -768,15 +798,15 @@ def _produce_page(item, series, score, season, trace_rows, traceability_events, 
     ) or "<tr><td colspan='4'>目前沒有相關紀錄。</td></tr>"
     return (
         "<header class='page-hero'><div class='wrap'><div class='eyebrow'>PRODUCE DETAIL</div>"
-        f"<h1>{_escape(item['display_name'])}</h1><p>{_escape(category_label(item['category'], registry))} · {_escape(score['verdict_label'])}</p></div></header>"
+        f"<h1>{_escape(item['display_name'])}</h1><p>{_escape(category_label(item['category'], registry))} · {_escape(series['as_of_date'])} {'歷史判定：' if historical else '判定：'}{_escape(score['verdict_label'])}</p></div></header>"
         + _toolbar("../", include_season_map)
         + "<main id='main' class='wrap'>"
-        + f"<section class='section'><div class='grid grid-4'><div class='card'><div class='label'>今日</div><div class='value'>{_price(series['today']['price_twd_per_kg'])}</div></div>"
+        + f"<section class='section'><p class='note warn'>完整分析參考日：{_escape(series['as_of_date'])}；產季背景月份：{_escape(season['month'])}。以下價格與 Buy Score 僅屬此日期，不代表目前採買建議；<a href='../index.html#latest-market'>查看最近取得行情</a>。</p><div class='grid grid-4'><div class='card'><div class='label'>{_escape(series['as_of_date'])}</div><div class='value'>{_price(series['today']['price_twd_per_kg'])}</div></div>"
         + f"<div class='card'><div class='label'>7D</div><div class='value'>{_price(windows['7d']['price_twd_per_kg'])}</div><div class='sub'>{windows['7d']['coverage_days']} 日</div></div>"
         + f"<div class='card'><div class='label'>30D</div><div class='value'>{_price(windows['30d']['price_twd_per_kg'])}</div><div class='sub'>{windows['30d']['coverage_days']} 日</div></div>"
         + f"<div class='card'><div class='label'>90D</div><div class='value'>{_price(windows['90d']['price_twd_per_kg'])}</div><div class='sub'>{windows['90d']['coverage_days']} 日</div></div></div>"
         + f"<p class='disclaimer'>{DISCLAIM}</p></section>"
-        + f"<section class='section'><h2>Buy Score 與產季</h2><div class='grid grid-2'><div class='verdict {'positive' if score['eligible'] else 'neutral'}'><strong>{score['score']} · {_escape(score['verdict_label'])}</strong>{'、'.join(_escape(REASON_LABELS.get(code,code)) for code in score['reason_codes'])}</div>"
+        + f"<section class='section'><h2>Buy Score 與產季</h2><div class='grid grid-2'><div class='verdict {'positive' if score['eligible'] and not historical else 'neutral'}'><strong>{'歷史判定：' if historical else ''}{score['score']} · {_escape(score['verdict_label'])}</strong>{'、'.join(_escape(REASON_LABELS.get(code,code)) for code in score['reason_codes'])}</div>"
         + f"<div class='verdict neutral'><strong>{_escape(season['seasonality_status'])}</strong>主要產地（{_escape(season_source)}）：{_escape('、'.join(season['counties']) or '—')}</div></div></section>"
         + f"<section class='section'><h2>近 120 日價格趨勢</h2>{_sparkline(series['daily'])}<p class='disclaimer'>{DISCLAIM}</p><div class='table-wrap'><table><thead><tr><th>日期</th><th class='num'>價格</th><th class='num'>交易量</th></tr></thead><tbody>{daily_rows}</tbody></table></div></section>"
         + f"<section class='section'><h2>相關產銷履歷</h2><p class='note warn'>{TRACE_WARNING}</p><div class='table-wrap'><table><thead><tr><th>履歷代碼</th><th>組織</th><th>縣市</th><th>驗證</th></tr></thead><tbody>{trace_html}</tbody></table></div></section>"
@@ -808,10 +838,10 @@ def _trend_page(label, window_name, items, series, include_season_map=False):
         )
     rows = "".join(render_row(row) for row in series)
     return (
-        f"<header class='page-hero'><div class='wrap'><div class='eyebrow'>TREND TABLE</div><h1>{_escape(label)}</h1><p>依日曆 window 計算的交易量加權平均。</p></div></header>"
+        f"<header class='page-hero'><div class='wrap'><div class='eyebrow'>TREND TABLE</div><h1>{_escape(label)}</h1><p>完整分析參考日：{_escape(series[0]['as_of_date'] if series else '尚無資料')}。依日曆 window 計算的交易量加權平均，不代表目前報價。</p></div></header>"
         + _toolbar("../", include_season_map)
         + f"<main id='main' class='wrap'><section class='section'><h2>{_escape(label)}總表</h2><p class='disclaimer'>{DISCLAIM}</p>"
-        + "<div class='table-wrap'><table><thead><tr><th>品項</th><th class='num'>今日</th><th class='num'>區間</th><th class='num'>變化</th><th class='num'>有效日</th><th>狀態</th></tr></thead>"
+        + "<div class='table-wrap'><table><thead><tr><th>品項</th><th class='num'>參考日價格</th><th class='num'>區間</th><th class='num'>變化</th><th class='num'>有效日</th><th>狀態</th></tr></thead>"
         + f"<tbody>{rows}</tbody></table></div></section></main>"
     )
 
@@ -1140,7 +1170,7 @@ def _taipei_monthly_page(monthly, include_season_map=False):
     )
 
 
-def build_site(rows, as_of, root, source_status="validated", *, series=None, scores=None, seasonality=None, season_catalog=None, advice=None, traceability=None, traceability_status=None, traceability_events=None, traceability_event_status=None, quality=None, publication_status=None, season_map_payload=None, county_svg=None, category_registry=None, taipei_analysis=None, taipei_monthly=None, taipei_map=None, taipei_map_svg=None):
+def build_site(rows, as_of, root, source_status="validated", *, series=None, scores=None, seasonality=None, season_catalog=None, advice=None, traceability=None, traceability_status=None, traceability_events=None, traceability_event_status=None, quality=None, publication_status=None, season_map_payload=None, county_svg=None, category_registry=None, taipei_analysis=None, taipei_monthly=None, taipei_map=None, taipei_map_svg=None, latest_market=None):
     if not rows:
         raise ValueError("requested as-of date has no valid mapped aggregates")
     # tpw.cli always passes an explicit category_registry (loaded once per command from its
@@ -1192,6 +1222,10 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
     })
     if publication_status.get("resolved_date") != as_of:
         raise ValueError("publication status resolved_date must match site as_of date")
+    if latest_market is not None:
+        validate_latest_market(latest_market)
+        if latest_market["requested_date"] != publication_status["requested_date"] or latest_market["complete_reference_date"] != as_of:
+            raise ValueError("latest market dates do not match publication")
     items = [
         {"canonical_id": row["canonical_id"], "display_name": row["display_name"], "category": row["category"]}
         for row in rows
@@ -1222,9 +1256,13 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
     complete = bool(series and scores and seasonality)
     include_season_map = season_map_payload is not None
     if complete:
-        home = _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map, registry, taipei_analysis, taipei_map is not None)
+        home = _home(items, scores, series, seasonality, advice, traceability, traceability_status, traceability_events, traceability_event_status, quality, as_of, source_status, publication_status, include_season_map, registry, taipei_analysis, taipei_map is not None, latest_market)
     else:
-        home = _hero(as_of, source_status, 0, 0, publication_status) + _market_status_notice(publication_status) + "<nav class='toolbar' aria-label='主要導覽'><div class='inner'>" + ("<a href='taipei/map.html'>臺北行情地圖</a>" if taipei_map is not None else "") + "<a href='archive/index.html'>歷史</a><a href='methodology.html'>方法</a></div></nav>" + "<main id='main' class='wrap'><section class='section' id='recommendations'><h2>今日推薦採買</h2><p>資料不足，暫不判定。</p></section>" + _market_table(rows, "fruit", registry=registry) + _market_table(rows, "vegetable", registry=registry) + "</main>"
+        home = _hero(as_of, source_status, 0, 0, publication_status, latest_market) + _market_status_notice(publication_status) + "<nav class='toolbar' aria-label='主要導覽'><div class='inner'>" + ("<a href='taipei/map.html'>臺北行情地圖</a>" if taipei_map is not None else "") + "<a href='archive/index.html'>歷史</a><a href='methodology.html'>方法</a></div></nav>" + "<main id='main' class='wrap'><section class='section' id='recommendations'><h2>採買參考</h2><p>資料不足，暫不判定。</p></section>" + _market_table(rows, "fruit", registry=registry) + _market_table(rows, "vegetable", registry=registry) + "</main>"
+    if latest_market is not None:
+        (root / "data/latest-market.json").write_text(json.dumps(latest_market, ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+        if not complete:
+            home = home.replace("<main id='main' class='wrap'>", "<main id='main' class='wrap'>" + _latest_market_section(latest_market), 1)
     (root / "index.html").write_text(_document("Taiwan Produce Watch", home, "assets/css/app.css", "assets/js/app.js"), encoding="utf-8")
     daily_body = _toolbar("../../../", include_season_map) + f"<main id='main' class='wrap'><section class='section'><h1>每日行情 {as_of}</h1><p class='disclaimer'>{DISCLAIM}</p></section>"
     if complete:
@@ -1241,7 +1279,7 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
         for item in items:
             related = [row for row in traceability if row["canonical_id"] == item["canonical_id"]]
             related_events = [row for row in traceability_events if row["canonical_id"] == item["canonical_id"]]
-            body = _produce_page(item, series_map[item["canonical_id"]], score_map[item["canonical_id"]], season_map[item["canonical_id"]], related, related_events, include_season_map, registry)
+            body = _produce_page(item, series_map[item["canonical_id"]], score_map[item["canonical_id"]], season_map[item["canonical_id"]], related, related_events, include_season_map, registry, as_of != publication_status["requested_date"] or publication_status["status"] != "complete")
             (root / "produce" / f"{item['canonical_id']}.html").write_text(_document(f"{item['display_name']}行情", body, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
         trend_specs = (("daily", "每日與前一交易日", "previous"), ("weekly", "近 7 日趨勢", "7d"), ("monthly", "近 30 日趨勢", "30d"), ("quarterly", "近 90 日趨勢", "90d"))
         for filename, label, window in trend_specs:
@@ -1313,7 +1351,7 @@ def build_site(rows, as_of, root, source_status="validated", *, series=None, sco
     links = "".join(f"<li><a href='../daily/{path.parent.parent.name}/{path.parent.name}/{path.stem}.html'>{path.stem}</a></li>" for path in sorted((root / "daily").rglob("*.html"), reverse=True))
     archive_body = "<header class='page-hero'><div class='wrap'><div class='eyebrow'>ARCHIVE</div><h1>歷史日期</h1></div></header>" + _toolbar("../", include_season_map) + f"<main id='main' class='wrap'><section class='section'><ul class='archive-list'>{links}</ul></section></main>"
     (root / "archive/index.html").write_text(_document("歷史封存", archive_body, "../assets/css/app.css", "../assets/js/app.js"), encoding="utf-8")
-    (root / "data/current.json").write_text(json.dumps({"as_of_date": as_of, "source_status": source_status, "publication_status": publication_status, "generation_mode": advice["generation_mode"], "prototype_complete": complete, "eligible_recommendations": len([row for row in scores if row.get("eligible")]), "items": rows, "scores": scores, "seasonality": seasonality, "season_catalog": season_catalog, "advice": advice, "traceability": traceability, "traceability_status": traceability_status, "traceability_events": traceability_events, "traceability_event_status": traceability_event_status, "quality": quality}, ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
+    (root / "data/current.json").write_text(json.dumps({"as_of_date": as_of, "source_status": source_status, "publication_status": publication_status, "generation_mode": advice["generation_mode"], "prototype_complete": complete, **({"latest_market_path": "latest-market.json"} if latest_market is not None else {}), "eligible_recommendations": len([row for row in scores if row.get("eligible")]), "items": rows, "scores": scores, "seasonality": seasonality, "season_catalog": season_catalog, "advice": advice, "traceability": traceability, "traceability_status": traceability_status, "traceability_events": traceability_events, "traceability_event_status": traceability_event_status, "quality": quality}, ensure_ascii=False, sort_keys=True, separators=(",", ":")), encoding="utf-8")
 
 
 def render_report(rows, scores, advice, quality, as_of, registry=None):
@@ -1328,7 +1366,7 @@ def render_report(rows, scores, advice, quality, as_of, registry=None):
     warnings = "\n".join(f"- {value}" for value in quality["warnings"]) or "- 無"
     return (
         f"# 每日行情 {as_of}\n\n{DISCLAIM}\n\n## Top recommendations\n\n{score_lines(recommendations)}\n\n"
-        f"## Watch items\n\n{score_lines(watch)}\n\n## 今日採買情報\n\n{advice['headline']}\n\n{advice['summary']}\n\n"
+        f"## Watch items\n\n{score_lines(watch)}\n\n## 按資料日期的採買分析\n\n{advice['headline']}\n\n{advice['summary']}\n\n"
         f"模式：{advice['generation_mode']}\n\n## {category_label('fruit', registry)}行情\n\n{market_lines('fruit')}\n\n## {category_label('vegetable', registry)}行情\n\n{market_lines('vegetable')}\n\n"
         f"## Data quality\n\n{warnings}\n\n## Sources and boundaries\n\n- 農業部農產品交易行情 Dataset 8066\n- 產季來源狀態與履歷資料邊界保存於公開 JSON\n- {TRACE_WARNING}\n\n{DISCLAIM}\n"
     )
